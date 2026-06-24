@@ -21,8 +21,7 @@ pub extern "C" fn listen_audio() {
     });
     if let Ok(stream) = _my_live_stream {
         *stream_guard = Some(SendStream(stream));
-    } 
-    std::thread::sleep(std::time::Duration::from_secs(10));
+    }
 }
 
 #[unsafe(no_mangle)]
