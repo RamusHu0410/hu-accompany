@@ -1,43 +1,21 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 
-void main() => runApp(const MyApp());
+class DraggableRecorderButton extends StatefulWidget {
+  final void Function(bool isRecording) onToggle;
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Audio Recorder',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(useMaterial3: true),
-      home: const Scaffold(
-        backgroundColor: Color(0xFF0F0F1A),
-        body: Center(child: RecordButton()),
-      ),
-    );
-  }
-}
-
-class RecordButton extends StatefulWidget {
-  /// Called when recording starts.
-  final VoidCallback? onStart;
-
-  /// Called when recording stops.
-  final VoidCallback? onStop;
-
-  const RecordButton({super.key, this.onStart, this.onStop});
+  const DraggableRecorderButton({super.key, required this.onToggle});
 
   @override
-  State<RecordButton> createState() => _RecordButtonState();
+  State<DraggableRecorderButton> createState() => _DraggableRecorderButtonState();
 }
 
-class _RecordButtonState extends State<RecordButton>
+class _DraggableRecorderButtonState extends State<DraggableRecorderButton>
     with SingleTickerProviderStateMixin {
   bool _isRecording = false;
   Duration _elapsed = Duration.zero;
   Timer? _timer;
+  Offset _position = const Offset(20, 400);
 
   late final AnimationController _pulseCtrl;
   late final Animation<double> _pulseAnim;
@@ -69,16 +47,15 @@ class _RecordButtonState extends State<RecordButton>
       _timer?.cancel();
       _pulseCtrl.stop();
       _pulseCtrl.reset();
-      setState(() { _isRecording = false; });
-      widget.onStop?.call();
+      setState(() => _isRecording = false);
     } else {
       setState(() { _isRecording = true; _elapsed = Duration.zero; });
       _pulseCtrl.repeat(reverse: true);
       _timer = Timer.periodic(const Duration(seconds: 1), (_) {
         setState(() => _elapsed += const Duration(seconds: 1));
       });
-      widget.onStart?.call();
     }
+    widget.onToggle(_isRecording);
   }
 
   String get _elapsedLabel {
@@ -87,148 +64,96 @@ class _RecordButtonState extends State<RecordButton>
     return '$m:$s';
   }
 
+  Widget _ring(Color color, double opacity) => Container(
+    width: 80,
+    height: 80,
+    decoration: BoxDecoration(
+      shape: BoxShape.circle,
+      color: color.withValues(alpha: opacity),
+    ),
+  );
+
   @override
   Widget build(BuildContext context) {
     final color = _isRecording ? _activeColor : _idleColor;
 
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        // Timer / hint label
-        AnimatedSwitcher(
-          duration: const Duration(milliseconds: 250),
-          child: Text(
-            _isRecording ? _elapsedLabel : 'Tap to record',
-            key: ValueKey(_isRecording),
-            style: TextStyle(
-              color: _isRecording ? _activeColor : Colors.white54,
-              fontSize: 20,
-              fontWeight: FontWeight.w600,
-              letterSpacing: 1.5,
-              fontFeatures: const [FontFeature.tabularFigures()],
-            ),
-          ),
-        ),
-
-        const SizedBox(height: 40),
-
-        // Button + pulse rings
-        AnimatedBuilder(
-          animation: _pulseAnim,
-          builder: (_, __) => GestureDetector(
-            onTap: _toggle,
-            behavior: HitTestBehavior.opaque,
-            child: SizedBox(
-              width: 140,
-              height: 140,
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  if (_isRecording) ...[
-                    Transform.scale(
-                      scale: _pulseAnim.value,
-                      child: _ring(_activeColor, 0.10),
-                    ),
-                    Transform.scale(
-                      scale: (_pulseAnim.value + 1) / 2,
-                      child: _ring(_activeColor, 0.18),
-                    ),
-                  ],
-                  AnimatedContainer(
-                    duration: const Duration(milliseconds: 300),
-                    curve: Curves.easeInOut,
-                    width: 88,
-                    height: 88,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: color,
-                      boxShadow: [
-                        BoxShadow(
-                          color: color.withOpacity(0.45),
-                          blurRadius: 28,
-                          spreadRadius: 2,
-                        ),
-                      ],
-                    ),
-                    child: AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 200),
-                      child: Icon(
-                        _isRecording ? Icons.stop_rounded : Icons.mic_rounded,
-                        key: ValueKey(_isRecording),
-                        color: Colors.white,
-                        size: 40,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-
-        const SizedBox(height: 28),
-
-        // Recording indicator dot + label
-        AnimatedOpacity(
-          opacity: _isRecording ? 1.0 : 0.0,
-          duration: const Duration(milliseconds: 300),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _BlinkingDot(color: _activeColor),
-              const SizedBox(width: 8),
-              Text(
-                'Recording',
+    return Positioned(
+      left: _position.dx,
+      top: _position.dy,
+      child: GestureDetector(
+        onPanUpdate: (details) {
+          setState(() => _position += details.delta);
+        },
+        onTap: _toggle,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 250),
+              child: Text(
+                _isRecording ? _elapsedLabel : 'Tap to record',
+                key: ValueKey(_isRecording),
                 style: TextStyle(
-                  color: Colors.white.withOpacity(0.7),
-                  fontSize: 13,
-                  letterSpacing: 0.5,
+                  color: _isRecording ? _activeColor : Colors.white54,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 1.2,
+                  fontFeatures: const [FontFeature.tabularFigures()],
                 ),
               ),
-            ],
-          ),
+            ),
+            const SizedBox(height: 12),
+            AnimatedBuilder(
+              animation: _pulseAnim,
+              builder: (_, __) => SizedBox(
+                width: 100,
+                height: 100,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    if (_isRecording) ...[
+                      Transform.scale(
+                        scale: _pulseAnim.value,
+                        child: _ring(_activeColor, 0.10),
+                      ),
+                      Transform.scale(
+                        scale: (_pulseAnim.value + 1) / 2,
+                        child: _ring(_activeColor, 0.18),
+                      ),
+                    ],
+                    AnimatedContainer(
+                      duration: const Duration(milliseconds: 300),
+                      curve: Curves.easeInOut,
+                      width: 64,
+                      height: 64,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: color,
+                        boxShadow: [
+                          BoxShadow(
+                            color: color.withValues(alpha: 0.45),
+                            blurRadius: 20,
+                            spreadRadius: 2,
+                          ),
+                        ],
+                      ),
+                      child: AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 200),
+                        child: Icon(
+                          _isRecording ? Icons.stop_rounded : Icons.mic_rounded,
+                          key: ValueKey(_isRecording),
+                          color: Colors.white,
+                          size: 30,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
         ),
-      ],
+      ),
     );
   }
-
-  Widget _ring(Color color, double opacity) => Container(
-        width: 110,
-        height: 110,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: color.withValues(alpha: opacity,)
-          ,
-        ),
-      );
-}
-
-// Blinking red dot shown while recording
-class _BlinkingDot extends StatefulWidget {
-  final Color color;
-  const _BlinkingDot({required this.color});
-
-  @override
-  State<_BlinkingDot> createState() => _BlinkingDotState();
-}
-
-class _BlinkingDotState extends State<_BlinkingDot>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _ctrl = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 600),
-  )..repeat(reverse: true);
-
-  @override
-  void dispose() { _ctrl.dispose(); super.dispose(); }
-
-  @override
-  Widget build(BuildContext context) => FadeTransition(
-        opacity: _ctrl,
-        child: Container(
-          width: 8,
-          height: 8,
-          decoration: BoxDecoration(shape: BoxShape.circle, color: widget.color),
-        ),
-      );
 }

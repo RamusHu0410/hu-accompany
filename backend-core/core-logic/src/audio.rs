@@ -1,9 +1,10 @@
-use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::Stream;
+use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
+use realfft::RealFftPlanner;
 use std::sync::mpsc::Receiver;
 use std::sync::mpsc::Sender;
 
-pub fn create_stream(tx : Sender<Vec<f32>>) -> Result<Stream, Box<dyn std::error::Error>> {
+pub fn create_stream(tx: Sender<Vec<f32>>) -> Result<Stream, Box<dyn std::error::Error>> {
     let host = cpal::default_host();
     let device = host
         .default_input_device()
@@ -16,14 +17,14 @@ pub fn create_stream(tx : Sender<Vec<f32>>) -> Result<Stream, Box<dyn std::error
         cpal::SampleFormat::F32 => device.build_input_stream(
             &config,
             move |data: &[f32], _: &cpal::InputCallbackInfo| {
-                let _ = tx.send(data.to_vec()); 
+                let _ = tx.send(data.to_vec());
             },
             err_fn,
             None,
         )?,
         _ => panic!("Unsupported sample format! (Expected f32)"),
     };
-    stream.play()?; 
+    stream.play()?;
     Ok(stream)
 }
 
@@ -46,11 +47,26 @@ pub fn start_processing_loop(rx: Receiver<Vec<f32>>) {
             // Grab the latest 2048 samples for the FFT
             let processing_chunk = &audio_vault[0..2048];
 
-            // -------------------------------------------------------------
-            // FUTURE FFT MATH WILL GO HERE
-            // This is where we will analyze the pitch for your C Major scale!
-            // -------------------------------------------------------------
-            
+            // FFT Processing
+            let chunklen = processing_chunk.len();
+            let mut planner = RealFftPlanner::<f32>::new();
+            let r2c = planner.plan_fft_forward(chunklen);
+
+            let mut input_data = processing_chunk.to_vec();
+            let mut output_data = r2c.make_output_vec();
+
+            r2c.process(&mut input_data, &mut output_data).unwrap();
+
+            for (i, complex_bin) in output_data.iter().enumerate() {
+                // Calculate the "loudness" (magnitude) of this specific pitch bucket
+                let magnitude = complex_bin.norm();
+
+                if magnitude > 5.0 {
+                    // You found a spike! Calculate which Hz it belongs to next.
+                    println!("FFT Worked!!");
+                }
+            }
+
             // For now, let's just calculate a basic volume so we can see it working:
             let volume: f32 = processing_chunk.iter().map(|s| s.abs()).sum::<f32>() / 2048.0;
             if volume > 0.01 {
@@ -58,12 +74,7 @@ pub fn start_processing_loop(rx: Receiver<Vec<f32>>) {
             }
 
             // Slide our data window forward so we don't leak memory
-            audio_vault.drain(0..1024); 
+            audio_vault.drain(0..1024);
         }
     }
 }
-
-
-
-
-
