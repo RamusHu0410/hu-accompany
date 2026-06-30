@@ -28,10 +28,18 @@ pub struct Notes {
     pub start_time_seconds: f64,
     pub end_time_seconds: f64,
     pub duration_seconds: f64,
+
+    // Optional Members
+    pub vibrato_depth: Option<f32>,
+    pub pedal_action: Option<String>,
+    pub has_accent: Option<bool>,
+    pub markings: Option<String>
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct PieceData {
+    pub piece_name: String,
+    pub curr_phase: u8,
     pub instrument: Instrument,
     pub curr_phrase: u32,
     pub bpm: u32,

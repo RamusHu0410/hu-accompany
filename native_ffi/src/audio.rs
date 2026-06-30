@@ -1,8 +1,11 @@
+use crate::ACTIVE_PIECE;
+use crate::models::PieceData;
 use cpal::Stream;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
+use std::mem::MaybeUninit;
+use std::ops::Range;
 use std::sync::mpsc::Receiver;
 use std::sync::mpsc::Sender;
-use std::ops::Range;
 
 pub fn create_stream(tx: Sender<Vec<f32>>) -> Result<Stream, Box<dyn std::error::Error>> {
     let host = cpal::default_host();
@@ -29,30 +32,43 @@ pub fn create_stream(tx: Sender<Vec<f32>>) -> Result<Stream, Box<dyn std::error:
     Ok(stream)
 }
 
-/// This function runs on a background thread. It listens to the channel receiver
-/// and collects the raw audio chunks sent over by the microphone.
 pub fn start_processing_loop(rx: Receiver<Vec<f32>>) {
-   
-    // Buffer to store incoming audio data
+
     let mut audio_vault: Vec<f32> = Vec::new();
+    let mut input_data_buffer = vec![0.0f32; 1024];
+    let mut output_spectrum = crate::dsp::FFT.make_output_vec();
+    let user_data = MaybeUninit::<PieceData>::uninit();
+    let piece_data = ACTIVE_PIECE.lock().unwrap();
 
     // This loop runs when data is recieved from rx
     while let Ok(chunk) = rx.recv() {
-       audio_vault.extend_from_slice(&chunk);
+        audio_vault.extend_from_slice(&chunk);
 
-       while audio_vault.len() >= 1024 {
-           let processing_data = &audio_vault[0..1024];
-           let rms: f32 = (processing_data
+        while audio_vault.len() >= 1024 {
+            let processing_data = &audio_vault[0..1024];
+            let rms: f32 = (processing_data
             .iter()
-            .map(|&x| x * x)         // 1. Square every sample
-            .sum::<f32>()           // 2. Add them all together
-            / 1024.0)               // 3. Divide by 1024 (Mean)
-            .sqrt();
-           if rms <= 0.005 {
+            .map(|&x| x * x)    // 1. Square every sample
+            .sum::<f32>()       // 2. Add them all together
+            / 1024.0) // 3. Divide by 1024 (Mean)
+                .sqrt();
+            if rms <= 0.005 {
+                audio_vault.drain(0..128);
                 continue;
-           }
+            } 
+            
+            input_data_buffer.copy_from_slice(&audio_vault[0..1024]);
+            crate::dsp::run_fft(&mut input_data_buffer, &mut output_spectrum);
 
-           audio_vault.drain(0..128);
-       }
+            if let Some(ref piece) = *piece_data {
+                match &piece.curr_phase {
+                    1 => {
+                        let notes = crate::dsp::process_dsp(&output_spectrum);
+                    }
+                    2 | 3 => {}
+                }
+            }
+            audio_vault.drain(0..128);
+        }
     }
 }
