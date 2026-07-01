@@ -29,7 +29,9 @@ import json
 import types
 import shutil
 import tempfile
+import threading
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import numpy as np
 # oemer 0.1.5 uses np.int / np.float / np.bool which were removed in NumPy 1.24.
@@ -80,6 +82,11 @@ _DUR_COLOR = {
     "SIXTEENTH":  (255, 0,   180),   # magenta
 }
 _DEFAULT_COLOR = (150, 150, 150)
+
+# oemer stores OMR results (noteheads, barlines, ...) in a single process-wide
+# dict (oemer.layers._layers), so only one extract() call may run at a time.
+# This lock serializes just that critical section across worker threads.
+_OEMER_LOCK = threading.Lock()
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -155,9 +162,17 @@ def image_to_musicxml(img_path: str, output_dir: str) -> dict:
     """
     Run oemer on one PNG image.
     Returns a dict with:
-      "mxl_path"   — path to the generated .musicxml file
-      "oemer_img"  — BGR numpy array (oemer's internal image, same coords as bboxes)
-      "notes"      — list of NoteHead-derived dicts  {bbox, label_name, color, sfn_name}
+      "mxl_path"    — path to the generated .musicxml file
+      "oemer_img"   — BGR numpy array (oemer's internal image, same coords as bboxes)
+      "notes"       — list of NoteHead-derived dicts  {bbox, label_name, color, sfn_name}
+      "notes_layer" — raw array of NoteHead objects (for dynamics detection)
+      "barlines"    — raw barline layer data
+
+    Thread-safe: the section that touches oemer's process-wide layer state
+    (clear_data/extract/get_layer) runs under _OEMER_LOCK, and every value
+    needed by the caller is copied out of that state before the lock is
+    released, so this function may be called concurrently from multiple
+    threads (e.g. one per page) without corrupting another call's data.
     """
     from oemer.ete import extract, clear_data
     from oemer import layers as oemer_layers
@@ -170,12 +185,17 @@ def image_to_musicxml(img_path: str, output_dir: str) -> dict:
         save_cache    = False,
         without_deskew= False,
     )
-    clear_data()
-    mxl_path = extract(args)
 
-    # Capture layer data immediately — clear_data() would erase it
-    raw_notes  = oemer_layers.get_layer("notes")          # array of NoteHead objects
-    oemer_img  = oemer_layers.get_layer("original_image") # BGR, same resolution as bboxes
+    with _OEMER_LOCK:
+        clear_data()
+        mxl_path = extract(args)
+
+        # Capture layer data immediately — clear_data() would erase it, and
+        # another thread's page could overwrite it once the lock is released.
+        raw_notes      = oemer_layers.get_layer("notes")          # array of NoteHead objects
+        oemer_img      = oemer_layers.get_layer("original_image") # BGR, same resolution as bboxes
+        barlines_layer = oemer_layers.get_layer("barlines")
+        barlines_data  = list(barlines_layer) if barlines_layer is not None else []
 
     note_data = []
     if raw_notes is not None:
@@ -194,15 +214,12 @@ def image_to_musicxml(img_path: str, output_dir: str) -> dict:
                 "color":      color,
             })
 
-    # Also capture barlines for dynamic detection
-    barlines_layer = oemer_layers.get_layer("barlines")
-    barlines_data  = list(barlines_layer) if barlines_layer is not None else []
-
     return {
-        "mxl_path":  mxl_path,
-        "oemer_img": oemer_img,
-        "notes":     note_data,
-        "barlines":  barlines_data,
+        "mxl_path":    mxl_path,
+        "oemer_img":   oemer_img,
+        "notes":       note_data,
+        "notes_layer": raw_notes,
+        "barlines":    barlines_data,
     }
 
 
@@ -680,12 +697,75 @@ def images_to_pdf(bgr_pages: list, out_path: str, dpi: int = 200) -> None:
 # Main pipeline
 # ─────────────────────────────────────────────────────────────────────────────
 
+def _process_page(index: int, img_path: str, tmpdir: str, bpm: float,
+                   want_annotated: bool) -> dict:
+    """
+    Run OMR + dynamics detection + note extraction for a single page.
+
+    Notes are extracted with a page-local time base (time_offset=0.0) so that
+    pages can be processed concurrently, in any completion order; the caller
+    stitches them into a single timeline afterward using each page's
+    "duration".
+    """
+    n   = index + 1
+    label = f"page {n}"
+    xml_dir = os.path.join(tmpdir, f"mxl_p{n}")
+    log = [f"\n         OMR {label}  ({os.path.basename(img_path)})"]
+
+    try:
+        result = image_to_musicxml(img_path, xml_dir)
+    except Exception as exc:
+        log.append(f"         oemer failed on {label}: {exc}")
+        return {"index": index, "ok": False, "log": "\n".join(log)}
+
+    xml_path    = result["mxl_path"]
+    oemer_img   = result["oemer_img"]
+    note_data   = result["notes"]
+    notes_layer = result["notes_layer"]
+    barlines    = result["barlines"]
+    log.append(f"         MusicXML  → {xml_path}")
+    log.append(f"         Noteheads detected: {len(note_data)}")
+
+    # ── Detect dynamics from image (oemer emits no dynamic markings) ──────
+    log.append("         Detecting dynamics from image...")
+    try:
+        dyn_ev   = detect_dynamics(oemer_img, barlines, xml_path, notes_layer)
+        marks    = [e for e in dyn_ev if e["type"] == "mark"]
+        hairpins = [e for e in dyn_ev if e["type"] == "hairpin"]
+        log.append(f"         Dynamic marks: {len(marks)}  Hairpins: {len(hairpins)}")
+    except Exception as exc:
+        log.append(f"         Dynamic detection failed ({exc}); using defaults")
+        dyn_ev = None
+
+    log.append(f"         Parsing MusicXML ({label})...")
+    page_notes, page_meta = musicxml_to_notes(xml_path, time_offset=0.0,
+                                               default_bpm=bpm, dyn_events=dyn_ev)
+    page_duration = max((nn["start"] + nn["duration"] for nn in page_notes), default=0.0)
+    log.append(f"         {len(page_notes)} note events extracted")
+
+    ann_img = None
+    if want_annotated and oemer_img is not None:
+        ann_img = draw_annotations(oemer_img, note_data)
+
+    return {
+        "index": index, "ok": True, "log": "\n".join(log),
+        "notes": page_notes, "meta": page_meta,
+        "duration": page_duration, "ann_img": ann_img,
+    }
+
+
 def convert(pdf_path: str, bpm: float = DEFAULT_BPM,
-            annotated_pdf: str = None) -> dict:
+            annotated_pdf: str = None, max_workers: int = None) -> dict:
     """
     Full pipeline: PDF → {name, bpm, time_signature, notes}
     If annotated_pdf is given (or set to True → auto-name), also saves an
     annotated PDF showing every detected notehead coloured by duration type.
+
+    Pages are processed concurrently via a thread pool. oemer's OMR step
+    (image_to_musicxml) is internally serialized because it relies on
+    process-wide layer state, but while one thread is running/waiting on
+    OMR for a page, other threads can run the CPU-bound dynamics-detection
+    and music21-parsing steps for pages whose OMR already finished.
     """
     if annotated_pdf is True:
         annotated_pdf = os.path.splitext(pdf_path)[0] + "_annotated.pdf"
@@ -698,59 +778,41 @@ def convert(pdf_path: str, bpm: float = DEFAULT_BPM,
     print("Step 2/4  Checking oemer ONNX checkpoints...")
     _ensure_checkpoints()
 
-    all_notes    = []
-    ann_pages    = []
-    time_offset  = 0.0
-    score_meta   = {"bpm": bpm, "time_signature": "4/4"}
-    piece_name   = os.path.splitext(os.path.basename(pdf_path))[0]
+    piece_name = os.path.splitext(os.path.basename(pdf_path))[0]
+    workers    = max_workers or min(len(img_paths), 4)
 
-    for i, img_path in enumerate(img_paths):
-        label   = f"page {i+1}/{len(img_paths)}"
-        xml_dir = os.path.join(tmpdir, f"mxl_p{i+1}")
-
-        print(f"\n         OMR (step 2/4) {label}  ({os.path.basename(img_path)})")
-        try:
-            result = image_to_musicxml(img_path, xml_dir)
-        except Exception as exc:
-            print(f"         oemer failed on {label}: {exc}")
-            continue
-
-        xml_path   = result["mxl_path"]
-        oemer_img  = result["oemer_img"]
-        note_data  = result["notes"]
-        barlines   = result["barlines"]
-        print(f"         MusicXML  → {xml_path}")
-        print(f"         Noteheads detected: {len(note_data)}")
-
-        # ── Detect dynamics from image (oemer emits no dynamic markings) ──────
-        print(f"         Detecting dynamics from image...")
-        from oemer import layers as _oemer_layers
-        _oemer_notes_layer = _oemer_layers.get_layer("notes")
-        try:
-            dyn_ev = detect_dynamics(oemer_img, barlines, xml_path,
-                                     _oemer_notes_layer)
-            marks   = [e for e in dyn_ev if e["type"] == "mark"]
-            hairpins = [e for e in dyn_ev if e["type"] == "hairpin"]
-            print(f"         Dynamic marks: {len(marks)}  Hairpins: {len(hairpins)}")
-        except Exception as exc:
-            print(f"         Dynamic detection failed ({exc}); using defaults")
-            dyn_ev = None
-
-        print(f"Step 4/4  Parsing MusicXML ({label})...")
-        page_notes, page_meta = musicxml_to_notes(xml_path, time_offset=time_offset,
-                                                   default_bpm=bpm, dyn_events=dyn_ev)
-        if i == 0:
-            score_meta = page_meta   # use first page for global metadata
-        if page_notes:
-            time_offset = max(n["start"] + n["duration"] for n in page_notes)
-        all_notes.extend(page_notes)
-        print(f"         {len(page_notes)} note events extracted")
-
-        # Build annotated image for this page
-        if annotated_pdf and oemer_img is not None:
-            ann_pages.append(draw_annotations(oemer_img, note_data))
+    results = [None] * len(img_paths)
+    with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
+        futures = {
+            pool.submit(_process_page, i, img_path, tmpdir, bpm, bool(annotated_pdf)): i
+            for i, img_path in enumerate(img_paths)
+        }
+        for fut in as_completed(futures):
+            res = fut.result()
+            print(res["log"])
+            results[res["index"]] = res
 
     shutil.rmtree(tmpdir, ignore_errors=True)
+
+    # Stitch pages back together in page order — each page's notes were
+    # extracted on a page-local timeline, so shift them by the running
+    # duration total accumulated from preceding pages.
+    all_notes   = []
+    ann_pages   = []
+    time_offset = 0.0
+    score_meta  = {"bpm": bpm, "bpm_beat": 1.0, "time_signature": "4/4"}
+
+    for i, res in enumerate(results):
+        if res is None or not res["ok"]:
+            continue
+        if i == 0:
+            score_meta = res["meta"]   # use first page for global metadata
+        for nn in res["notes"]:
+            nn["start"] = round(nn["start"] + time_offset, 4)
+        all_notes.extend(res["notes"])
+        time_offset += res["duration"]
+        if annotated_pdf and res["ann_img"] is not None:
+            ann_pages.append(res["ann_img"])
 
     if annotated_pdf and ann_pages:
         images_to_pdf(ann_pages, annotated_pdf)
