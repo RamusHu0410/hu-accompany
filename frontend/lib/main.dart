@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
 import 'package:liquid_glass_easy/liquid_glass_easy.dart';
 import 'Draggable_Recorder_Button.dart';
 import 'Drawing_Overlay.dart';
@@ -128,11 +127,9 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
               // 1. If true, look at how the Widget sits right under the if statement (no braces!)
               if (_hasMusicSheet)
                 Positioned.fill(
-                  child: SfPdfViewer.asset(
-                    'assets/test.pdf',
-                    canShowScrollHead: false,
-                    pageLayoutMode: PdfPageLayoutMode.single,
-                    scrollDirection: PdfScrollDirection.horizontal,
+                  child: // (
+                   // 'assets/test.pdf',
+                    
                   ),
                 ) // 👈 Note: NO trailing comma or semicolon directly after the widget if an 'else' follows
               // 2. If false, the else statement also has no braces

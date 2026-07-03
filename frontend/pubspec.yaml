@@ -9,18 +9,19 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  syncfusion_flutter_pdfviewer: ^33.2.15
   device_info_plus: ^13.2.0
   liquid_glass_easy: ^3.2.2
+  music_xml: ^2.7.0
+  http: ^1.6.0
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0
+  
 
 flutter:
   uses-material-design: true
-  assets:
-    - assets/test.pdf
+
   
 
