@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
 import 'package:liquid_glass_easy/liquid_glass_easy.dart';
 import 'Draggable_Recorder_Button.dart';
 import 'Drawing_Overlay.dart';
@@ -93,6 +92,19 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
   bool _isDrawingMode = false;
   final bool _hasMusicSheet = true; // Track if a music sheet is loaded
 
+  // Pen settings
+  bool _showPenSettings = false;
+  Color _penColor = const Color(0xFFE94560);
+  double _penSize = 3.0;
+
+  static const List<Color> _penColorOptions = [
+    Color(0xFFE94560), // brand red/pink
+    Color(0xFF2C2C2C), // near-black
+    Color(0xFF2D6CDF), // blue
+    Color(0xFF2FA84F), // green
+    Color(0xFFF2A93B), // amber
+  ];
+
   void _goToNavPage() {
     Navigator.of(context).push(
       PageRouteBuilder(
@@ -126,24 +138,22 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
             children: [
               // LAYER 1: PDF Viewer (or placeholder background)
               // 1. If true, look at how the Widget sits right under the if statement (no braces!)
+              // LAYER 1: PDF Viewer (or placeholder background)
               if (_hasMusicSheet)
                 Positioned.fill(
-                  child: SfPdfViewer.asset(
-                    'assets/test.pdf',
-                    canShowScrollHead: false,
-                    pageLayoutMode: PdfPageLayoutMode.single,
-                    scrollDirection: PdfScrollDirection.horizontal,
-                  ),
-                ) // 👈 Note: NO trailing comma or semicolon directly after the widget if an 'else' follows
-              // 2. If false, the else statement also has no braces
+                  child: Container(color: Colors.white),
+                )
               else
                 Positioned.fill(
-                  child: Container(color: const Color.fromARGB(255, 236, 236, 236)),
-                ), // 👈 Comma goes here at the very end of the whole if/else block
-
+                  child: Container(color: const Color.fromARGB(255, 255, 255, 255)),
+                ),
               // LAYER 2: Drawing overlay
               Positioned.fill(
-                child: Drawing_Overlay(isDrawingMode: _isDrawingMode),
+                child: Drawing_Overlay(
+                  isDrawingMode: _isDrawingMode,
+                  penColor: _penColor,
+                  penSize: _penSize,
+                ),
               ),
             ],
           ), // closes Stack (backgroundWidget)
@@ -174,6 +184,24 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
                           onPressed: () =>
                               setState(() => _isDrawingMode = !_isDrawingMode),
                         ),
+                        // Small "reveal pen settings" arrow — points left toward
+                        // the panel that pops out beside the toolbar.
+                        IconButton(
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(
+                            minWidth: 28,
+                            minHeight: 28,
+                          ),
+                          icon: Icon(
+                            Icons.chevron_left,
+                            size: 18,
+                            color: _showPenSettings
+                                ? const Color(0xFFE94560)
+                                : const Color.fromARGB(255, 170, 170, 170),
+                          ),
+                          onPressed: () => setState(
+                              () => _showPenSettings = !_showPenSettings),
+                        ),
                         IconButton(
                           icon: const Icon(Icons.more_horiz, size: 22),
                           color: const Color.fromARGB(255, 170, 170, 170),
@@ -184,6 +212,130 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
                   ),
                 ),
               ),
+
+              // LAYER 3b: Pen settings panel — pops out to the left of the
+              // toolbar when the small arrow is tapped.
+              if (_showPenSettings)
+                Positioned(
+                  top: 16,
+                  right: 132,
+                  child: LiquidGlass(
+                    borderRadius: BorderRadius.circular(20),
+                    blur: 18,
+                    tintOpacity: 0.16,
+                    child: Container(
+                      width: 210,
+                      padding: const EdgeInsets.all(14),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Text(
+                            'Pen',
+                            style: TextStyle(
+                              color: Color.fromARGB(255, 170, 170, 170),
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          // Color swatches
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: _penColorOptions.map((color) {
+                              final bool selected = color.value == _penColor.value;
+                              return GestureDetector(
+                                onTap: () => setState(() => _penColor = color),
+                                child: AnimatedContainer(
+                                  duration: const Duration(milliseconds: 150),
+                                  width: 26,
+                                  height: 26,
+                                  decoration: BoxDecoration(
+                                    color: color,
+                                    shape: BoxShape.circle,
+                                    border: Border.all(
+                                      color: selected
+                                          ? Colors.white
+                                          : Colors.transparent,
+                                      width: 2,
+                                    ),
+                                    boxShadow: selected
+                                        ? [
+                                            BoxShadow(
+                                              color: color.withOpacity(0.6),
+                                              blurRadius: 6,
+                                            ),
+                                          ]
+                                        : null,
+                                  ),
+                                ),
+                              );
+                            }).toList(),
+                          ),
+                          const SizedBox(height: 14),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text(
+                                'Size',
+                                style: TextStyle(
+                                  color: Color.fromARGB(255, 170, 170, 170),
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              Text(
+                                _penSize.toStringAsFixed(0),
+                                style: const TextStyle(
+                                  color: Color.fromARGB(255, 170, 170, 170),
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
+                          ),
+                          SliderTheme(
+                            data: SliderTheme.of(context).copyWith(
+                              trackHeight: 3,
+                              thumbShape: const RoundSliderThumbShape(
+                                  enabledThumbRadius: 7),
+                              overlayShape: const RoundSliderOverlayShape(
+                                  overlayRadius: 14),
+                              activeTrackColor: const Color(0xFFE94560),
+                              inactiveTrackColor:
+                                  const Color.fromARGB(60, 170, 170, 170),
+                              thumbColor: const Color(0xFFE94560),
+                            ),
+                            child: Slider(
+                              min: 1,
+                              max: 14,
+                              value: _penSize,
+                              onChanged: (v) => setState(() => _penSize = v),
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          // Texture — placeholder for a future update.
+                          Opacity(
+                            opacity: 0.4,
+                            child: Row(
+                              children: const [
+                                Icon(Icons.texture, size: 16,
+                                    color: Color.fromARGB(255, 170, 170, 170)),
+                                SizedBox(width: 8),
+                                Text(
+                                  'Texture — coming soon',
+                                  style: TextStyle(
+                                    color: Color.fromARGB(255, 170, 170, 170),
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
 
               // LAYER 4: Draggable Recorder Button
               Draggable_Recorder_Button(
