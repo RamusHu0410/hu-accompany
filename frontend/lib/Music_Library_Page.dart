@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:liquid_glass_easy/liquid_glass_easy.dart';
 import 'LiquidGlass.dart';
+import 'Search_Validator.dart';
+import 'music_sheet_service.dart';
+import 'Score_Viewer_Page.dart';
 
 // ─── Plug your real data in here later ────────────────────────────────────────
 class MusicSheet {
@@ -17,11 +20,6 @@ class MusicSheet {
     required this.pdfUrl,
   });
 }
-
-// ─── Swap this list out for your API response ──────────────────────────────────
-final List<MusicSheet?> _slots = List.generate(12, (_) => null);
-// When backend is ready, do something like:
-//   final List<MusicSheet?> _slots = sheets.cast<MusicSheet?>();
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // PAGE
@@ -39,6 +37,8 @@ class _Music_Library_PageState extends State<Music_Library_Page> {
   final FocusNode _focus = FocusNode();
   bool _focused = false;
 
+  // Swap this out for your API response when the backend is ready:
+  //   List<MusicSheet?> _slots = sheets.cast<MusicSheet?>();
   List<MusicSheet?> _slots = List.generate(12, (_) => null);
   bool _isLoading = false;
   String? _errorMessage;
@@ -47,7 +47,7 @@ class _Music_Library_PageState extends State<Music_Library_Page> {
   void _onSearchSubmitted(String rawQuery) async {
     // 1. Run local structural validation check first
     final validationError = SearchValidator.validateQuery(rawQuery);
-    
+
     if (validationError != null) {
       setState(() {
         _errorMessage = validationError;
@@ -59,13 +59,14 @@ class _Music_Library_PageState extends State<Music_Library_Page> {
     // 2. If it passes validation, proceed to hit your friend's API endpoint
     setState(() {
       _isLoading = true;
-      _errorMessage = null; 
+      _errorMessage = null;
     });
 
     try {
-      // Mocking the network call logic here for context:
-      // final results = await MusicSheetService.searchMusic(rawQuery);
-      // update your _slots with results...
+      final results = await MusicSheetService.searchMusic(rawQuery);
+      setState(() {
+        _slots = results;
+      });
     } catch (e) {
       setState(() {
         _errorMessage = "Network connection failed.";
@@ -74,6 +75,36 @@ class _Music_Library_PageState extends State<Music_Library_Page> {
       setState(() {
         _isLoading = false;
       });
+    }
+  }
+
+  // Fires when a result row is tapped. Fetches the MusicXML for that one
+  // sheet and hands off to the viewer page.
+  void _openSheet(MusicSheet sheet) async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final xml = await MusicSheetService.fetchScoreXml(sheet.id);
+      if (!mounted) return;
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => Score_Viewer_Page(title: sheet.title, musicXml: xml),
+        ),
+      );
+    } catch (e) {
+      setState(() {
+        _errorMessage = "Couldn't load that sheet. Please try again.";
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 
@@ -126,19 +157,57 @@ class _Music_Library_PageState extends State<Music_Library_Page> {
                           controller: _search,
                           focusNode: _focus,
                           focused: _focused,
+                          onSubmitted: _onSearchSubmitted,
                         ),
                       ),
                     ],
                   ),
 
-                  // ── Stacked name list ──────────────────────────────────────
+                  // ── Stacked name list / loading / error state ─────────────
                   Expanded(
-                    child: ListView.separated(
-                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 40),
-                      itemCount: _slots.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 10),
-                      itemBuilder: (_, i) => _NameSlot(sheet: _slots[i]),
-                    ),
+                    child: _isLoading
+                        ? const Center(
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2.5,
+                            ),
+                          )
+                        : _errorMessage != null
+                            ? Center(
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 32,
+                                  ),
+                                  child: Text(
+                                    _errorMessage!,
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(
+                                      color: Colors.black.withValues(
+                                        alpha: 0.5,
+                                      ),
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w400,
+                                      height: 1.4, // breathing room
+                                    ),
+                                  ),
+                                ),
+                              )
+                            : ListView.separated(
+                                padding: const EdgeInsets.fromLTRB(
+                                  16,
+                                  8,
+                                  16,
+                                  40,
+                                ),
+                                itemCount: _slots.length,
+                                separatorBuilder: (_, __) =>
+                                    const SizedBox(height: 10),
+                                itemBuilder: (_, i) => _NameSlot(
+                                  sheet: _slots[i],
+                                  onTap: _slots[i] == null
+                                      ? null
+                                      : () => _openSheet(_slots[i]!),
+                                ),
+                              ),
                   ),
                 ],
               ),
@@ -158,11 +227,13 @@ class _SearchBar extends StatelessWidget {
   final TextEditingController controller;
   final FocusNode focusNode;
   final bool focused;
+  final ValueChanged<String> onSubmitted;
 
   const _SearchBar({
     required this.controller,
     required this.focusNode,
     required this.focused,
+    required this.onSubmitted,
   });
 
   @override
@@ -208,18 +279,15 @@ class _SearchBar extends StatelessWidget {
               child: TextField(
                 controller: controller,
                 focusNode: focusNode,
-                style: const TextStyle(
-                  color: Colors.black87,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w400,
-                  letterSpacing: -0.2,
-                ),
+                textInputAction: TextInputAction
+                    .search, // Changes keyboard layout enter key to a search icon
+                onSubmitted: onSubmitted,
                 decoration: InputDecoration(
-                  hintText: 'Search',
+                  // This hint sits quietly in the pill until they start typing
+                  hintText: 'Search format: "Artist - Title"',
                   hintStyle: TextStyle(
                     color: Colors.black.withValues(alpha: 0.30),
-                    fontSize: 16,
-                    fontWeight: FontWeight.w400,
+                    fontSize: 14,
                   ),
                   border: InputBorder.none,
                   isDense: true,
@@ -285,14 +353,15 @@ class CloseButton extends StatelessWidget {
 
 class _NameSlot extends StatelessWidget {
   final MusicSheet? sheet;
-  const _NameSlot({this.sheet});
+  final VoidCallback? onTap;
+  const _NameSlot({this.sheet, this.onTap});
 
   @override
   Widget build(BuildContext context) {
     final isEmpty = sheet == null;
 
     return GestureDetector(
-      onTap: isEmpty ? null : () { /* navigate to ScoreViewerPage */ },
+      onTap: onTap,
       child: Container(
         height: 56,
         padding: const EdgeInsets.symmetric(horizontal: 16),
