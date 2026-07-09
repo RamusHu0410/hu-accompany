@@ -4,6 +4,8 @@ import 'Draggable_Recorder_Button.dart';
 import 'Drawing_Overlay.dart';
 import 'Music_Library_Page.dart';
 import 'LiquidGlass.dart';
+import 'Score_Page_Controller.dart';
+import 'Score_Pages_View.dart';
 import 'dart:ffi' as ffi;
 
 typedef StartRecordingFunc = ffi.Void Function();
@@ -82,7 +84,8 @@ class HuAccumponistApp extends StatelessWidget {
 }
 
 class ScoreViewerPage extends StatefulWidget {
-  const ScoreViewerPage({super.key});
+  final SelectedSheet? selected;
+  const ScoreViewerPage({super.key, this.selected});
 
   @override
   State<ScoreViewerPage> createState() => _ScoreViewerPageState();
@@ -90,7 +93,18 @@ class ScoreViewerPage extends StatefulWidget {
 
 class _ScoreViewerPageState extends State<ScoreViewerPage> {
   bool _isDrawingMode = false;
-  final bool _hasMusicSheet = true; // Track if a music sheet is loaded
+
+  // Null until a sheet has been picked from the library.
+  ScorePageController? _pageController;
+  bool get _hasMusicSheet => _pageController != null;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.selected != null) {
+      _pageController = ScorePageController(widget.selected!.musicXml);
+    }
+  }
 
   // Pen settings
   bool _showPenSettings = false;
@@ -105,12 +119,12 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
     Color(0xFFF2A93B), // amber
   ];
 
-  void _goToNavPage() {
-    Navigator.of(context).push(
-      PageRouteBuilder(
+  void _goToNavPage() async {
+    final selected = await Navigator.of(context).push<SelectedSheet>(
+      PageRouteBuilder<SelectedSheet>(
         transitionDuration: const Duration(milliseconds: 400),
         pageBuilder: (context, animation, secondaryAnimation) =>
-            const Music_Library_Page(), // 👈 replace with your class name
+            const Music_Library_Page(),
         transitionsBuilder: (context, animation, secondaryAnimation, child) {
           final tween = Tween(
             begin: const Offset(0.0, 1.0),
@@ -123,6 +137,12 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
         },
       ),
     );
+
+    if (selected != null) {
+      setState(() {
+        _pageController = ScorePageController(selected.musicXml);
+      });
+    }
   }
 
   @override
@@ -141,7 +161,7 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
               // LAYER 1: PDF Viewer (or placeholder background)
               if (_hasMusicSheet)
                 Positioned.fill(
-                  child: Container(color: Colors.white),
+                  child: Score_Pages_View(controller: _pageController!),
                 )
               else
                 Positioned.fill(

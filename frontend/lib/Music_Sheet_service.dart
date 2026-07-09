@@ -16,10 +16,8 @@ class MusicSheetService {
   static const String baseUrl = 'https://your-django-server.example.com';
 
   static const String _searchPath = '/api/search/';
-  static const String _scorePath = '/api/score/';
 
   static const Duration _searchTimeout = Duration(seconds: 10);
-  static const Duration _scoreTimeout = Duration(seconds: 15);
 
   /// Sends the already-validated "Artist - Title" query to Django and
   /// returns the matching sheets (metadata only — no MusicXML yet).
@@ -54,24 +52,4 @@ class MusicSheetService {
     }).toList();
   }
 
-  /// Requests the full MusicXML payload for one sheet, by id.
-  static Future<String> fetchScoreXml(String sheetId) async {
-    final uri = Uri.parse('$baseUrl$_scorePath');
-
-    final response = await http
-        .post(
-          uri,
-          headers: {'Content-Type': 'application/json'},
-          body: jsonEncode({'id': sheetId}),
-        )
-        .timeout(_scoreTimeout);
-
-    if (response.statusCode != 200) {
-      throw Exception('Score fetch failed with status ${response.statusCode}');
-    }
-
-    // TODO: if Django wraps this, e.g. {"musicxml": "<score-partwise>..."},
-    // change this to: return (jsonDecode(response.body) as Map)['musicxml'];
-    return response.body;
-  }
 }

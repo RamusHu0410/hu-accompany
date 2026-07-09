@@ -3,8 +3,8 @@ import 'package:flutter/services.dart';
 import 'package:liquid_glass_easy/liquid_glass_easy.dart';
 import 'LiquidGlass.dart';
 import 'Search_Validator.dart';
-import 'music_sheet_service.dart';
-import 'Score_Viewer_Page.dart';
+import 'Music_Sheet_service.dart';
+import 'api_service.dart';
 
 // ─── Plug your real data in here later ────────────────────────────────────────
 class MusicSheet {
@@ -19,6 +19,15 @@ class MusicSheet {
     this.thumbnailUrl,
     required this.pdfUrl,
   });
+}
+
+/// What gets handed back to ScoreViewerPage when the user picks a sheet:
+/// the sheet itself, plus the MusicXML already fetched for it, so the
+/// viewer doesn't have to make a second request.
+class SelectedSheet {
+  final MusicSheet sheet;
+  final String musicXml;
+  const SelectedSheet({required this.sheet, required this.musicXml});
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -42,6 +51,7 @@ class _Music_Library_PageState extends State<Music_Library_Page> {
   List<MusicSheet?> _slots = List.generate(12, (_) => null);
   bool _isLoading = false;
   String? _errorMessage;
+  final ApiService _api = ApiService();
 
   // This helper intercepts the text and manages local states
   void _onSearchSubmitted(String rawQuery) async {
@@ -79,7 +89,8 @@ class _Music_Library_PageState extends State<Music_Library_Page> {
   }
 
   // Fires when a result row is tapped. Fetches the MusicXML for that one
-  // sheet and hands off to the viewer page.
+  // sheet, then closes the library (sliding back down) and hands the
+  // result to ScoreViewerPage via the pop result.
   void _openSheet(MusicSheet sheet) async {
     setState(() {
       _isLoading = true;
@@ -87,14 +98,9 @@ class _Music_Library_PageState extends State<Music_Library_Page> {
     });
 
     try {
-      final xml = await MusicSheetService.fetchScoreXml(sheet.id);
+      final xml = await _api.fetchMusicSheet(sheet.title);
       if (!mounted) return;
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => Score_Viewer_Page(title: sheet.title, musicXml: xml),
-        ),
-      );
+      Navigator.pop(context, SelectedSheet(sheet: sheet, musicXml: xml));
     } catch (e) {
       setState(() {
         _errorMessage = "Couldn't load that sheet. Please try again.";
