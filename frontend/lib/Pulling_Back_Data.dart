@@ -3,8 +3,7 @@ import 'dart:convert'; // Needed to convert data into JSON format
 
 class ApiService {
   // Replace this with your friend's local computer IP address when they return.
-  // '10.0.2.2' is a special alias used by Android Emulators to connect to 'localhost'
-  static const String baseUrl = 'http://10.0.2.2:8000/api/get-sheet/';
+  static const String baseUrl = 'http://localhost:8000';
 
   // This function is 'async' and returns a Promise (Future) of a String (the XML text)
   Future<String> fetchMusicSheet(String songName) async {

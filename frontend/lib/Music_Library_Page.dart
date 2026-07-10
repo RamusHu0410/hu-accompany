@@ -3,8 +3,8 @@ import 'package:flutter/services.dart';
 import 'package:liquid_glass_easy/liquid_glass_easy.dart';
 import 'LiquidGlass.dart';
 import 'Search_Validator.dart';
-import 'Music_Sheet_service.dart';
-import 'api_service.dart';
+import 'Send_Strings_2Server.dart';
+import 'Pulling_Back_Data.dart';
 
 // ─── Plug your real data in here later ────────────────────────────────────────
 class MusicSheet {

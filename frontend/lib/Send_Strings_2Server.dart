@@ -13,7 +13,7 @@ class MusicSheetService {
   MusicSheetService._();
 
   // TODO: point this at the real server.
-  static const String baseUrl = 'https://your-django-server.example.com';
+  static const String baseUrl = 'http://localhost:8000';
 
   static const String _searchPath = '/api/search/';
 
