@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:liquid_glass_easy/liquid_glass_easy.dart';
 import 'LiquidGlass.dart';
+import 'Search_Validator.dart';
+import 'Music_Sheet_service.dart';
+import 'api_service.dart';
 
 // ─── Plug your real data in here later ────────────────────────────────────────
 class MusicSheet {
@@ -18,10 +21,14 @@ class MusicSheet {
   });
 }
 
-// ─── Swap this list out for your API response ──────────────────────────────────
-final List<MusicSheet?> _slots = List.generate(12, (_) => null);
-// When backend is ready, do something like:
-//   final List<MusicSheet?> _slots = sheets.cast<MusicSheet?>();
+/// What gets handed back to ScoreViewerPage when the user picks a sheet:
+/// the sheet itself, plus the MusicXML already fetched for it, so the
+/// viewer doesn't have to make a second request.
+class SelectedSheet {
+  final MusicSheet sheet;
+  final String musicXml;
+  const SelectedSheet({required this.sheet, required this.musicXml});
+}
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // PAGE
@@ -38,6 +45,74 @@ class _Music_Library_PageState extends State<Music_Library_Page> {
   final TextEditingController _search = TextEditingController();
   final FocusNode _focus = FocusNode();
   bool _focused = false;
+
+  // Swap this out for your API response when the backend is ready:
+  //   List<MusicSheet?> _slots = sheets.cast<MusicSheet?>();
+  List<MusicSheet?> _slots = List.generate(12, (_) => null);
+  bool _isLoading = false;
+  String? _errorMessage;
+  final ApiService _api = ApiService();
+
+  // This helper intercepts the text and manages local states
+  void _onSearchSubmitted(String rawQuery) async {
+    // 1. Run local structural validation check first
+    final validationError = SearchValidator.validateQuery(rawQuery);
+
+    if (validationError != null) {
+      setState(() {
+        _errorMessage = validationError;
+        _slots = []; // Wipe previous results or placeholders on failure
+      });
+      return; // Stop execution right here!
+    }
+
+    // 2. If it passes validation, proceed to hit your friend's API endpoint
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final results = await MusicSheetService.searchMusic(rawQuery);
+      setState(() {
+        _slots = results;
+      });
+    } catch (e) {
+      setState(() {
+        _errorMessage = "Network connection failed.";
+      });
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+
+  // Fires when a result row is tapped. Fetches the MusicXML for that one
+  // sheet, then closes the library (sliding back down) and hands the
+  // result to ScoreViewerPage via the pop result.
+  void _openSheet(MusicSheet sheet) async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final xml = await _api.fetchMusicSheet(sheet.title);
+      if (!mounted) return;
+      Navigator.pop(context, SelectedSheet(sheet: sheet, musicXml: xml));
+    } catch (e) {
+      setState(() {
+        _errorMessage = "Couldn't load that sheet. Please try again.";
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
 
   @override
   void initState() {
@@ -88,25 +163,57 @@ class _Music_Library_PageState extends State<Music_Library_Page> {
                           controller: _search,
                           focusNode: _focus,
                           focused: _focused,
+                          onSubmitted: _onSearchSubmitted,
                         ),
                       ),
                     ],
                   ),
 
-                  // ── Grid ────────────────────────────────────────────────────
+                  // ── Stacked name list / loading / error state ─────────────
                   Expanded(
-                    child: GridView.builder(
-                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 40),
-                      gridDelegate:
-                          const SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: 2,
-                        crossAxisSpacing: 12,
-                        mainAxisSpacing: 16,
-                        childAspectRatio: 0.68,
-                      ),
-                      itemCount: _slots.length,
-                      itemBuilder: (_, i) => _ParkingSlot(sheet: _slots[i]),
-                    ),
+                    child: _isLoading
+                        ? const Center(
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2.5,
+                            ),
+                          )
+                        : _errorMessage != null
+                            ? Center(
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 32,
+                                  ),
+                                  child: Text(
+                                    _errorMessage!,
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(
+                                      color: Colors.black.withValues(
+                                        alpha: 0.5,
+                                      ),
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w400,
+                                      height: 1.4, // breathing room
+                                    ),
+                                  ),
+                                ),
+                              )
+                            : ListView.separated(
+                                padding: const EdgeInsets.fromLTRB(
+                                  16,
+                                  8,
+                                  16,
+                                  40,
+                                ),
+                                itemCount: _slots.length,
+                                separatorBuilder: (_, __) =>
+                                    const SizedBox(height: 10),
+                                itemBuilder: (_, i) => _NameSlot(
+                                  sheet: _slots[i],
+                                  onTap: _slots[i] == null
+                                      ? null
+                                      : () => _openSheet(_slots[i]!),
+                                ),
+                              ),
                   ),
                 ],
               ),
@@ -126,11 +233,13 @@ class _SearchBar extends StatelessWidget {
   final TextEditingController controller;
   final FocusNode focusNode;
   final bool focused;
+  final ValueChanged<String> onSubmitted;
 
   const _SearchBar({
     required this.controller,
     required this.focusNode,
     required this.focused,
+    required this.onSubmitted,
   });
 
   @override
@@ -176,18 +285,15 @@ class _SearchBar extends StatelessWidget {
               child: TextField(
                 controller: controller,
                 focusNode: focusNode,
-                style: const TextStyle(
-                  color: Colors.black87,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w400,
-                  letterSpacing: -0.2,
-                ),
+                textInputAction: TextInputAction
+                    .search, // Changes keyboard layout enter key to a search icon
+                onSubmitted: onSubmitted,
                 decoration: InputDecoration(
-                  hintText: 'Search',
+                  // This hint sits quietly in the pill until they start typing
+                  hintText: 'Search format: "Artist - Title"',
                   hintStyle: TextStyle(
                     color: Colors.black.withValues(alpha: 0.30),
-                    fontSize: 16,
-                    fontWeight: FontWeight.w400,
+                    fontSize: 14,
                   ),
                   border: InputBorder.none,
                   isDense: true,
@@ -248,183 +354,71 @@ class CloseButton extends StatelessWidget {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// PARKING SLOT  — empty or filled card
+// NAME SLOT  — one long horizontal row, empty or filled
 // ═══════════════════════════════════════════════════════════════════════════════
 
-class _ParkingSlot extends StatelessWidget {
+class _NameSlot extends StatelessWidget {
   final MusicSheet? sheet;
-  const _ParkingSlot({this.sheet});
+  final VoidCallback? onTap;
+  const _NameSlot({this.sheet, this.onTap});
 
   @override
   Widget build(BuildContext context) {
     final isEmpty = sheet == null;
 
     return GestureDetector(
-      onTap: isEmpty ? null : () { /* navigate to ScoreViewerPage */ },
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // ── PDF thumbnail area ──────────────────────────────────────────
-          Expanded(
-            child: Container(
-              decoration: BoxDecoration(
-                // Glass surface — a touch darker than the page bg
-                color: isEmpty
-                    ? const Color.fromARGB(255, 180, 180, 180).withValues(alpha: 0.06)
-                    : const Color.fromARGB(255, 180, 180, 180).withValues(alpha: 0.10),
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(
-                  color: const Color.fromARGB(255, 180, 180, 180).withValues(
-                    alpha: isEmpty ? 0.18 : 0.28,
-                  ),
-                  width: 1,
-                ),
-              ),
-              child: isEmpty
-                  ? _EmptySlotContent()
-                  : _FilledSlotContent(sheet: sheet!),
+      onTap: onTap,
+      child: Container(
+        height: 56,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        decoration: BoxDecoration(
+          color: isEmpty
+              ? const Color.fromARGB(255, 180, 180, 180).withValues(alpha: 0.06)
+              : const Color.fromARGB(255, 180, 180, 180).withValues(alpha: 0.10),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: const Color.fromARGB(255, 180, 180, 180).withValues(
+              alpha: isEmpty ? 0.18 : 0.28,
             ),
+            width: 1,
           ),
-
-          const SizedBox(height: 9),
-
-          // ── Name placeholder ────────────────────────────────────────────
-          if (isEmpty) ...[
-            // Two stacked pill placeholders like empty text lines
-            _PlaceholderLine(width: double.infinity, height: 12),
-            const SizedBox(height: 5),
-            _PlaceholderLine(width: 80, height: 10),
-          ] else ...[
-            Text(
-              sheet!.title,
-              style: const TextStyle(
-                color: Color.fromARGB(255, 144, 144, 144),
-                fontSize: 13,
-                fontWeight: FontWeight.w500,
-                letterSpacing: -0.2,
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-            const SizedBox(height: 2),
-            Text(
-              'Tap to open',
-              style: TextStyle(
-                color: Colors.black.withValues(alpha: 0.40),
-                fontSize: 11,
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-// ── Empty slot interior ─────────────────────────────────────────────────────
-
-class _EmptySlotContent extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Dashed rectangle to suggest a PDF page
-          CustomPaint(
-            size: const Size(48, 62),
-            painter: _DashedPagePainter(),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _DashedPagePainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = Colors.black.withValues(alpha: 0.22)
-      ..strokeWidth = 1.2
-      ..style = PaintingStyle.stroke;
-
-    const r = 4.0;
-    const dash = 4.0;
-    const gap = 3.0;
-
-    final rect = RRect.fromRectAndRadius(
-      Rect.fromLTWH(0, 0, size.width, size.height),
-      const Radius.circular(r),
-    );
-
-    final path = Path()..addRRect(rect);
-    final metrics = path.computeMetrics();
-
-    for (final metric in metrics) {
-      double dist = 0;
-      bool draw = true;
-      while (dist < metric.length) {
-        final len = draw ? dash : gap;
-        if (draw) {
-          canvas.drawPath(metric.extractPath(dist, dist + len), paint);
-        }
-        dist += len;
-        draw = !draw;
-      }
-    }
-
-    // Tiny dog-ear fold top-right corner
-    final foldPaint = Paint()
-      ..color = Colors.black.withValues(alpha: 0.16)
-      ..style = PaintingStyle.fill;
-
-    final foldPath = Path()
-      ..moveTo(size.width - 12, 0)
-      ..lineTo(size.width, 12)
-      ..lineTo(size.width - 12, 12)
-      ..close();
-    canvas.drawPath(foldPath, foldPaint);
-
-    // Three faint lines to suggest text on the page
-    final linePaint = Paint()
-      ..color = Colors.black.withValues(alpha: 0.16)
-      ..strokeWidth = 1.0
-      ..style = PaintingStyle.stroke;
-
-    for (int i = 0; i < 3; i++) {
-      final y = size.height * 0.45 + i * 7.0;
-      canvas.drawLine(
-        Offset(size.width * 0.18, y),
-        Offset(size.width * (i == 2 ? 0.65 : 0.82), y),
-        linePaint,
-      );
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter old) => false;
-}
-
-// ── Filled slot interior ────────────────────────────────────────────────────
-
-class _FilledSlotContent extends StatelessWidget {
-  final MusicSheet sheet;
-  const _FilledSlotContent({required this.sheet});
-
-  @override
-  Widget build(BuildContext context) {
-    if (sheet.thumbnailUrl != null) {
-      return ClipRRect(
-        borderRadius: BorderRadius.circular(14),
-        child: Image.network(
-          sheet.thumbnailUrl!,
-          fit: BoxFit.cover,
-          errorBuilder: (_, _, _) => _EmptySlotContent(),
         ),
-      );
-    }
-    return _EmptySlotContent();
+        child: Row(
+          children: [
+            // Small leading icon so a row of text doesn't feel bare
+            Icon(
+              Icons.music_note_rounded,
+              size: 18,
+              color: Colors.black.withValues(alpha: isEmpty ? 0.14 : 0.30),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: isEmpty
+                  ? const _PlaceholderLine(width: double.infinity, height: 13)
+                  : Text(
+                      sheet!.title,
+                      style: const TextStyle(
+                        color: Color.fromARGB(255, 90, 90, 90),
+                        fontSize: 15,
+                        fontWeight: FontWeight.w500,
+                        letterSpacing: -0.2,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+            ),
+            if (!isEmpty) ...[
+              const SizedBox(width: 8),
+              Icon(
+                Icons.chevron_right_rounded,
+                size: 18,
+                color: Colors.black.withValues(alpha: 0.25),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
   }
 }
 
