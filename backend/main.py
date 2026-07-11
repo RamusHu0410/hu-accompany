@@ -1,7 +1,7 @@
 import os
 import re
 import requests
-from google import genai
+"""from google import genai
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -15,7 +15,7 @@ def chat(prompt: str) -> str:
         contents=prompt,
     )
     return response.text
-
+"""
 
 # ─────────────────────────────────────────────────────────────────────────────
 # IMSLP score lookup
