@@ -2,7 +2,7 @@ import json
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
-from main import chat, search_imslp
+from main import search_imslp
 
 
 @csrf_exempt
@@ -13,8 +13,7 @@ def chat_view(request):
         prompt = body.get("prompt", "").strip()
         if not prompt:
             return JsonResponse({"error": "prompt is required"}, status=400)
-        response = chat(prompt)
-        return JsonResponse({"response": response})
+        return JsonResponse({"response": prompt})
     except json.JSONDecodeError:
         return JsonResponse({"error": "invalid JSON"}, status=400)
     except Exception as e:
