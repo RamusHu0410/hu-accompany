@@ -38,7 +38,7 @@ pub fn start_processing_loop(rx: Receiver<Vec<f32>>) {
     let mut audio_vault: Vec<f32> = Vec::new();
     let mut input_data_buffer = vec![0.0f32; 1024];
     let mut output_spectrum = crate::dsp::FFT.make_output_vec();
-    let user_data: Option<PieceData> = None;
+    let mut user_data: Option<PieceData> = None;
     let piece_data = ACTIVE_PIECE.lock().unwrap();
     let start_time = Instant::now();
 
