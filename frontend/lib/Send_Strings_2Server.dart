@@ -13,7 +13,7 @@ class MusicSheetService {
   MusicSheetService._();
 
   // TODO: point this at the real server.
-  static const String baseUrl = 'http://192.168.2.36:localhost:8000';
+  static const String baseUrl = 'http://192.168.2.36:8000';
 
   static const String _searchPath = '/api/search';
 
