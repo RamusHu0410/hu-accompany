@@ -1,4 +1,4 @@
 Run django server
 
-cd backend-web
-python3 manage.py runserver
+cd backend
+python3 manage.py runserver 0.0.0.0:8000
