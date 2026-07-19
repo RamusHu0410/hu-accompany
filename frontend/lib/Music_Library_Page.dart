@@ -174,6 +174,20 @@ class _Music_Library_PageState extends State<Music_Library_Page> {
                     ],
                   ),
 
+                  // ── Attribution ────────────────────────────────────────────
+                  const Padding(
+                    padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
+                    child: Text(
+                      'All sheet music is sourced from IMSLP.org',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Color.fromARGB(140, 90, 90, 90),
+                        fontSize: 11,
+                        fontWeight: FontWeight.w400,
+                      ),
+                    ),
+                  ),
+
                   // ── Stacked name list / loading / error state ─────────────
                   Expanded(
                     child: _isLoading
