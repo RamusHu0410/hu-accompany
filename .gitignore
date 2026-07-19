@@ -22,6 +22,8 @@ build/
 # ==========================================
 **/.venv/
 backend-web/.env
+__pycache__/
+*.py[cod]
 
 # ==========================================
 # 4. IDEs and System Dotfiles (The "dot files")

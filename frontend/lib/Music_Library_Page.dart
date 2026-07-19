@@ -78,6 +78,7 @@ class _Music_Library_PageState extends State<Music_Library_Page> {
         _slots = results;
       });
     } catch (e) {
+      print("Search failed: $e");
       setState(() {
         _errorMessage = "Network connection failed.";
       });
