@@ -20,6 +20,7 @@ class Version(models.Model):
     arranger = models.CharField(max_length=500, blank=True, null=True)
     editor = models.CharField(max_length=500, blank=True, null=True)
     imslp_url = models.URLField(max_length=1000)
+    file_name = models.CharField(max_length=500, blank=True, null=True)
 
     def __str__(self):
         return f"{self.name} [{self.work_id}]"

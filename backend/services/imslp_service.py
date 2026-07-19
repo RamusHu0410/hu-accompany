@@ -25,6 +25,7 @@ def _work_to_dict(work: Work) -> dict:
                 "movement": v.movement,
                 "arranger": v.arranger,
                 "editor": v.editor,
+                "file_name": v.file_name,
             }
             for v in work.versions.all()
         ],
@@ -32,13 +33,14 @@ def _work_to_dict(work: Work) -> dict:
 
 
 def _fetch_and_cache(title: str, composer: str, url: str) -> Work:
-    wikitext = parser.fetch_wikitext(parser.page_title_from_url(url))
+    wikitext, page_html = parser.fetch_work_page(parser.page_title_from_url(url))
     work_info = parser.parse_work_info(wikitext)
     default_instrument = work_info.get("Instrumentation") or DEFAULT_INSTRUMENT
+    file_id_map = parser.parse_file_ids(page_html)
 
     sections = parser.parse_sections(wikitext)
     choices = [
-        normalizer.build_choice(section, i, url, default_instrument)
+        normalizer.build_choice(section, i, url, default_instrument, file_id_map)
         for i, section in enumerate(sections)
     ]
 
@@ -58,6 +60,7 @@ def _fetch_and_cache(title: str, composer: str, url: str) -> Work:
                 arranger=c.arranger,
                 editor=c.editor,
                 imslp_url=c.imslp_url,
+                file_name=c.file_name,
             )
             for c in choices
         ]
