@@ -49,6 +49,7 @@ class Choice:
     movement: Optional[str] = None
     arranger: Optional[str] = None
     editor: Optional[str] = None
+    file_name: Optional[str] = None  # original filename on IMSLP, e.g. "...pdf"
 
 
 @dataclass

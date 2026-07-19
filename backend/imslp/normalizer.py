@@ -3,6 +3,7 @@
 import re
 
 from .models import Choice, Edition
+from .parser import normalize_filename
 
 _COMPOSER_SUFFIX_RE = re.compile(r"\s*\([^()]+\)\s*$")
 _COMPOSER_RE = re.compile(r"\(([^()]+)\)\s*$")
@@ -74,11 +75,27 @@ def extract_editor(raw):
     return text
 
 
-def build_choice(section, index: int, work_url: str, default_instrument: str) -> Choice:
-    """Normalize a parser.RawSection into an API-ready Choice."""
+def build_choice(
+    section, index: int, work_url: str, default_instrument: str, file_id_map: dict = None
+) -> Choice:
+    """Normalize a parser.RawSection into an API-ready Choice.
+
+    `file_id_map` (from parser.parse_file_ids) resolves the primary
+    edition's filename to IMSLP's numeric file id, so `imslp_url` can point
+    straight at the downloadable file (Special:ImagefromIndex/{id}) instead
+    of just the parent work page -- the downloader needs that specific URL,
+    since a work page can list dozens of files.
+    """
     is_arrangement = detect_arrangement(section.category)
     primary_edition = section.editions[0] if section.editions else Edition()
     editor = extract_editor(primary_edition.editor)
+
+    file_name = primary_edition.file_names[0] if primary_edition.file_names else None
+    imslp_url = work_url
+    if file_name and file_id_map:
+        file_id = file_id_map.get(normalize_filename(file_name))
+        if file_id:
+            imslp_url = f"https://imslp.org/wiki/Special:ImagefromIndex/{file_id}"
 
     if section.instrumentation_label:
         instruments, arranger = normalize_instrument(section.instrumentation_label)
@@ -103,8 +120,9 @@ def build_choice(section, index: int, work_url: str, default_instrument: str) ->
         name=name,
         instrumentation=instrumentation,
         type="Arrangement" if is_arrangement else "Original Score",
-        imslp_url=work_url,
+        imslp_url=imslp_url,
         movement=movement,
         arranger=arranger,
         editor=editor,
+        file_name=file_name,
     )

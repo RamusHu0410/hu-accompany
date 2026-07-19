@@ -15,6 +15,7 @@ under the top of the file with no level-5 child) *is* itself a version: it
 holds the file entries for the work's original scoring.
 """
 
+import html
 import re
 
 import requests
@@ -28,6 +29,9 @@ REQUEST_TIMEOUT = 15
 _MARKER_RE = re.compile(r"\*{3,}\s*([A-Z /]+?)\s*\*{3,}")
 _HEADER_RE = re.compile(r"^(={3,5})\s*(.*?)\s*\1\s*$", re.MULTILINE)
 _FIELD_RE = re.compile(r"\n\|\s*([^=\n]+?)[ \t]*=[ \t]*(.*?)(?=\n\|[^=\n]+=|\Z)", re.DOTALL)
+_FILE_BLOCK_RE = re.compile(r'<div id="IMSLP(\d+)"')
+_FILE_TITLE_RE = re.compile(r'title="(?:File:)?([^"]+?\.\w{2,4})"')
+_FILE_TITLE_WINDOW = 1500
 
 
 def page_title_from_url(url: str) -> str:
@@ -36,7 +40,10 @@ def page_title_from_url(url: str) -> str:
     return title.replace("_", " ")
 
 
-def fetch_wikitext(page_title: str) -> str:
+def fetch_work_page(page_title: str) -> tuple:
+    """Fetch a work page's wikitext (for section/edition structure) and its
+    rendered HTML (for the numeric per-file IMSLP ids the wikitext doesn't
+    carry) in a single API call. Returns (wikitext, html)."""
     try:
         resp = requests.get(
             IMSLP_API_URL,
@@ -44,7 +51,7 @@ def fetch_wikitext(page_title: str) -> str:
                 "action": "parse",
                 "page": page_title,
                 "format": "json",
-                "prop": "wikitext",
+                "prop": "wikitext|text",
             },
             timeout=REQUEST_TIMEOUT,
         )
@@ -56,7 +63,32 @@ def fetch_wikitext(page_title: str) -> str:
     if "error" in data:
         raise IMSLPNetworkError(f"IMSLP page fetch failed: {data['error']}")
 
-    return data["parse"]["wikitext"]["*"]
+    parse = data["parse"]
+    return parse["wikitext"]["*"], parse["text"]["*"]
+
+
+def normalize_filename(name: str) -> str:
+    """Canonicalize a filename for cross-referencing the wikitext's
+    underscore-separated "File Name" fields against the rendered HTML's
+    space-separated, HTML-entity-escaped file titles."""
+    return html.unescape(name).replace("_", " ").strip().lower()
+
+
+def parse_file_ids(page_html: str) -> dict:
+    """Map normalized filename -> numeric IMSLP file id, read from each
+    file row's `<div id="IMSLPxxxxx">` block in the rendered HTML. This is
+    the only place a file's real download id (used to build
+    https://imslp.org/wiki/Special:ImagefromIndex/{id}) is exposed --
+    it's absent from the wikitext."""
+    file_ids = {}
+    for m in _FILE_BLOCK_RE.finditer(page_html):
+        window = page_html[m.end() : m.end() + _FILE_TITLE_WINDOW]
+        title_match = _FILE_TITLE_RE.search(window)
+        if not title_match:
+            continue
+        key = normalize_filename(title_match.group(1))
+        file_ids.setdefault(key, m.group(1))
+    return file_ids
 
 
 def _find_section(wikitext: str, marker_name: str) -> str:

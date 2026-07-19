@@ -24,6 +24,7 @@ build/
 backend-web/.env
 __pycache__/
 *.py[cod]
+backend/storage/
 
 # ==========================================
 # 4. IDEs and System Dotfiles (The "dot files")

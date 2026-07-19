@@ -16,7 +16,12 @@ INSTALLED_APPS = [
     "django.contrib.contenttypes",
     "django.contrib.auth",
     "api",
+    "imslp_downloader",
 ]
+
+# Root directory downloaded PDFs are stored under; the DB stores paths
+# relative to this (e.g. "scores/Beethoven/Moonlight_Sonata/piano.pdf").
+STORAGE_ROOT = BASE_DIR / "storage"
 
 MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
