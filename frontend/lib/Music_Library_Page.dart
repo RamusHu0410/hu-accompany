@@ -288,9 +288,15 @@ class _SearchBar extends StatelessWidget {
                 textInputAction: TextInputAction
                     .search, // Changes keyboard layout enter key to a search icon
                 onSubmitted: onSubmitted,
+                // Was unset, so it fell back to the app's dark theme default
+                // (white) and was invisible against this light search bar.
+                style: const TextStyle(
+                  color: Colors.black,
+                  fontSize: 14,
+                ),
                 decoration: InputDecoration(
                   // This hint sits quietly in the pill until they start typing
-                  hintText: 'Search format: "Artist - Title"',
+                  hintText: 'Search for sheet music',
                   hintStyle: TextStyle(
                     color: Colors.black.withValues(alpha: 0.30),
                     fontSize: 14,
