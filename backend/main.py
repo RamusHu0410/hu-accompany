@@ -18,7 +18,7 @@ def chat(prompt: str) -> str:
 """
 
 # ─────────────────────────────────────────────────────────────────────────────
-# IMSLP score lookup
+# IMSLP score lookup old version
 # ─────────────────────────────────────────────────────────────────────────────
 
 IMSLP_SEARCH_API_URL = "https://imslp.org/api.php"
