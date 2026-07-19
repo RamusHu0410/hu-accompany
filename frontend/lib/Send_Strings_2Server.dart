@@ -13,9 +13,9 @@ class MusicSheetService {
   MusicSheetService._();
 
   // TODO: point this at the real server.
-  static const String baseUrl = 'http://172.28.176.30:8000';
+  static const String baseUrl = 'http://172.28.176.30:8000'; // THIS IS WHERE BUG ALWAYS HAPPENS
 
-  static const String _searchPath = '/api/search';
+  static const String _searchPath = '/api/imslp/search';
 
   static const Duration _searchTimeout = Duration(seconds: 10);
 

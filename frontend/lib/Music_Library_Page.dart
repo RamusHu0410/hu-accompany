@@ -78,7 +78,11 @@ class _Music_Library_PageState extends State<Music_Library_Page> {
         _slots = results;
       });
     } catch (e) {
-      print("Search failed: $e");
+      // The real exception (SocketException, TimeoutException, a non-200
+      // Exception, etc.) was previously swallowed here — logging it is the
+      // fastest way to tell "server unreachable" apart from "server
+      // reachable but errored" apart from "bad response shape."
+      debugPrint('MusicSheetService.searchMusic failed: $e');
       setState(() {
         _errorMessage = "Network connection failed.";
       });
