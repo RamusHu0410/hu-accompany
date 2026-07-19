@@ -4,9 +4,11 @@ import 'Draggable_Recorder_Button.dart';
 import 'Drawing_Overlay.dart';
 import 'Music_Library_Page.dart';
 import 'LiquidGlass.dart';
-import 'Score_Page_Controller.dart';
-import 'Score_Pages_View.dart';
+import 'Score_osmd_renderer.dart'; // fixed casing to match actual filename
 import 'dart:ffi' as ffi;
+// NOTE: removed `import 'Osmd_viewer.html';` — you can't import an HTML
+// file into Dart. It's loaded at runtime via WebViewController's
+// loadFlutterAsset() inside Score_osmd_renderer.dart, not via Dart import.
 
 typedef StartRecordingFunc = ffi.Void Function();
 typedef StartRecordingFuncDart = void Function();
@@ -95,15 +97,20 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
   bool _isDrawingMode = false;
 
   // Null until a sheet has been picked from the library.
-  ScorePageController? _pageController;
-  bool get _hasMusicSheet => _pageController != null;
+  String? _musicXml;
+  bool get _hasMusicSheet => _musicXml != null;
+
+  // Drives the OSMD WebView directly — e.g. call
+  // _osmdController.colorNotes([...]) once wrong-note feedback comes back
+  // from analysis, no re-render of the whole score needed.
+  // Fixed: was `ScoreosmdController` (undefined) — actual class is
+  // `ScoreOsmdController`, matching the definition in Score_osmd_renderer.dart.
+  final ScoreOsmdController _osmdController = ScoreOsmdController();
 
   @override
   void initState() {
     super.initState();
-    if (widget.selected != null) {
-      _pageController = ScorePageController(widget.selected!.musicXml);
-    }
+    _musicXml = widget.selected?.musicXml;
   }
 
   // Pen settings
@@ -140,7 +147,7 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
 
     if (selected != null) {
       setState(() {
-        _pageController = ScorePageController(selected.musicXml);
+        _musicXml = selected.musicXml;
       });
     }
   }
@@ -156,12 +163,15 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
           // captured for the lenses on Skia backends like macOS desktop.
           backgroundWidget: Stack(
             children: [
-              // LAYER 1: PDF Viewer (or placeholder background)
-              // 1. If true, look at how the Widget sits right under the if statement (no braces!)
-              // LAYER 1: PDF Viewer (or placeholder background)
+              // LAYER 1: OSMD score view (or placeholder background)
               if (_hasMusicSheet)
                 Positioned.fill(
-                  child: Score_Pages_View(controller: _pageController!),
+                  // Fixed: was `Score_osmd_View` (undefined) — actual
+                  // class is `Score_Osmd_View`.
+                  child: Score_Osmd_View(
+                    musicXml: _musicXml!,
+                    controller: _osmdController,
+                  ),
                 )
               else
                 Positioned.fill(

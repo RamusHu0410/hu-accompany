@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <script src="https://cdn.jsdelivr.net/npm/opensheetmusicdisplay@1.8.4/build/opensheetmusicdisplay.min.js"></script>
+  <style>
+    html, body { margin: 0; padding: 0; background: transparent; }
+    #osmd-container { width: 100%; }
+  </style>
+</head>
+<body>
+  <div id="osmd-container"></div>
+  <script>
+    let osmd;
+    // Tracks whether a score has been successfully loaded+rendered —
+    // separate concept from bridge readiness below, kept as its own
+    // variable name to avoid confusion with the 'bridgeReady' message.
+    let scoreReady = false;
+
+    function post(type, payload) {
+      if (window.FlutterBridge) {
+        window.FlutterBridge.postMessage(JSON.stringify({ type: type, payload: payload }));
+      }
+    }
+
+    async function loadScore(musicXmlString) {
+      scoreReady = false;
+      try {
+        if (!osmd) {
+          osmd = new opensheetmusicdisplay.OpenSheetMusicDisplay('osmd-container', {
+            autoResize: true,
+            backend: 'svg',
+            drawTitle: true,
+          });
+        }
+        await osmd.load(musicXmlString);
+        osmd.render();
+        scoreReady = true;
+        post('loaded', {});
+      } catch (e) {
+        post('error', { message: String(e) });
+      }
+    }
+
+    // noteRefs: [{ measure: 0, voiceEntry: 0, noteIndex: 0 }, ...]
+    // measure/voiceEntry/noteIndex are all zero-based, matching the order
+    // notes appear in the original MusicXML.
+    function colorNotes(noteRefs, colorHex) {
+      if (!scoreReady) return;
+      try {
+        const measureList = osmd.GraphicSheet.MeasureList;
+        noteRefs.forEach(function (ref) {
+          const measureAcrossStaves = measureList[ref.measure];
+          if (!measureAcrossStaves) return;
+          measureAcrossStaves.forEach(function (staffMeasure) {
+            staffMeasure.staffEntries.forEach(function (entry) {
+              const ve = entry.graphicalVoiceEntries[ref.voiceEntry];
+              if (!ve) return;
+              const note = ve.notes[ref.noteIndex];
+              if (note && note.sourceNote) {
+                note.sourceNote.NoteheadColor = colorHex;
+              }
+            });
+          });
+        });
+        osmd.render();
+      } catch (e) {
+        post('error', { message: 'colorNotes: ' + String(e) });
+      }
+    }
+
+    function resetColors() {
+      if (!scoreReady) return;
+      try {
+        const measureList = osmd.GraphicSheet.MeasureList;
+        measureList.forEach(function (measureAcrossStaves) {
+          measureAcrossStaves.forEach(function (staffMeasure) {
+            staffMeasure.staffEntries.forEach(function (entry) {
+              entry.graphicalVoiceEntries.forEach(function (ve) {
+                ve.notes.forEach(function (note) {
+                  // null, not undefined — this is the actual "unset"
+                  // sentinel OSMD checks for when picking a notehead color.
+                  if (note.sourceNote) note.sourceNote.NoteheadColor = null;
+                });
+              });
+            });
+          });
+        });
+        osmd.render();
+      } catch (e) {
+        post('error', { message: 'resetColors: ' + String(e) });
+      }
+    }
+
+    window.OSMDBridge = { loadScore, colorNotes, resetColors };
+    // Renamed from 'ready' to 'bridgeReady' so it's unambiguous on the
+    // Dart side (and doesn't collide in spirit with the scoreReady flag
+    // above). This is the ONLY safe signal that window.OSMDBridge exists —
+    // Dart should gate its first loadScore() call on receiving this, not
+    // on WebView's onPageFinished, since the CDN script may still be
+    // loading when onPageFinished fires.
+    post('bridgeReady', {});
+  </script>
+</body>
+</html>
