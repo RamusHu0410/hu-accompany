@@ -8,7 +8,7 @@ import 'Music_Library_Page.dart' show MusicSheet;
 class MusicSheetService {
   MusicSheetService._();
 
-  static const String baseUrl = 'http://172.28.176.34:8000';
+  static const String baseUrl = 'http://172.28.178.10:8000';
 
   // imslp_search_view — returns a single matched Work with its available
   // editions/arrangements nested under "choices", NOT a flat list of
