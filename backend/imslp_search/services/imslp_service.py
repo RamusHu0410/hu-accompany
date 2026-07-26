@@ -68,13 +68,32 @@ def _fetch_and_cache(title: str, composer: str, url: str) -> Work:
     return work
 
 
+def browse_composer(composer_name: str) -> dict:
+    """List every work filed under a composer's IMSLP category.
+
+    Used when the query names a composer only (e.g. "Chopin"), where
+    resolving to a single top search hit would arbitrarily pick one piece
+    instead of showing everything the composer has available.
+    """
+    works = imslp_search_module.list_composer_works(composer_name)
+    if not works:
+        raise WorkNotFoundError(f"No works found for composer {composer_name!r}")
+    return {
+        "composer": composer_name,
+        "works": [{"title": w.title, "composer": w.composer, "url": w.url} for w in works],
+    }
+
+
 def search(query: str = "", url: str = None) -> dict:
-    """Look up a work's available versions/arrangements/editions.
+    """Look up a work's available versions/arrangements/editions, or -- if
+    the query names a composer only -- every work by that composer.
 
     If `url` is given (e.g. the caller already disambiguated via
     /api/search), it's used directly and no IMSLP search call is made.
-    Otherwise the top IMSLP search hit for `query` is used, matching the
-    "piece name in, versions list out" contract for a first pass.
+    Otherwise, a bare composer name (e.g. "Chopin") returns that composer's
+    full work list (see `browse_composer`); anything more specific resolves
+    to the top IMSLP search hit for `query`, matching the "piece name in,
+    versions list out" contract for a first pass.
     """
     if url:
         cached = Work.objects.filter(imslp_url=url).first()
@@ -85,6 +104,10 @@ def search(query: str = "", url: str = None) -> dict:
         title, composer = normalizer.split_title_composer(page_title)
         work = _fetch_and_cache(title, composer, url)
         return _work_to_dict(work)
+
+    composer_name = imslp_search_module.find_composer_category(query)
+    if composer_name:
+        return browse_composer(composer_name)
 
     hits = imslp_search_module.search_works(query)
     if not hits:

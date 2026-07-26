@@ -1,6 +1,7 @@
 """Finds candidate IMSLP works matching a free-text query."""
 
 import re
+import unicodedata
 
 import requests
 
@@ -14,7 +15,9 @@ REQUEST_TIMEOUT = 10
 MAX_FALLBACK_ATTEMPTS = 20
 
 _REDIRECT_RE = re.compile(r"#REDIRECT\s*\[\[([^\]]+)\]\]", re.IGNORECASE)
+_CATEGORY_REDIRECT_RE = re.compile(r"#REDIRECT\s*\[\[:?Category:([^\]]+)\]\]", re.IGNORECASE)
 _HTML_TAG_RE = re.compile(r"<[^>]+>")
+_CATEGORY_TITLE_RE = re.compile(r"^Category:(.+)$")
 
 
 def _run_search(query: str) -> list:
@@ -57,6 +60,113 @@ def _run_search(query: str) -> list:
                 url=f"https://imslp.org/wiki/{title.replace(' ', '_')}",
             )
         )
+
+    return results
+
+
+def _strip_accents(text: str) -> str:
+    return "".join(c for c in unicodedata.normalize("NFKD", text) if not unicodedata.combining(c))
+
+
+def _tokenize(text: str) -> set:
+    return {
+        _strip_accents(tok.strip(".,").lower())
+        for tok in text.split()
+        if tok.strip(".,")
+    }
+
+
+def find_composer_category(query: str):
+    """If `query` is (entirely) a composer's name -- e.g. "Chopin" or
+    "Frederic Chopin" -- return IMSLP's canonical category name for that
+    composer (e.g. "Chopin, Frédéric"), resolving redirects like
+    "Category:Chopin, Frederick" -> "Category:Chopin, Frédéric".
+
+    Returns None for anything more specific than a bare composer name (e.g.
+    "Chopin Nocturne Op.9 No.2"), so piece lookups aren't hijacked into a
+    composer browse.
+    """
+    query_tokens = _tokenize(query)
+    if not query_tokens:
+        return None
+
+    try:
+        resp = requests.get(
+            IMSLP_API_URL,
+            params={
+                "action": "query",
+                "list": "search",
+                "srsearch": query,
+                "srnamespace": 14,
+                "srlimit": 10,
+                "format": "json",
+            },
+            timeout=REQUEST_TIMEOUT,
+        )
+        resp.raise_for_status()
+        hits = resp.json().get("query", {}).get("search", [])
+    except requests.RequestException as exc:
+        raise IMSLPNetworkError(f"IMSLP category search failed: {exc}") from exc
+
+    for hit in hits:
+        title = hit["title"]
+        redirect = _CATEGORY_REDIRECT_RE.match(hit.get("snippet", ""))
+        if redirect:
+            title = f"Category:{_HTML_TAG_RE.sub('', redirect.group(1)).strip()}"
+
+        m = _CATEGORY_TITLE_RE.match(title)
+        if not m:
+            continue
+        composer_name = m.group(1).strip()
+        name_tokens = _tokenize(composer_name.replace(",", " "))
+        if name_tokens and query_tokens.issubset(name_tokens):
+            return composer_name
+
+    return None
+
+
+def list_composer_works(composer_name: str, limit: int = 500) -> list:
+    """List every work page (namespace 0) filed under a composer's IMSLP
+    category, paginating via `cmcontinue` until exhausted or `limit` hit."""
+    category_title = f"Category:{composer_name}"
+    results = []
+    cmcontinue = None
+    pages_fetched = 0
+
+    while True:
+        params = {
+            "action": "query",
+            "list": "categorymembers",
+            "cmtitle": category_title,
+            "cmnamespace": 0,
+            "cmlimit": min(limit, 500),
+            "format": "json",
+        }
+        if cmcontinue:
+            params["cmcontinue"] = cmcontinue
+
+        try:
+            resp = requests.get(IMSLP_API_URL, params=params, timeout=REQUEST_TIMEOUT)
+            resp.raise_for_status()
+            data = resp.json()
+        except requests.RequestException as exc:
+            raise IMSLPNetworkError(f"IMSLP category listing failed: {exc}") from exc
+
+        for member in data.get("query", {}).get("categorymembers", []):
+            title = member["title"]
+            name, composer = split_title_composer(title)
+            results.append(
+                SearchHit(
+                    title=name,
+                    composer=composer,
+                    url=f"https://imslp.org/wiki/{title.replace(' ', '_')}",
+                )
+            )
+
+        cmcontinue = data.get("continue", {}).get("cmcontinue")
+        pages_fetched += 1
+        if not cmcontinue or len(results) >= limit or pages_fetched >= 5:
+            break
 
     return results
 
