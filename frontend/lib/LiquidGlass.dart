@@ -22,7 +22,7 @@ class LiquidGlass extends StatelessWidget {
     required this.child,
     this.borderRadius = const BorderRadius.all(Radius.circular(20)),
     this.blur = 16,
-    this.tintOpacity = 0.18,
+    this.tintOpacity = 0.05,
     this.tintColor = const Color.fromARGB(255, 190, 190, 190),
     this.shadowOpacity = 0.20,
   });

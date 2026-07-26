@@ -7,23 +7,29 @@ class _Stroke {
   final List<Offset> points;
   final Color color;
   final double strokeWidth;
+  final bool isEraser;
 
   _Stroke({
     required this.points,
     required this.color,
     required this.strokeWidth,
+    this.isEraser = false,
   });
 }
 
 class Drawing_Overlay extends StatefulWidget {
   final bool isDrawingMode;
+  final bool isErasing;
   final Color penColor;
   final double penSize;
+  final double eraserSize;
   const Drawing_Overlay({
     super.key,
     required this.isDrawingMode,
+    this.isErasing = false,
     this.penColor = const Color(0xFFE94560),
     this.penSize = 3.0,
+    this.eraserSize = 24.0,
   });
 
   @override
@@ -35,15 +41,22 @@ class _Drawing_OverlayState extends State<Drawing_Overlay> {
   _Stroke? _currentStroke;
 
   void _startStroke(Offset point) {
-    // Snapshot the pen settings *now* — this stroke keeps this
-    // color/width for its whole life, even if the user changes the
-    // pen settings later.
+    // Snapshot the current tool *now* — this stroke keeps this
+    // color/width/eraser-ness for its whole life, even if the user changes
+    // the pen or eraser settings later.
     setState(() {
-      _currentStroke = _Stroke(
-        points: [point],
-        color: widget.penColor,
-        strokeWidth: widget.penSize,
-      );
+      _currentStroke = widget.isErasing
+          ? _Stroke(
+              points: [point],
+              color: Colors.transparent,
+              strokeWidth: widget.eraserSize,
+              isEraser: true,
+            )
+          : _Stroke(
+              points: [point],
+              color: widget.penColor,
+              strokeWidth: widget.penSize,
+            );
     });
   }
 
@@ -65,16 +78,13 @@ class _Drawing_OverlayState extends State<Drawing_Overlay> {
 
   @override
   Widget build(BuildContext context) {
+    final toolActive = widget.isDrawingMode || widget.isErasing;
     return GestureDetector(
-      // Pass touches through when not drawing
-      behavior: widget.isDrawingMode
-          ? HitTestBehavior.opaque
-          : HitTestBehavior.translucent,
-      onPanStart:
-          widget.isDrawingMode ? (d) => _startStroke(d.localPosition) : null,
-      onPanUpdate:
-          widget.isDrawingMode ? (d) => _extendStroke(d.localPosition) : null,
-      onPanEnd: widget.isDrawingMode ? (d) => _endStroke() : null,
+      // Pass touches through when neither drawing nor erasing
+      behavior: toolActive ? HitTestBehavior.opaque : HitTestBehavior.translucent,
+      onPanStart: toolActive ? (d) => _startStroke(d.localPosition) : null,
+      onPanUpdate: toolActive ? (d) => _extendStroke(d.localPosition) : null,
+      onPanEnd: toolActive ? (d) => _endStroke() : null,
       child: CustomPaint(
         painter: _strokes.isNotEmpty || _currentStroke != null
             ? _StrokePainter(
@@ -96,11 +106,16 @@ class _StrokePainter extends CustomPainter {
   void _drawStroke(Canvas canvas, _Stroke stroke) {
     if (stroke.points.length < 2) return;
     final paint = Paint()
-      ..color = stroke.color
+      ..color = stroke.isEraser ? Colors.black : stroke.color
       ..strokeWidth = stroke.strokeWidth
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round
-      ..style = PaintingStyle.stroke;
+      ..style = PaintingStyle.stroke
+      // Eraser strokes clear pixels instead of painting over them, so they
+      // remove ink from strokes drawn earlier in this same layer regardless
+      // of color. Requires the saveLayer wrapper in paint() below — without
+      // an offscreen layer, BlendMode.clear has nothing scoped to clear.
+      ..blendMode = stroke.isEraser ? BlendMode.clear : BlendMode.srcOver;
     final path = Path()..moveTo(stroke.points[0].dx, stroke.points[0].dy);
     for (int i = 1; i < stroke.points.length; i++) {
       path.lineTo(stroke.points[i].dx, stroke.points[i].dy);
@@ -110,12 +125,18 @@ class _StrokePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    // All strokes for this frame are composited into one offscreen layer
+    // first, so eraser strokes (BlendMode.clear) only punch through ink
+    // drawn earlier in this same layer — not whatever's rendered beneath
+    // the whole overlay widget in the tree.
+    canvas.saveLayer(Offset.zero & size, Paint());
     for (final s in strokes) {
       _drawStroke(canvas, s);
     }
     if (currentStroke != null) {
       _drawStroke(canvas, currentStroke!);
     }
+    canvas.restore();
   }
 
   @override

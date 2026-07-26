@@ -95,6 +95,7 @@ class ScoreViewerPage extends StatefulWidget {
 
 class _ScoreViewerPageState extends State<ScoreViewerPage> {
   bool _isDrawingMode = false;
+  bool _isErasing = false;
 
   // Null until a sheet has been picked from the library.
   String? _musicXml;
@@ -181,6 +182,7 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
               Positioned.fill(
                 child: Drawing_Overlay(
                   isDrawingMode: _isDrawingMode,
+                  isErasing: _isErasing,
                   penColor: _penColor,
                   penSize: _penSize,
                 ),
@@ -197,25 +199,15 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
                 child: LiquidGlass(
                   borderRadius: BorderRadius.circular(30),
                   blur: 18,
-                  tintOpacity: 0.16,
+                  tintOpacity: 0.14,
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        IconButton(
-                          icon: Icon(
-                            Icons.edit_outlined,
-                            size: 22,
-                            color: _isDrawingMode
-                                ? const Color(0xFFE94560)
-                                : const Color.fromARGB(255, 170, 170, 170),
-                          ),
-                          onPressed: () =>
-                              setState(() => _isDrawingMode = !_isDrawingMode),
-                        ),
-                        // Small "reveal pen settings" arrow — points left toward
-                        // the panel that pops out beside the toolbar.
+                        // Small "reveal pen settings" arrow — leads the row
+                        // so it sits closest to (and points toward) the
+                        // panel that pops out further left of the toolbar.
                         IconButton(
                           padding: EdgeInsets.zero,
                           constraints: const BoxConstraints(
@@ -233,9 +225,31 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
                               () => _showPenSettings = !_showPenSettings),
                         ),
                         IconButton(
-                          icon: const Icon(Icons.more_horiz, size: 22),
-                          color: const Color.fromARGB(255, 170, 170, 170),
-                          onPressed: () {},
+                          icon: Icon(
+                            Icons.edit_outlined,
+                            size: 22,
+                            color: _isDrawingMode
+                                ? const Color(0xFFE94560)
+                                : const Color.fromARGB(255, 170, 170, 170),
+                          ),
+                          onPressed: () => setState(() {
+                            _isDrawingMode = !_isDrawingMode;
+                            // Pen and eraser are mutually exclusive tools.
+                            if (_isDrawingMode) _isErasing = false;
+                          }),
+                        ),
+                        IconButton(
+                          icon: Icon(
+                            Icons.backspace_outlined,
+                            size: 20,
+                            color: _isErasing
+                                ? const Color(0xFFE94560)
+                                : const Color.fromARGB(255, 170, 170, 170),
+                          ),
+                          onPressed: () => setState(() {
+                            _isErasing = !_isErasing;
+                            if (_isErasing) _isDrawingMode = false;
+                          }),
                         ),
                       ],
                     ),
@@ -252,7 +266,7 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
                   child: LiquidGlass(
                     borderRadius: BorderRadius.circular(20),
                     blur: 18,
-                    tintOpacity: 0.16,
+                    tintOpacity: 0.05,
                     child: Container(
                       width: 210,
                       padding: const EdgeInsets.all(14),
@@ -387,7 +401,7 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
                   child: LiquidGlass(
                     borderRadius: BorderRadius.circular(16),
                     blur: 14,
-                    tintOpacity: 0.20,
+                    tintOpacity: 0.14,
                     child: Padding(
                       padding: const EdgeInsets.all(14),
                       child: Icon(

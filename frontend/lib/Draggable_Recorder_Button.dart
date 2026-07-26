@@ -18,6 +18,12 @@ class _Draggable_Recorder_ButtonState extends State<Draggable_Recorder_Button>
   Timer? _timer;
   Offset _position = const Offset(20, 400);
 
+  // Approximate footprint of the whole draggable widget (label row +
+  // spacing + the 100x100 icon stack) — used to keep it fully on-screen
+  // when dragged, since Positioned won't clamp this for us.
+  static const double _buttonWidth = 100.0;
+  static const double _buttonHeight = 132.0;
+
   late final AnimationController _pulseCtrl;
   late final Animation<double> _pulseAnim;
 
@@ -83,7 +89,16 @@ class _Draggable_Recorder_ButtonState extends State<Draggable_Recorder_Button>
       top: _position.dy,
       child: GestureDetector(
         onPanUpdate: (details) {
-          setState(() => _position += details.delta);
+          final screenSize = MediaQuery.of(context).size;
+          final maxX = screenSize.width - _buttonWidth;
+          final maxY = screenSize.height - _buttonHeight;
+          setState(() {
+            final next = _position + details.delta;
+            _position = Offset(
+              next.dx.clamp(0.0, maxX < 0 ? 0.0 : maxX),
+              next.dy.clamp(0.0, maxY < 0 ? 0.0 : maxY),
+            );
+          });
         },
         onTap: _toggle,
         child: Column(
