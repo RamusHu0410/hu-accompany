@@ -190,6 +190,24 @@ def parse_sections(wikitext: str) -> list:
     movement = None
     instrumentation = None
 
+    # Files can appear before any heading at all -- e.g. simple works with
+    # a single edition and no Arrangements/instrumentation subdivision.
+    # Without this, such works parse to zero sections/choices even though
+    # their files are sitting right there in the text.
+    leading_end = headers[0][2] if headers else len(section_text)
+    leading_content = section_text[:leading_end]
+    leading_blocks = _extract_templates(leading_content, "imslpfile")
+    if leading_blocks:
+        editions = [_edition_from_fields(_parse_fields(b, "imslpfile")) for b in leading_blocks]
+        sections.append(
+            RawSection(
+                category=category,
+                movement=movement,
+                instrumentation_label=instrumentation,
+                editions=editions,
+            )
+        )
+
     for i, (level, title, _hstart, hend) in enumerate(headers):
         content_end = headers[i + 1][2] if i + 1 < len(headers) else len(section_text)
         content = section_text[hend:content_end]
