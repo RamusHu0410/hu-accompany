@@ -1,8 +1,8 @@
-"""Plain dataclasses shared across the imslp package.
+"""Plain dataclasses shared across the imslp_search package.
 
 These describe shapes moving between search -> parser -> normalizer -> service.
-They are intentionally framework-free (no Django/Pydantic) so the imslp package
-has no dependency on how the API layer serializes its output.
+They are intentionally framework-free (no Django/Pydantic) so the imslp_search
+package has no dependency on how the API layer serializes its output.
 """
 
 from dataclasses import dataclass, field

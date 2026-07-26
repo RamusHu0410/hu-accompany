@@ -3,9 +3,9 @@ with a database cache in front so repeat lookups skip IMSLP entirely.
 """
 
 from api.models import Version, Work
-from imslp import normalizer, parser
-from imslp import search as imslp_search
-from imslp.errors import WorkNotFoundError
+from imslp_search import normalizer, parser
+from imslp_search import search as imslp_search_module
+from imslp_search.errors import WorkNotFoundError
 
 DEFAULT_INSTRUMENT = "Unknown"
 
@@ -86,7 +86,7 @@ def search(query: str = "", url: str = None) -> dict:
         work = _fetch_and_cache(title, composer, url)
         return _work_to_dict(work)
 
-    hits = imslp_search.search_works(query)
+    hits = imslp_search_module.search_works(query)
     if not hits:
         raise WorkNotFoundError(f"No IMSLP results for {query!r}")
     best = hits[0]

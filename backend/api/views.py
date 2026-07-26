@@ -2,10 +2,9 @@ import json
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
-from main import search_imslp
-
-from imslp.errors import IMSLPNetworkError, WorkNotFoundError
-from services import imslp_service
+from imslp_search.main import search_imslp
+from imslp_search.errors import IMSLPNetworkError, WorkNotFoundError
+from imslp_search.services import imslp_service
 
 
 @csrf_exempt
