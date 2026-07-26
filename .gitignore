@@ -25,6 +25,7 @@ backend-web/.env
 __pycache__/
 *.py[cod]
 backend/storage/
+backend/db.sqlite3
 
 # ==========================================
 # 4. IDEs and System Dotfiles (The "dot files")

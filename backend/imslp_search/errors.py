@@ -1,5 +1,5 @@
 class IMSLPError(Exception):
-    """Base class for errors raised by the imslp package."""
+    """Base class for errors raised by the imslp_search package."""
 
 
 class IMSLPNetworkError(IMSLPError):
