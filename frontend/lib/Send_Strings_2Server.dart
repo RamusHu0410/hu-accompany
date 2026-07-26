@@ -3,12 +3,11 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 import 'Music_Library_Page.dart' show MusicSheet;
+import 'ServerDiscovery.dart';
 
 /// Thin client for talking to your friend's Django backend.
 class MusicSheetService {
   MusicSheetService._();
-
-  static const String baseUrl = 'http://172.28.176.34:8000';
 
   // imslp_search_view — returns a single matched Work with its available
   // editions/arrangements nested under "choices", NOT a flat list of
@@ -45,16 +44,49 @@ class MusicSheetService {
   /// "no matching work" and just yields an empty result list rather than
   /// an error). Callers should still try/catch for real failures.
   static Future<List<MusicSheet>> searchMusic(String query) async {
+    final baseUrl = await ServerDiscovery.resolveBaseUrl();
+    if (baseUrl == null) {
+      throw Exception(
+        'Could not find the accompaniment server on this network.',
+      );
+    }
+
+    final response = await _post(baseUrl, query);
+    // A cached address can go stale if the backend restarted with a new
+    // IP; re-discover once and retry before giving up.
+    if (response == null) {
+      ServerDiscovery.invalidateCache();
+      final freshBaseUrl = await ServerDiscovery.resolveBaseUrl(
+        forceRefresh: true,
+      );
+      if (freshBaseUrl == null) {
+        throw Exception(
+          'Could not find the accompaniment server on this network.',
+        );
+      }
+      return _parseResponse(await _post(freshBaseUrl, query) ??
+          (throw Exception('Search failed: server unreachable')));
+    }
+
+    return _parseResponse(response);
+  }
+
+  static Future<http.Response?> _post(String baseUrl, String query) async {
     final uri = Uri.parse('$baseUrl$_searchPath');
+    try {
+      return await http
+          .post(
+            uri,
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({'query': query}),
+          )
+          .timeout(_searchTimeout);
+    } on Exception {
+      return null;
+    }
+  }
 
-    final response = await http
-        .post(
-          uri,
-          headers: {'Content-Type': 'application/json'},
-          body: jsonEncode({'query': query}),
-        )
-        .timeout(_searchTimeout);
-
+  static List<MusicSheet> _parseResponse(http.Response response) {
     // 404 here means imslp_service.search() raised WorkNotFoundError —
     // that's a legitimate "nothing matched," not a failure, so we return
     // an empty list instead of throwing (which would surface as a scary

@@ -28,5 +28,11 @@
 	<string>MainMenu</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>This app discovers the accompaniment server on your local network.</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_huaccompany._tcp</string>
+	</array>
 </dict>
 </plist>
