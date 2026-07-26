@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter/services.dart';
 import 'package:liquid_glass_easy/liquid_glass_easy.dart';
 import 'LiquidGlass.dart';
@@ -46,9 +47,11 @@ class _Music_Library_PageState extends State<Music_Library_Page> {
   final FocusNode _focus = FocusNode();
   bool _focused = false;
 
-  // Swap this out for your API response when the backend is ready:
-  //   List<MusicSheet?> _slots = sheets.cast<MusicSheet?>();
-  List<MusicSheet?> _slots = List.generate(12, (_) => null);
+  // Shown as empty shimmer placeholders before the user's first search.
+  static const int _placeholderCount = 12;
+
+  List<WorkSummary> _results = [];
+  bool _hasSearched = false;
   bool _isLoading = false;
   String? _errorMessage;
   final ApiService _api = ApiService();
@@ -61,7 +64,7 @@ class _Music_Library_PageState extends State<Music_Library_Page> {
     if (validationError != null) {
       setState(() {
         _errorMessage = validationError;
-        _slots = []; // Wipe previous results or placeholders on failure
+        _results = []; // Wipe previous results on failure
       });
       return; // Stop execution right here!
     }
@@ -75,7 +78,8 @@ class _Music_Library_PageState extends State<Music_Library_Page> {
     try {
       final results = await MusicSheetService.searchMusic(rawQuery);
       setState(() {
-        _slots = results;
+        _results = results;
+        _hasSearched = true;
       });
     } catch (e) {
       // The real exception (SocketException, TimeoutException, a non-200
@@ -88,6 +92,55 @@ class _Music_Library_PageState extends State<Music_Library_Page> {
       });
     } finally {
       setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+
+  // Fires when a work row is tapped. A "work" here may have one edition
+  // or several (different arrangers/instrumentations/editors) — we don't
+  // know which until we ask, so this always fetches first.
+  void _onWorkTapped(WorkSummary work) async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final editions = await MusicSheetService.fetchWorkEditions(work.title);
+
+      if (!mounted) return;
+
+      if (editions.isEmpty) {
+        setState(() {
+          _errorMessage = "No sheet music found for that piece.";
+          _isLoading = false;
+        });
+        return;
+      }
+
+      if (editions.length == 1) {
+        setState(() => _isLoading = false);
+        _openSheet(editions.first);
+        return;
+      }
+
+      // Multiple versions — let the user pick which one before opening.
+      setState(() => _isLoading = false);
+      final chosen = await showModalBottomSheet<MusicSheet>(
+        context: context,
+        backgroundColor: Colors.white,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        builder: (_) => _EditionPicker(work: work, editions: editions),
+      );
+      if (chosen != null) _openSheet(chosen);
+    } catch (e) {
+      debugPrint('fetchWorkEditions failed: $e');
+      if (!mounted) return;
+      setState(() {
+        _errorMessage = "Couldn't load versions for that piece.";
         _isLoading = false;
       });
     }
@@ -216,23 +269,54 @@ class _Music_Library_PageState extends State<Music_Library_Page> {
                                   ),
                                 ),
                               )
-                            : ListView.separated(
-                                padding: const EdgeInsets.fromLTRB(
-                                  16,
-                                  8,
-                                  16,
-                                  40,
-                                ),
-                                itemCount: _slots.length,
-                                separatorBuilder: (_, __) =>
-                                    const SizedBox(height: 10),
-                                itemBuilder: (_, i) => _NameSlot(
-                                  sheet: _slots[i],
-                                  onTap: _slots[i] == null
-                                      ? null
-                                      : () => _openSheet(_slots[i]!),
-                                ),
-                              ),
+                            : !_hasSearched
+                                // Shimmer placeholders before the first search.
+                                ? ListView.separated(
+                                    padding: const EdgeInsets.fromLTRB(
+                                      16,
+                                      8,
+                                      16,
+                                      40,
+                                    ),
+                                    itemCount: _placeholderCount,
+                                    separatorBuilder: (_, __) =>
+                                        const SizedBox(height: 10),
+                                    itemBuilder: (_, __) =>
+                                        const _NameSlot(title: null),
+                                  )
+                                : _results.isEmpty
+                                    ? Center(
+                                        child: Text(
+                                          "No sheet music found. Try another search.",
+                                          textAlign: TextAlign.center,
+                                          style: TextStyle(
+                                            color: Colors.black.withValues(
+                                              alpha: 0.4,
+                                            ),
+                                            fontSize: 15,
+                                            fontWeight: FontWeight.w400,
+                                          ),
+                                        ),
+                                      )
+                                    // Shows every piece the backend found —
+                                    // not a fixed slot count — since result
+                                    // counts vary widely by query.
+                                    : ListView.separated(
+                                        padding: const EdgeInsets.fromLTRB(
+                                          16,
+                                          8,
+                                          16,
+                                          40,
+                                        ),
+                                        itemCount: _results.length,
+                                        separatorBuilder: (_, __) =>
+                                            const SizedBox(height: 10),
+                                        itemBuilder: (_, i) => _NameSlot(
+                                          title: _results[i].title,
+                                          onTap: () =>
+                                              _onWorkTapped(_results[i]),
+                                        ),
+                                      ),
                   ),
                 ],
               ),
@@ -383,13 +467,13 @@ class CloseButton extends StatelessWidget {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 class _NameSlot extends StatelessWidget {
-  final MusicSheet? sheet;
+  final String? title;
   final VoidCallback? onTap;
-  const _NameSlot({this.sheet, this.onTap});
+  const _NameSlot({this.title, this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    final isEmpty = sheet == null;
+    final isEmpty = title == null;
 
     return GestureDetector(
       onTap: onTap,
@@ -421,7 +505,7 @@ class _NameSlot extends StatelessWidget {
               child: isEmpty
                   ? const _PlaceholderLine(width: double.infinity, height: 13)
                   : Text(
-                      sheet!.title,
+                      title!,
                       style: const TextStyle(
                         color: Color.fromARGB(255, 90, 90, 90),
                         fontSize: 15,
@@ -440,6 +524,110 @@ class _NameSlot extends StatelessWidget {
                 color: Colors.black.withValues(alpha: 0.25),
               ),
             ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// EDITION PICKER — bottom sheet shown when a tapped work has more than
+// one version (different arrangers/instrumentations/editors).
+// ═══════════════════════════════════════════════════════════════════════════════
+
+class _EditionPicker extends StatelessWidget {
+  final WorkSummary work;
+  final List<MusicSheet> editions;
+  const _EditionPicker({required this.work, required this.editions});
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 36,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 16),
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            Text(
+              work.title,
+              style: const TextStyle(
+                color: Color.fromARGB(255, 60, 60, 60),
+                fontSize: 17,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              '${editions.length} versions found — choose one',
+              style: TextStyle(
+                color: Colors.black.withValues(alpha: 0.4),
+                fontSize: 13,
+              ),
+            ),
+            const SizedBox(height: 14),
+            Flexible(
+              child: ListView.separated(
+                shrinkWrap: true,
+                itemCount: editions.length,
+                separatorBuilder: (_, __) => const SizedBox(height: 8),
+                itemBuilder: (_, i) {
+                  final edition = editions[i];
+                  return GestureDetector(
+                    onTap: () => Navigator.pop(context, edition),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 12,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color.fromARGB(255, 180, 180, 180)
+                            .withValues(alpha: 0.10),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: const Color.fromARGB(255, 180, 180, 180)
+                              .withValues(alpha: 0.24),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              edition.title,
+                              style: const TextStyle(
+                                color: Color.fromARGB(255, 90, 90, 90),
+                                fontSize: 14,
+                                fontWeight: FontWeight.w500,
+                              ),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Icon(
+                            Icons.chevron_right_rounded,
+                            size: 18,
+                            color: Colors.black.withValues(alpha: 0.25),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
           ],
         ),
       ),
