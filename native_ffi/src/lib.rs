@@ -12,11 +12,14 @@ use std::os::raw::c_char;
 use std::sync::{Mutex, LazyLock};
 
 // Custom Defined types
-use models::SendStream;
-use models::PieceData;
+use models::{PieceData, Notes, SendStream};
 
 static ACTIVE_STREAM: Lazy<Mutex<Option<SendStream>>> = Lazy::new(|| Mutex::new(None));
 pub static ACTIVE_PIECE: LazyLock<Mutex<Option<PieceData>>> = LazyLock::new(|| {
+    Mutex::new(None)
+});
+
+pub static USER_DATA: LazyLock<Mutex<Option<Vec<Notes>>>> = LazyLock::new(|| {
     Mutex::new(None)
 });
 
