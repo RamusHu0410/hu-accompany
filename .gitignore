@@ -27,6 +27,13 @@ __pycache__/
 backend/storage/
 backend/db.sqlite3
 
+# Music score pipeline - keep folder structure, ignore generated content
+backend/image_processor/output/**
+!backend/image_processor/output/**/
+!backend/image_processor/output/**/.gitkeep
+backend/image_processor/input/**
+!backend/image_processor/input/.gitkeep
+
 # ==========================================
 # 4. IDEs and System Dotfiles (The "dot files")
 # ==========================================
