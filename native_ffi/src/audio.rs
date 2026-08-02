@@ -1,4 +1,4 @@
-use crate::ACTIVE_PIECE;
+use crate::{ACTIVE_PIECE, USER_DATA};
 use crate::models::PieceData;
 use cpal::Stream;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
@@ -9,6 +9,9 @@ use std::sync::mpsc::Sender;
 use std::time::Instant;
 
 static RMS_THRESHOLD: Option<f32> = None;
+const FFT_WINDOWSIZE: u32 = 1024;
+const SAMPLE_RATE: u32 = 44100;
+const BUFF_DURATION: f32 = (FFT_WINDOWSIZE / SAMPLE_RATE) * 1000.0;
 
 pub fn create_stream(tx: Sender<Vec<f32>>) -> Result<Stream, Box<dyn std::error::Error>> {
     let host = cpal::default_host();
@@ -42,14 +45,14 @@ pub fn start_processing_loop(rx: Receiver<Vec<f32>>) {
     let mut user_data: Option<PieceData> = None;
 
     let piece_data = ACTIVE_PIECE.lock().unwrap();
-    let start_time = Instant::now();
+    let processed_windows: u32 = 0;
 
     // This loop runs when data is recieved from rx
     while let Ok(chunk) = rx.recv() {
         audio_vault.extend_from_slice(&chunk);
 
         while audio_vault.len() >= 1024 {
-            let current_ms = start_time.elapsed().as_millis() as f32;
+            let current_ms: f32 = BUFF_DURATION * processed_windows;
             let processing_data = &audio_vault[0..1024];
             let rms: f32 = (processing_data
             .iter()
@@ -69,7 +72,8 @@ pub fn start_processing_loop(rx: Receiver<Vec<f32>>) {
                 match &piece.curr_phase {
                     1 => {
                         let target_notes = crate::dsp::get_current_targets(current_ms, piece);
-                        let real_notes = crate::dsp::process_dsp(&output_spectrum, &target_notes);
+                        let user_data = USER_DATA.lock().unwrap();
+                        let real_notes = crate::dsp::process_dsp(&output_spectrum, &target_notes, current_ms);
                     }
                     2 | 3 => {}
                 }
