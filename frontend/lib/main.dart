@@ -4,11 +4,16 @@ import 'Draggable_Recorder_Button.dart';
 import 'Drawing_Overlay.dart';
 import 'Music_Library_Page.dart';
 import 'LiquidGlass.dart';
-import 'Score_osmd_renderer.dart'; // fixed casing to match actual filename
+import 'Score_Page_Controller.dart';
+import 'Score_Pages_View.dart';
 import 'dart:ffi' as ffi;
-// NOTE: removed `import 'Osmd_viewer.html';` — you can't import an HTML
-// file into Dart. It's loaded at runtime via WebViewController's
-// loadFlutterAsset() inside Score_osmd_renderer.dart, not via Dart import.
+import 'dart:typed_data';
+// CHANGED: the backend now returns a literal PDF instead of MusicXML, so
+// the OSMD WebView renderer (Score_osmd_renderer.dart) no longer applies
+// here — swapped for the swipeable PDF page view (Score_Pages_View.dart +
+// Score_Page_Controller.dart). Note this drops the OSMD-based per-note
+// wrong-note coloring feature (colorNotes/resetColors); there's no direct
+// equivalent for a rasterized PDF page yet.
 
 typedef StartRecordingFunc = ffi.Void Function();
 typedef StartRecordingFuncDart = void Function();
@@ -98,20 +103,30 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
   bool _isErasing = false;
 
   // Null until a sheet has been picked from the library.
-  String? _musicXml;
-  bool get _hasMusicSheet => _musicXml != null;
+  Uint8List? _pdfBytes;
+  bool get _hasScore => _pdfBytes != null;
 
-  // Drives the OSMD WebView directly — e.g. call
-  // _osmdController.colorNotes([...]) once wrong-note feedback comes back
-  // from analysis, no re-render of the whole score needed.
-  // Fixed: was `ScoreosmdController` (undefined) — actual class is
-  // `ScoreOsmdController`, matching the definition in Score_osmd_renderer.dart.
-  final ScoreOsmdController _osmdController = ScoreOsmdController();
+  // Owns the fetched-and-parsed pages for whatever score is currently
+  // loaded — kept as a stable field (not rebuilt in build()) so it isn't
+  // torn down and its cache/prefetch thrown away on every setState (e.g.
+  // toggling pen color). Null alongside _pdfBytes until a sheet is picked.
+  ScorePageController? _pageController;
+
+  // Swaps in a new score, or clears it if [pdfBytes] is null.
+  void _setScore(Uint8List? pdfBytes) {
+    _pdfBytes = pdfBytes;
+    _pageController = pdfBytes != null ? ScorePageController(pdfBytes) : null;
+  }
 
   @override
   void initState() {
     super.initState();
-    _musicXml = widget.selected?.musicXml;
+    // ASSUMPTION: SelectedSheet (defined in Music_Library_Page.dart, not
+    // reviewed here) needs a `pdfBytes` field now instead of `musicXml`,
+    // and whatever populates it needs to call ApiService.fetchScorePdf()
+    // instead of the old fetchMusicSheet(). Flag this to Ramus/update it
+    // there too — this file alone can't fix that part.
+    _setScore(widget.selected?.pdfBytes);
   }
 
   // Pen settings
@@ -148,7 +163,7 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
 
     if (selected != null) {
       setState(() {
-        _musicXml = selected.musicXml;
+        _setScore(selected.pdfBytes);
       });
     }
   }
@@ -164,14 +179,11 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
           // captured for the lenses on Skia backends like macOS desktop.
           backgroundWidget: Stack(
             children: [
-              // LAYER 1: OSMD score view (or placeholder background)
-              if (_hasMusicSheet)
+              // LAYER 1: PDF score pages (or placeholder background)
+              if (_hasScore)
                 Positioned.fill(
-                  // Fixed: was `Score_osmd_View` (undefined) — actual
-                  // class is `Score_Osmd_View`.
-                  child: Score_Osmd_View(
-                    musicXml: _musicXml!,
-                    controller: _osmdController,
+                  child: Score_Pages_View(
+                    controller: _pageController!,
                   ),
                 )
               else

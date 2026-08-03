@@ -1,14 +1,18 @@
+import 'dart:typed_data';
 import 'Score_Page_Renderer.dart';
-import 'package:flutter/material.dart';
 
-/// Lays out one score's pages on demand from its already-fetched MusicXML,
+/// Lays out one score's pages on demand from its already-fetched PDF bytes,
 /// and keeps a page ahead pre-rendered so turning the page feels instant
 /// instead of triggering a visible layout pause.
+///
+/// CHANGED: this used to take `musicXml` (a String) since the backend
+/// returned MusicXML. It now returns a literal PDF, so this takes the raw
+/// PDF bytes instead and defaults to [pdfPageRenderer].
 class ScorePageController {
-  final String musicXml;
+  final Uint8List pdfBytes;
   final PageRenderer render;
 
-  ScorePageController(this.musicXml, {this.render = placeholderPageRenderer});
+  ScorePageController(this.pdfBytes, {this.render = pdfPageRenderer});
 
   final Map<int, Future<RenderedPage>> _pages = {};
 
@@ -18,7 +22,7 @@ class ScorePageController {
 
   Future<RenderedPage> getPage(int pageNumber) {
     return _pages.putIfAbsent(pageNumber, () async {
-      final result = await render(musicXml, pageNumber);
+      final result = await render(pdfBytes, pageNumber);
       totalPages ??= result.totalPages;
       return result;
     });
