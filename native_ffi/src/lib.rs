@@ -1,27 +1,23 @@
 // Modules
 pub mod audio;
 pub mod dsp;
-pub mod run_onnx;
 pub mod models;
+pub mod run_onnx;
 
 // Crates
 use once_cell::sync::Lazy;
 use serde_json;
-use std::ffi::CStr;
+use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
-use std::sync::{Mutex, LazyLock};
+use std::sync::{LazyLock, Mutex};
 
 // Custom Defined types
-use models::{PieceData, Notes, SendStream};
+use models::{Notes, PieceData, SendStream};
 
 static ACTIVE_STREAM: Lazy<Mutex<Option<SendStream>>> = Lazy::new(|| Mutex::new(None));
-pub static ACTIVE_PIECE: LazyLock<Mutex<Option<PieceData>>> = LazyLock::new(|| {
-    Mutex::new(None)
-});
+pub static ACTIVE_PIECE: LazyLock<Mutex<Option<PieceData>>> = LazyLock::new(|| Mutex::new(None));
 
-pub static USER_DATA: LazyLock<Mutex<Option<Vec<Notes>>>> = LazyLock::new(|| {
-    Mutex::new(None)
-});
+pub static USER_DATA: LazyLock<Mutex<Option<Vec<Notes>>>> = LazyLock::new(|| Mutex::new(None));
 
 #[unsafe(no_mangle)]
 pub extern "C" fn listen_audio() {
@@ -53,7 +49,17 @@ pub extern "C" fn init_session(json_data: *const c_char) {
     let c_str = unsafe { CStr::from_ptr(json_data) };
     let json = c_str.to_str().expect("Invalid String from Flutter!");
     let piece_data: PieceData = serde_json::from_str(json).unwrap();
-    
+
     let mut active_slot = ACTIVE_PIECE.lock().unwrap();
     *active_slot = Some(piece_data);
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn get_user_data() -> *mut c_char {
+    let mut user_data = USER_DATA.lock().unwrap();
+    let json_str = serde_json::to_string(&*user_data)
+        .unwrap_or_else(|_| "{}".to_string());
+    let cstring = CString::new(json_str)
+        .unwrap_or_else(|_| CString::new("{}").unwrap());
+    cstring.into_raw()
 }
