@@ -18,3 +18,7 @@ def file_content_hash(path: Path, length: int = 16) -> str:
 
 def render_cache_dir(cache_root: Path, pdf_hash: str, dpi: int) -> Path:
     return cache_root / "renders" / f"{pdf_hash}_dpi{dpi}"
+
+
+def detection_cache_dir(cache_root: Path, image_hash: str) -> Path:
+    return cache_root / "oemer" / image_hash
