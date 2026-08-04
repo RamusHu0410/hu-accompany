@@ -16,20 +16,21 @@ class ApiService {
   /// it's a literal PDF now, so the return type changed from String to
   /// Uint8List. Whatever renders this on the Flutter side needs to be a
   /// PDF viewer, not the OSMD WebView.
-  Future<Uint8List> fetchScorePdf(String pieceName) async {
+  Future<Uint8List> fetchScorePdf(String scoreId, String imslpUrl) async {
     try {
       // 1. Prepare the URL endpoint
       final url = Uri.parse('$baseUrl/api/imslp/download');
 
-      // 2. Prepare the payload body we want to send to Django
-      //    ASSUMPTION: field name is 'piece_name' — confirm against
-      //    whatever Ramus actually named the param on the Django side.
+      // 2. Prepare the payload body we want to send to Django.
+      //    Matches the contract read by imslp_downloader/api.py: score_id
+      //    and imslp_url.
       final Map<String, String> requestBody = {
-        'piece_name': pieceName,
+        'score_id': scoreId,
+        'imslp_url': imslpUrl,
       };
 
       // 3. Send the POST request and AWAIT the response
-      print("Requesting score PDF for: $pieceName...");
+      print("Requesting score PDF for: $scoreId ($imslpUrl)...");
       final response = await http.post(
         url,
         headers: {

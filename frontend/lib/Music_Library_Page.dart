@@ -160,7 +160,7 @@ class _Music_Library_PageState extends State<Music_Library_Page> {
     });
 
     try {
-      final pdfBytes = await _api.fetchScorePdf(sheet.title);
+      final pdfBytes = await _api.fetchScorePdf(sheet.id, sheet.pdfUrl);
       if (!mounted) return;
       Navigator.pop(context, SelectedSheet(sheet: sheet, pdfBytes: pdfBytes));
     } catch (e) {
