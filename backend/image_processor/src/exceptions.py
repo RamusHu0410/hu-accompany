@@ -8,3 +8,7 @@ class InvalidPDFError(PipelineError):
 
 class RenderError(PipelineError):
     """Raised when a page fails to rasterize (corrupt page, out-of-memory, ...)."""
+
+
+class DetectionError(PipelineError):
+    """Raised when the vision detector (oemer) fails to process a page image."""

@@ -4,6 +4,7 @@ Download row's status in sync throughout (Phase 3/4/6 of the design doc).
 """
 
 import os
+from pathlib import Path
 from urllib.parse import urlparse
 
 from api.models import Version
@@ -63,7 +64,7 @@ def download(score_id: str, imslp_url: str) -> Download:
 
         work_title = version.work.title if version else ""
         composer = version.work.composer if version else ""
-        choice_name = version.name if version else downloaded.suggested_filename
+        choice_name = version.name if version else Path(downloaded.suggested_filename).stem
 
         relative_path = storage.build_relative_path(
             work_title, composer, choice_name, downloaded.suggested_filename

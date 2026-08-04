@@ -1,11 +1,32 @@
-google-genai
-python-dotenv
+# Web framework
 django
-pdfplumber
+
+# Config / environment
+python-dotenv
+
+# HTTP client / LAN service discovery (api/mdns.py advertises the
+# Django server so the Flutter app can find it without a fixed IP)
+requests
+zeroconf
+
+# IMSLP score download (imslp_downloader app drives a real browser
+# through IMSLP's disclaimer/subscribe flow)
+playwright
+
+# PDF -> image extraction (image_processor phase1_prepare, scripts/pdf_processor.py)
 PyMuPDF
 opencv-python-headless
-pytesseract
+numpy
+
+# Optical music recognition pipeline (image_processor phase2_detect, scripts/pdf_processor.py)
+oemer
 music21
-requests
-playwright
-zeroconf
+
+# OCR (legacy archive/Converter script only)
+pdfplumber
+pytesseract
+
+# LLM client -- currently unused (imslp_search/main.py has a Gemini
+# integration commented out); keep or drop depending on whether that
+# code path is coming back
+google-genai

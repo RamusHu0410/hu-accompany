@@ -45,8 +45,32 @@ class MusicObject:
     candidate_labels: list = field(default_factory=list)
     ocr_text: Optional[str] = None
     confidence_history: list = field(default_factory=list)
+    # Detector-specific extras that don't fit the generic shape above (e.g.
+    # oemer's group/track/stem-direction/accidental). Keyed by "kind" =
+    # "note" | "rest" | "clef" | "accidental" so consumers can tell object
+    # types apart without a separate class per kind.
+    attributes: dict = field(default_factory=dict)
 
     def final_confidence(self) -> float:
         if not self.confidence_history:
             return 0.0
         return self.confidence_history[-1].value
+
+
+@dataclass
+class PageDetection:
+    """Phase 2 output for one page.
+
+    Bboxes on `objects` and `barlines` are in oemer's resized/dewarped
+    coordinate space (`image_size`), NOT the original page pixel space from
+    Phase 1 - oemer downsamples internally regardless of input resolution.
+    `image_path` is oemer's own rendering of that space, saved so later
+    phases (and debugging) can line bboxes up against actual pixels.
+    """
+
+    page: int
+    image_path: Optional[str] = None
+    image_size: Optional[tuple] = None  # (width, height)
+    objects: list = field(default_factory=list)  # list[MusicObject]
+    barlines: list = field(default_factory=list)  # list[BoundingBox]
+    error: Optional[str] = None

@@ -5,10 +5,12 @@ in a real browser (confirmed by hand against the live site):
 
 1. A one-time-per-session "Disclaimer" page with an "I understand" link
    (`Special:IMSLPDisclaimerAccept/{id}`).
-2. A "Subscribe" nag page that eventually fires the actual download via
-   client-side JS -- no visible countdown is reliable; in practice this
-   took anywhere from ~30s to over two minutes in testing, so callers must
-   tolerate a long wait rather than treating it as a fixed delay.
+2. An `IMSLPImageHandler` nag page with a real (non-subscriber) countdown --
+   "Your download will continue in 15 seconds..." -- that, once it hits
+   zero, reveals an `<a>` link reading "Click here to continue your
+   download." pointing straight at the file. Nothing navigates there on its
+   own; it has to be clicked. Some files skip this page entirely and start
+   downloading right after the disclaimer.
 
 A plain HTTP client can't get through either step (both are JS-driven), so
 we drive a headless Chromium instance instead.
@@ -27,9 +29,11 @@ from .exceptions import BrowserError, DownloadFailed
 NAV_TIMEOUT_MS = 20000
 DEFAULT_DOWNLOAD_TIMEOUT_S = 180
 DISCLAIMER_ACCEPT_TIMEOUT_MS = 5000
+CONTINUE_DOWNLOAD_TIMEOUT_MS = 30000
 POLL_INTERVAL_S = 1
 
 DISCLAIMER_ACCEPT_TEXT = "I understand"
+CONTINUE_DOWNLOAD_TEXT = "Click here to continue your download."
 
 
 class DownloadedFile:
@@ -97,6 +101,14 @@ class IMSLPBrowser:
                 page.wait_for_load_state("load")
             except Exception:
                 pass  # no disclaimer this time -- already accepted, or this file skips it
+
+            try:
+                page.click(
+                    f"a:has-text('{CONTINUE_DOWNLOAD_TEXT}')",
+                    timeout=CONTINUE_DOWNLOAD_TIMEOUT_MS,
+                )
+            except Exception:
+                pass  # no nag page this time -- download already started, or this file skips it
 
             deadline = time.monotonic() + self.download_timeout_s
             while not downloads and time.monotonic() < deadline:
