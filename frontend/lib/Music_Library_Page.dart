@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter/services.dart';
@@ -23,12 +24,15 @@ class MusicSheet {
 }
 
 /// What gets handed back to ScoreViewerPage when the user picks a sheet:
-/// the sheet itself, plus the MusicXML already fetched for it, so the
+/// the sheet itself, plus the PDF bytes already fetched for it, so the
 /// viewer doesn't have to make a second request.
+///
+/// CHANGED: this used to carry `musicXml` (a String) since the backend
+/// returned MusicXML. It now returns a literal PDF, hence `pdfBytes`.
 class SelectedSheet {
   final MusicSheet sheet;
-  final String musicXml;
-  const SelectedSheet({required this.sheet, required this.musicXml});
+  final Uint8List pdfBytes;
+  const SelectedSheet({required this.sheet, required this.pdfBytes});
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -146,9 +150,9 @@ class _Music_Library_PageState extends State<Music_Library_Page> {
     }
   }
 
-  // Fires when a result row is tapped. Fetches the MusicXML for that one
-  // sheet, then closes the library (sliding back down) and hands the
-  // result to ScoreViewerPage via the pop result.
+  // Fires when a result row is tapped. Fetches the PDF for that one sheet,
+  // then closes the library (sliding back down) and hands the result to
+  // ScoreViewerPage via the pop result.
   void _openSheet(MusicSheet sheet) async {
     setState(() {
       _isLoading = true;
@@ -156,9 +160,9 @@ class _Music_Library_PageState extends State<Music_Library_Page> {
     });
 
     try {
-      final xml = await _api.fetchMusicSheet(sheet.title);
+      final pdfBytes = await _api.fetchScorePdf(sheet.title);
       if (!mounted) return;
-      Navigator.pop(context, SelectedSheet(sheet: sheet, musicXml: xml));
+      Navigator.pop(context, SelectedSheet(sheet: sheet, pdfBytes: pdfBytes));
     } catch (e) {
       setState(() {
         _errorMessage = "Couldn't load that sheet. Please try again.";

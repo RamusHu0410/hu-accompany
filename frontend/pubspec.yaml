@@ -10,11 +10,11 @@ dependencies:
   flutter:
     sdk: flutter
   device_info_plus: ^13.2.0
-  liquid_glass_easy: ^3.3.0
-  music_xml: ^2.8.0
+  liquid_glass_easy: ^3.5.0
   http: ^1.6.0
   webview_flutter: ^4.14.1
   nsd: ^5.0.1
+  pdfx: ^2.9.2
 
 dev_dependencies:
   flutter_test:
