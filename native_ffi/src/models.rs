@@ -31,9 +31,9 @@ pub struct TimingSpecs {
 pub struct Notes {
     pub note_id: u64,
     pub pitch_hz: f64,
-    pub start_time_ms: f64,
-    pub end_time_ms: f64,
-    pub duration_ms: f64,
+    pub start_time_ms: Option<f32>, // temporary
+    pub end_time_ms: Option<f32>, // temporary
+    pub duration_ms: Option<f32>, // temporary
 
     // Optional Members
     pub vibrato_depth: Option<f32>,
@@ -51,6 +51,29 @@ pub struct PieceData {
     pub timing: TimingSpecs,
     pub notes: Vec<Notes>
 }
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum NoteState {
+    Idle,
+    Playing { start_ms: f32 },
+}
+
+#[derive(Debug)]
+pub struct NoteResult {
+    pub start_ms: f32,
+    pub end_ms: f32,
+    pub duration_ms: f32,
+}
+
+pub struct NoteDetector {
+    pub state: NoteState,
+    pub target_hz: f32,
+    pub threshold: f32,
+    pub consecutive_high_frames: u32,
+    pub consecutive_low_frames: u32,
+    pub required_frames: u32, // e.g., 2 or 3
+}
+
 
 pub struct SendStream(pub Stream);
 
