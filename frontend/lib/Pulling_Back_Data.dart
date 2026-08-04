@@ -63,8 +63,28 @@ class ApiService {
     }
 
     if (response.statusCode == 200) {
-      print("Success! PDF received (${response.bodyBytes.length} bytes).");
-      return response.bodyBytes;
+      final bytes = response.bodyBytes;
+      // A real PDF always starts with the 4 bytes "%PDF". If it doesn't,
+      // the backend returned something else on a 200 — e.g. a small JSON
+      // status/job response — rather than the actual file. Catch that
+      // here with a clear error instead of silently handing bogus bytes
+      // to pdfx, where it fails in a way that looks like "stuck loading"
+      // rather than an actual error (see Score_Pages_View fix).
+      final looksLikePdf = bytes.length > 4 &&
+          bytes[0] == 0x25 &&
+          bytes[1] == 0x50 &&
+          bytes[2] == 0x44 &&
+          bytes[3] == 0x46; // %PDF
+      if (!looksLikePdf) {
+        print(
+          "200 response wasn't a PDF (${bytes.length} bytes). Body: ${response.body}",
+        );
+        throw Exception(
+          "Server returned success but not a PDF: ${response.body}",
+        );
+      }
+      print("Success! PDF received (${bytes.length} bytes).");
+      return bytes;
     } else if (response.statusCode == 404) {
       throw Exception("Piece not found on IMSLP.");
     } else {

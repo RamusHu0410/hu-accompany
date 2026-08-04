@@ -47,7 +47,8 @@ import oemer.staffline_extraction as _oemer_staffline  # noqa: E402
 import oemer.symbol_extraction as _oemer_symbol  # noqa: E402
 from oemer import layers as oemer_layers  # noqa: E402
 from oemer.dewarp import dewarp, estimate_coords  # noqa: E402
-from oemer.ete import CHECKPOINTS_URL, MODULE_PATH, clear_data, generate_pred, register_note_id  # noqa: E402
+from oemer.ete import CHECKPOINTS_URL, MODULE_PATH, clear_data, register_note_id  # noqa: E402
+from oemer.inference import inference as _oemer_inference  # noqa: E402
 from oemer.note_group_extraction import extract as _group_extract  # noqa: E402
 from oemer.notehead_extraction import extract as _note_extract  # noqa: E402
 from oemer.rhythm_extraction import extract as _rhythm_extract  # noqa: E402
@@ -111,7 +112,40 @@ def _ensure_checkpoints(logger: logging.Logger) -> None:
     logger.info("phase2_detect: checkpoints ready")
 
 
-def _run_oemer(img_path: Path, work_dir: Path) -> dict:
+def _generate_pred(img_path: str, unet_step_size: int, seg_step_size: int) -> tuple:
+    """Equivalent to oemer.ete.generate_pred, but with the sliding-window
+    step size exposed instead of hardcoded to 128.
+
+    oemer's two models scan the page in overlapping windows and average the
+    overlaps (unet_big: 256x256 window, seg_net: 288x288). The hardcoded
+    step of 128 makes every window overlap its neighbors by ~50%, i.e. it
+    runs each model on ~4-5x more windows than the page's area requires.
+    Setting step_size to each model's own window size drops overlap to zero
+    - full coverage, no gaps - for a ~4-5x speedup with no resolution loss;
+    the only thing lost is the cross-window averaging at tile boundaries.
+    """
+    staff_symbols_map, _ = _oemer_inference(
+        os.path.join(MODULE_PATH, "checkpoints/unet_big"),
+        img_path,
+        step_size=unet_step_size,
+    )
+    staff = np.where(staff_symbols_map == 1, 1, 0)
+    symbols = np.where(staff_symbols_map == 2, 1, 0)
+
+    sep, _ = _oemer_inference(
+        os.path.join(MODULE_PATH, "checkpoints/seg_net"),
+        img_path,
+        manual_th=None,
+        step_size=seg_step_size,
+    )
+    stems_rests = np.where(sep == 1, 1, 0)
+    notehead = np.where(sep == 2, 1, 0)
+    clefs_keys = np.where(sep == 3, 1, 0)
+
+    return staff, symbols, stems_rests, notehead, clefs_keys
+
+
+def _run_oemer(img_path: Path, work_dir: Path, config) -> dict:
     """Run oemer's detection stages on one page image, returning every layer
     this phase needs. This is oemer.ete.extract() re-sequenced to stop
     before MusicXMLBuilder (see module docstring for why). Must not run
@@ -129,7 +163,9 @@ def _run_oemer(img_path: Path, work_dir: Path) -> dict:
     work_dir.mkdir(parents=True, exist_ok=True)
     clear_data()
     try:
-        staff, symbols, stems_rests, notehead, clefs_keys = generate_pred(str(img_path))
+        staff, symbols, stems_rests, notehead, clefs_keys = _generate_pred(
+            str(img_path), config.oemer_unet_step_size, config.oemer_seg_step_size
+        )
 
         image = cv2.imread(str(img_path))
         image = cv2.resize(image, (staff.shape[1], staff.shape[0]))
@@ -340,7 +376,7 @@ def process_page(
         for obj in objects:
             obj.id = next_id()
     else:
-        raw = _run_oemer(image_path, cache_dir)
+        raw = _run_oemer(image_path, cache_dir, config)
         objects = _build_objects(page_number, raw, next_id)
         _save_cache(cache_dir, objects, raw)
         barlines = [_bbox(b.bbox) for b in raw["barlines"]]

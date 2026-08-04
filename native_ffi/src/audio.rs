@@ -11,7 +11,7 @@ use std::time::Instant;
 static RMS_THRESHOLD: Option<f32> = None;
 const FFT_WINDOWSIZE: u32 = 1024;
 const SAMPLE_RATE: u32 = 44100;
-const BUFF_DURATION: f32 = (FFT_WINDOWSIZE / SAMPLE_RATE) * 1000.0;
+const BUFF_DURATION: f32 = (128.0 / SAMPLE_RATE) * 1000.0;
 
 pub fn create_stream(tx: Sender<Vec<f32>>) -> Result<Stream, Box<dyn std::error::Error>> {
     let host = cpal::default_host();
@@ -43,16 +43,15 @@ pub fn start_processing_loop(rx: Receiver<Vec<f32>>) {
     let mut input_data_buffer = vec![0.0f32; 1024];
     let mut output_spectrum = crate::dsp::FFT.make_output_vec();
     let mut user_data: Option<PieceData> = None;
-
-    let piece_data = ACTIVE_PIECE.lock().unwrap();
-    let processed_windows: u32 = 0;
+    let mut processed_windows: u64 = 0;
+    let mut note_start_ms: Option<f32> = None;
 
     // This loop runs when data is recieved from rx
     while let Ok(chunk) = rx.recv() {
         audio_vault.extend_from_slice(&chunk);
 
         while audio_vault.len() >= 1024 {
-            let current_ms: f32 = BUFF_DURATION * processed_windows;
+            let current_ms: f32 = BUFF_DURATION * (processed_windows as f32);
             let processing_data = &audio_vault[0..1024];
             let rms: f32 = (processing_data
             .iter()
@@ -62,23 +61,28 @@ pub fn start_processing_loop(rx: Receiver<Vec<f32>>) {
                 .sqrt();
             if rms <= 0.0075 {
                 audio_vault.drain(0..128);
+                processed_windows += 1;
                 continue;
             }
 
             input_data_buffer.copy_from_slice(&audio_vault[0..1024]);
             crate::dsp::run_fft(&mut input_data_buffer, &mut output_spectrum);
 
-            if let Some(ref piece) = *piece_data {
+            if let Some(ref piece) = *ACTIVE_PIECE.lock().unwrap() {
                 match &piece.curr_phase {
                     1 => {
                         let target_notes = crate::dsp::get_current_targets(current_ms, piece);
-                        let user_data = USER_DATA.lock().unwrap();
-                        let real_notes = crate::dsp::process_dsp(&output_spectrum, &target_notes, current_ms);
+                        let _ = crate::dsp::process_dsp(&output_spectrum, 
+                            &target_notes, 
+                            current_ms, 
+                            &mut note_start_ms
+                        );
                     }
                     2 | 3 => {}
                 }
             }
             audio_vault.drain(0..128);
+            processed_windows += 1;
         }
     }
 }
