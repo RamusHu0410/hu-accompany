@@ -1,57 +1,100 @@
-import 'package:http/http.dart' as http;
-import 'dart:convert'; // Needed to convert data into JSON format
+import 'dart:convert';
 import 'dart:typed_data';
+import 'package:http/http.dart' as http;
 
+import 'ServerDiscovery.dart';
+
+/// Thin client for the PDF-download side of the backend. Mirrors the
+/// discovery/retry pattern MusicSheetService (Send_Strings_2Server.dart)
+/// already uses for search — resolves the backend address via mDNS
+/// instead of a hardcoded IP, since dev machines move between
+/// networks/DHCP leases.
+///
+/// CHANGED: this used to hardcode `baseUrl = 'http://172.28.176.30:8000'`
+/// with a comment telling you to manually update the IP. That's what was
+/// causing "Host is down" / "Operation timed out" — the search calls
+/// worked because they already went through ServerDiscovery, but this
+/// file was still on the stale manual IP. Now it goes through the same
+/// discovery path.
 class ApiService {
-  // Replace this with your friend's local computer IP address when they return.
-  static const String baseUrl = 'http://172.28.178.9:8000';
+  static const String _downloadPath = '/api/imslp/download';
 
-  /// Asks the backend to look up [pieceName] on IMSLP. If found, the
-  /// backend downloads and parses the PDF and stores it under
-  /// backend/storage/scores/<composer>/<piece_name>, then returns the raw
-  /// PDF bytes in the response body.
+  // Longer than the search timeout — this involves the backend actually
+  // fetching a PDF from IMSLP and parsing it, not just a DB/local lookup.
+  static const Duration _downloadTimeout = Duration(seconds: 30);
+
+  /// Asks the backend to download and parse the PDF for one specific
+  /// IMSLP edition, identified by score_id (the numeric/string id the
+  /// backend already returned per-choice from /api/imslp/search — see
+  /// MusicSheet.id in Music_Library_Page.dart). If found, the backend
+  /// stores it under backend/storage/scores/<composer>/<piece_name> and
+  /// returns the raw PDF bytes in the response body.
   ///
-  /// NOTE: this used to return a MusicXML string (see fetchMusicSheet,
-  /// now removed). The backend no longer produces MusicXML for this flow —
-  /// it's a literal PDF now, so the return type changed from String to
-  /// Uint8List. Whatever renders this on the Flutter side needs to be a
-  /// PDF viewer, not the OSMD WebView.
-  Future<Uint8List> fetchScorePdf(String pieceName) async {
-    try {
-      // 1. Prepare the URL endpoint
-      final url = Uri.parse('$baseUrl/api/imslp/download');
-
-      // 2. Prepare the payload body we want to send to Django
-      //    ASSUMPTION: field name is 'piece_name' — confirm against
-      //    whatever Ramus actually named the param on the Django side.
-      final Map<String, String> requestBody = {
-        'piece_name': pieceName,
-      };
-
-      // 3. Send the POST request and AWAIT the response
-      print("Requesting score PDF for: $pieceName...");
-      final response = await http.post(
-        url,
-        headers: {
-          'Content-Type': 'application/json', // Telling Django we are sending JSON
-        },
-        body: jsonEncode(requestBody), // Converts the Map into a flat JSON string
+  /// CONFIRMED via backend error: {"error": "score_id is required"} —
+  /// this used to send imslp_url under a 'url' field, which the backend
+  /// rejected. Field name and value are now known-correct, not guesses.
+  Future<Uint8List> fetchScorePdf(String scoreId) async {
+    final baseUrl = await ServerDiscovery.resolveBaseUrl();
+    if (baseUrl == null) {
+      throw Exception(
+        'Could not find the accompaniment server on this network.',
       );
+    }
 
-      // 4. Check the Status Code sent back by Django
-      if (response.statusCode == 200) {
-        print("Success! PDF received (${response.bodyBytes.length} bytes).");
-        // The body is now raw PDF bytes, not a MusicXML string.
-        return response.bodyBytes;
-      } else if (response.statusCode == 404) {
-        throw Exception("Piece not found on IMSLP.");
-      } else {
-        throw Exception("Server error code: ${response.statusCode}");
+    var response = await _post(baseUrl, scoreId);
+
+    // Same "stale cached address" recovery as MusicSheetService: a null
+    // response here means the request itself failed (not a clean HTTP
+    // error), so re-discover and retry once before giving up.
+    if (response == null) {
+      ServerDiscovery.invalidateCache();
+      final freshBaseUrl = await ServerDiscovery.resolveBaseUrl(
+        forceRefresh: true,
+      );
+      if (freshBaseUrl == null) {
+        throw Exception(
+          'Could not find the accompaniment server on this network.',
+        );
       }
-    } catch (error) {
-      // Catches network errors (like no internet connection or server offline)
-      print("Network error occurred: $error");
-      throw Exception("Could not connect to the server.");
+      response = await _post(freshBaseUrl, scoreId);
+      if (response == null) {
+        throw Exception('Download failed: server unreachable');
+      }
+    }
+
+    if (response.statusCode == 200) {
+      print("Success! PDF received (${response.bodyBytes.length} bytes).");
+      return response.bodyBytes;
+    } else if (response.statusCode == 404) {
+      throw Exception("Piece not found on IMSLP.");
+    } else {
+      // Print the actual backend error message rather than just the
+      // status code — the fastest way to nail down the real field
+      // name/shape it expects if this still isn't right.
+      print(
+        "Server rejected request: ${response.statusCode} — ${response.body}",
+      );
+      throw Exception("Server error code: ${response.statusCode}");
+    }
+  }
+
+  /// Returns null on any network-level failure (timeout, socket error,
+  /// etc.) so the caller can decide whether to retry against a
+  /// re-discovered address — distinct from a clean non-200 HTTP response,
+  /// which comes back as a normal Response and is handled by the caller.
+  static Future<http.Response?> _post(String baseUrl, String scoreId) async {
+    final uri = Uri.parse('$baseUrl$_downloadPath');
+    try {
+      print("Requesting score PDF for score_id: $scoreId...");
+      return await http
+          .post(
+            uri,
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({'score_id': scoreId}),
+          )
+          .timeout(_downloadTimeout);
+    } on Exception {
+      return null;
     }
   }
 }
