@@ -2,57 +2,127 @@ import 'dart:async';
 
 import 'package:nsd/nsd.dart';
 
-/// Finds the Django backend on the LAN via mDNS/Bonjour instead of a
-/// hardcoded IP, since dev machines move between networks/DHCP leases.
-/// The backend advertises itself under this service type — see
-/// backend/api/mdns.py.
-///
-/// Uses package:nsd (wraps NSNetServiceBrowser on iOS/macOS, NsdManager on
-/// Android) rather than a raw-socket mDNS client — iOS's Local Network
-/// Privacy restrictions silently drop raw multicast traffic that doesn't
-/// go through the native Bonjour APIs, even with the right Info.plist
-/// entries, so a pure-Dart UDP implementation (e.g. multicast_dns) is
-/// unreliable here.
 class ServerDiscovery {
-  ServerDiscovery._();
-
   static const String _serviceType = '_huaccompany._tcp';
-  static const Duration _discoveryTimeout = Duration(seconds: 4);
+
+  static const Duration _discoveryTimeout = Duration(seconds: 5);
 
   static String? _cachedBaseUrl;
 
-  /// Returns e.g. "http://172.28.176.117:8000", or null if no backend
-  /// answered on the network within the timeout.
-  static Future<String?> resolveBaseUrl({bool forceRefresh = false}) async {
+  /// Finds the backend server using mDNS/Bonjour.
+  ///
+  /// If a server was already found, the cached address is returned immediately.
+  static Future<String?> resolveBaseUrl({
+    bool forceRefresh = false,
+  }) async {
+    // Use the previously discovered server when possible.
     if (!forceRefresh && _cachedBaseUrl != null) {
+      print(
+        'ServerDiscovery: using cached backend URL: '
+        '$_cachedBaseUrl',
+      );
       return _cachedBaseUrl;
     }
 
-    final completer = Completer<String?>();
-    final discovery = await startDiscovery(_serviceType);
-
-    discovery.addServiceListener((service, status) {
-      if (status == ServiceStatus.found &&
-          service.host != null &&
-          service.port != null &&
-          !completer.isCompleted) {
-        completer.complete('http://${service.host}:${service.port}');
-      }
-    });
-
-    final result = await completer.future.timeout(
-      _discoveryTimeout,
-      onTimeout: () => null,
+    print(
+      'ServerDiscovery: searching for backend service '
+      '$_serviceType...',
     );
-    await stopDiscovery(discovery);
 
-    _cachedBaseUrl = result;
-    return result;
+    Discovery? discovery;
+    final completer = Completer<String?>();
+
+    try {
+      discovery = await startDiscovery(_serviceType);
+
+      discovery.addServiceListener((service, status) {
+        print(
+          'ServerDiscovery: service event '
+          '[$status] '
+          'host=${service.host}, '
+          'port=${service.port}',
+        );
+
+        // Only accept a discovered service with a valid host and port.
+        if (status == ServiceStatus.found &&
+            service.host != null &&
+            service.host!.isNotEmpty &&
+            service.port != null &&
+            service.port! > 0 &&
+            !completer.isCompleted) {
+          final baseUrl =
+              'http://${service.host}:${service.port}';
+
+          print(
+            'ServerDiscovery: backend found at $baseUrl',
+          );
+
+          _cachedBaseUrl = baseUrl;
+          completer.complete(baseUrl);
+        }
+      });
+
+      final result = await completer.future.timeout(
+        _discoveryTimeout,
+        onTimeout: () {
+          print(
+            'ServerDiscovery: discovery timed out after '
+            '${_discoveryTimeout.inSeconds} seconds.',
+          );
+
+          return null;
+        },
+      );
+
+      if (result == null) {
+        print(
+          'ServerDiscovery: no backend server was found.',
+        );
+      }
+
+      return result;
+    } catch (e, stackTrace) {
+      print(
+        'ServerDiscovery: discovery failed: $e',
+      );
+      print(stackTrace);
+
+      return null;
+    } finally {
+      if (discovery != null) {
+        try {
+          await stopDiscovery(discovery);
+          print(
+            'ServerDiscovery: discovery stopped.',
+          );
+        } catch (e) {
+          print(
+            'ServerDiscovery: could not stop discovery: $e',
+          );
+        }
+      }
+    }
   }
 
-  /// Call after a request against the cached URL fails, so the next
-  /// resolveBaseUrl() re-discovers instead of retrying a stale address.
-  static void invalidateCache() {
-    _cachedBaseUrl = null;
-  }
+  /// Clears the saved backend address.
+  ///
+  /// Call this when the server changes address or when a request fails.
+/// Clears the saved backend address.
+///
+/// Call this when the server changes address or when a request fails.
+static void invalidateCache() {
+  print(
+    'ServerDiscovery: clearing cached backend URL: '
+    '$_cachedBaseUrl',
+  );
+
+  _cachedBaseUrl = null;
+}
+
+/// Alias for invalidateCache().
+///
+/// Kept so either method name can be used.
+static void clearCache() {
+  invalidateCache();
+}
 }

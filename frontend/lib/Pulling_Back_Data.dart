@@ -102,19 +102,38 @@ class ApiService {
   /// etc.) so the caller can decide whether to retry against a
   /// re-discovered address — distinct from a clean non-200 HTTP response,
   /// which comes back as a normal Response and is handled by the caller.
-  static Future<http.Response?> _post(String baseUrl, String scoreId) async {
-    final uri = Uri.parse('$baseUrl$_downloadPath');
-    try {
-      print("Requesting score PDF for score_id: $scoreId...");
-      return await http
-          .post(
-            uri,
-            headers: {'Content-Type': 'application/json'},
-            body: jsonEncode({'score_id': scoreId}),
-          )
-          .timeout(_downloadTimeout);
-    } on Exception {
-      return null;
-    }
+static Future<http.Response?> _post(
+  String baseUrl,
+  String scoreId,
+) async {
+  final uri = Uri.parse('$baseUrl$_downloadPath');
+
+  print('PDF URL: $uri');
+  print('Requesting score PDF for score_id: $scoreId...');
+
+  try {
+    final response = await http
+        .post(
+          uri,
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: jsonEncode({
+            'score_id': scoreId,
+          }),
+        )
+        .timeout(_downloadTimeout);
+
+    print(
+      'PDF response received: '
+      '${response.statusCode}, ${response.bodyBytes.length} bytes',
+    );
+
+    return response;
+  } catch (e, stackTrace) {
+    print('PDF request failed: $e');
+    print(stackTrace);
+    return null;
   }
+}
 }
