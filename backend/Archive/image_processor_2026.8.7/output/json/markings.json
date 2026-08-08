@@ -1,0 +1,74 @@
+[
+  {
+    "measure": 1,
+    "beat": 0.0,
+    "type": "dynamic",
+    "value": 0.15
+  },
+  {
+    "measure": 1,
+    "beat": 0.77,
+    "type": "tempo",
+    "value": 45
+  },
+  {
+    "measure": 1,
+    "beat": 1.37,
+    "type": "dynamic",
+    "value": 0.88
+  },
+  {
+    "measure": 4,
+    "beat": 2.183,
+    "type": "technique",
+    "value": "simile"
+  },
+  {
+    "measure": 7,
+    "beat": 1.945,
+    "type": "expression",
+    "value": "cresc"
+  },
+  {
+    "measure": 10,
+    "beat": 1.232,
+    "type": "dynamic",
+    "value": 0.15
+  },
+  {
+    "measure": 14,
+    "beat": 0.0,
+    "type": "dynamic",
+    "value": 0.15
+  },
+  {
+    "measure": 14,
+    "beat": 0.77,
+    "type": "tempo",
+    "value": 45
+  },
+  {
+    "measure": 14,
+    "beat": 1.37,
+    "type": "dynamic",
+    "value": 0.88
+  },
+  {
+    "measure": 17,
+    "beat": 2.183,
+    "type": "technique",
+    "value": "simile"
+  },
+  {
+    "measure": 20,
+    "beat": 1.945,
+    "type": "expression",
+    "value": "cresc"
+  },
+  {
+    "measure": 23,
+    "beat": 1.232,
+    "type": "dynamic",
+    "value": 0.15
+  }
+]
