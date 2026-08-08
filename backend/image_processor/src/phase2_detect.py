@@ -7,14 +7,22 @@ label oemer assigned. Barlines are kept separately on PageDetection since
 they're layout, not a musical object to classify.
 
 This calls oemer's extraction stages directly instead of its top-level
-extract() / MusicXMLBuilder: builder.build() hard-asserts exactly 2 staves
-per system (`assert track_nums == 2`), i.e. it only supports piano grand
-staff. Single-staff instrumental parts - like the violin part this was
-built and tested against - hit that assertion and crash. Detection itself
-(everything through rhythm_extract()) works for any staff count, so Phase 2
-stops right before the MusicXML build step. Turning these raw objects into
-pitch/duration/measures is Phase 5's job, done from MusicObject data rather
-than from oemer's MusicXML.
+extract() (inference/dewarp/staff/notehead/group/symbol/rhythm), matching
+oemer.ete.extract() so results line up with what oemer itself would produce.
+
+It then also drives oemer's own MusicXMLBuilder (build() + to_musicxml())
+per page, reading from the same oemer.layers globals the extraction calls
+above populated - this is exactly what oemer.ete.extract() does next, we're
+just capturing the MusicXML instead of only writing it to disk. That
+document is oemer's own pitch/rhythm/voice/chord reasoning (computed inside
+build(), not before it) - Phase 5 parses it with music21 rather than
+re-deriving pitch/duration/voices from raw MusicObject data. build() only
+hard-asserts for 3+ simultaneous staves in one system (track_nums not in
+{1, 2}); mono and grand-staff parts hit an early-return and build fine. If
+it does fail for some page (e.g. a genuine 3+-staff system, or a decoding
+edge case), that failure is caught and logged per-page - the page's
+MusicObject detections (still useful for markings/validation) are kept
+either way, just without a MusicXML for Phase 5 to stitch in for that page.
 
 oemer's model directly assigns a label to each detection (there's no raw
 "unclassified blob" stage to hand to Phase 3), and it exposes no per-object
@@ -27,6 +35,8 @@ output/cache/oemer/, since one page can take several minutes of CPU on a
 laptop - re-running the pipeline on an unchanged render should not redo it.
 """
 
+import concurrent.futures
+import itertools
 import json
 import logging
 import os
@@ -46,6 +56,7 @@ import oemer.bbox as _oemer_bbox  # noqa: E402
 import oemer.staffline_extraction as _oemer_staffline  # noqa: E402
 import oemer.symbol_extraction as _oemer_symbol  # noqa: E402
 from oemer import layers as oemer_layers  # noqa: E402
+from oemer.build_system import MusicXMLBuilder  # noqa: E402
 from oemer.dewarp import dewarp, estimate_coords  # noqa: E402
 from oemer.ete import CHECKPOINTS_URL, MODULE_PATH, clear_data, register_note_id  # noqa: E402
 from oemer.inference import inference as _oemer_inference  # noqa: E402
@@ -59,6 +70,7 @@ from .exceptions import DetectionError
 from .models.document import DocumentPreparation
 from .models.objects import BoundingBox, ConfidenceRecord, MusicObject, PageDetection
 from .utils.cache import detection_cache_dir, file_content_hash
+from .utils.logging_setup import configure_logging
 
 
 def _find_lines_fixed(data: np.ndarray, min_len: int = 10, max_gap: int = 20) -> list:
@@ -145,20 +157,13 @@ def _generate_pred(img_path: str, unet_step_size: int, seg_step_size: int) -> tu
     return staff, symbols, stems_rests, notehead, clefs_keys
 
 
-def _run_oemer(img_path: Path, work_dir: Path, config) -> dict:
+def _run_oemer(img_path: Path, work_dir: Path, config, logger: logging.Logger) -> dict:
     """Run oemer's detection stages on one page image, returning every layer
-    this phase needs. This is oemer.ete.extract() re-sequenced to stop
-    before MusicXMLBuilder (see module docstring for why). Must not run
-    concurrently with another call - oemer keeps its results in
-    process-wide global state (oemer.layers).
-
-    Object identity, not just values, matters here: builder.build() (not
-    called here) is normally what allows attribute changes recorded on
-    NoteHead/Sfn instances - like symbol_extraction pairing an accidental
-    with a note - to be visible via oemer_layers.get_layer('notes') after
-    the fact. All the pairing this phase relies on (note.sfn, note.group,
-    note.track, ...) is already set by the extraction calls below, so
-    skipping the builder does not lose it.
+    this phase needs, then build oemer's own MusicXML from those layers.
+    This matches oemer.ete.extract()'s call sequence exactly - detection
+    calls followed by MusicXMLBuilder. Must not run concurrently with
+    another call - oemer keeps its results in process-wide global state
+    (oemer.layers).
     """
     work_dir.mkdir(parents=True, exist_ok=True)
     clear_data()
@@ -215,6 +220,18 @@ def _run_oemer(img_path: Path, work_dir: Path, config) -> dict:
     image_path = work_dir / "oemer_image.png"
     cv2.imwrite(str(image_path), original_image)
 
+    musicxml_path = None
+    try:
+        builder = MusicXMLBuilder(title=Path(img_path).stem)
+        builder.build()
+        xml = builder.to_musicxml()
+        musicxml_path = work_dir / "page.musicxml"
+        with open(musicxml_path, "wb") as f:
+            f.write(xml)
+    except Exception as exc:
+        logger.warning("phase2_detect: MusicXML build failed for '%s': %s", img_path, exc)
+        musicxml_path = None
+
     return {
         "image_path": str(image_path),
         "image_size": (int(original_image.shape[1]), int(original_image.shape[0])),
@@ -223,6 +240,7 @@ def _run_oemer(img_path: Path, work_dir: Path, config) -> dict:
         "clefs": list(oemer_layers.get_layer("clefs")),
         "sfns": list(oemer_layers.get_layer("sfns")),
         "rests": list(oemer_layers.get_layer("rests")),
+        "musicxml_path": str(musicxml_path) if musicxml_path else None,
     }
 
 
@@ -304,6 +322,7 @@ def _save_cache(cache_dir: Path, objects: list, raw: dict) -> None:
     payload = {
         "image_path": raw["image_path"],
         "image_size": list(raw["image_size"]),
+        "musicxml_path": raw.get("musicxml_path"),
         "barlines": [list(b.bbox) for b in raw["barlines"]],
         "objects": [
             {
@@ -340,7 +359,7 @@ def _load_cache(cache_dir: Path) -> tuple:
         ))
 
     barlines = [BoundingBox(x=x1, y=y1, width=x2 - x1, height=y2 - y1) for x1, y1, x2, y2 in payload["barlines"]]
-    return objects, barlines, payload["image_path"], tuple(payload["image_size"])
+    return objects, barlines, payload["image_path"], tuple(payload["image_size"]), payload.get("musicxml_path")
 
 
 def draw_debug_overlay(image: np.ndarray, objects: list) -> np.ndarray:
@@ -362,25 +381,27 @@ def process_page(
     page_number: int,
     image_path: Path,
     config,
-    next_id,
     logger: logging.Logger,
 ) -> PageDetection:
+    """Ids assigned here are only unique within this page - each page can run
+    in its own worker process (see detect()), so document-wide uniqueness is
+    established afterward by renumbering all pages' objects in page order."""
+    next_id = itertools.count(1).__next__
     image_hash = file_content_hash(image_path)
     cache_dir = detection_cache_dir(config.cache_dir, image_hash)
 
     if (cache_dir / "result.json").exists():
         logger.debug("page %d: oemer cache hit (%s)", page_number, cache_dir)
-        objects, barlines, oemer_image_path, image_size = _load_cache(cache_dir)
-        # Cached objects need their ids remapped into this run's id sequence
-        # so ids stay unique document-wide even when only some pages hit cache.
+        objects, barlines, oemer_image_path, image_size, musicxml_path = _load_cache(cache_dir)
         for obj in objects:
             obj.id = next_id()
     else:
-        raw = _run_oemer(image_path, cache_dir, config)
+        raw = _run_oemer(image_path, cache_dir, config, logger)
         objects = _build_objects(page_number, raw, next_id)
         _save_cache(cache_dir, objects, raw)
         barlines = [_bbox(b.bbox) for b in raw["barlines"]]
         oemer_image_path, image_size = raw["image_path"], raw["image_size"]
+        musicxml_path = raw.get("musicxml_path")
 
     debug_dir = config.debug_dir / "phase2"
     debug_dir.mkdir(parents=True, exist_ok=True)
@@ -405,26 +426,66 @@ def process_page(
         image_size=image_size,
         objects=objects,
         barlines=barlines,
+        musicxml_path=musicxml_path,
     )
+
+
+def _process_page_worker(args: tuple) -> PageDetection:
+    """Module-level (picklable) wrapper so ProcessPoolExecutor can run this
+    per page. Each worker process gets its own log file - a shared Logger
+    object/file handle can't cross the process boundary - and, more
+    importantly, its own process-wide oemer.layers state, which is exactly
+    why pages run in separate processes rather than threads (see
+    _run_oemer's docstring: oemer's results live in global state and one
+    call must not run concurrently with another)."""
+    page_number, image_path_str, config, log_dir_str, run_id = args
+    worker_logger = configure_logging(Path(log_dir_str), f"{run_id}_p{page_number:03d}")
+    return process_page(page_number, Path(image_path_str), config, worker_logger)
 
 
 def detect(prep: DocumentPreparation, config, logger: logging.Logger) -> list:
     _ensure_checkpoints(logger)
 
-    counter = {"n": 0}
+    pages = prep.pages
+    if not pages:
+        return []
 
-    def next_id():
-        counter["n"] += 1
-        return counter["n"]
+    run_id = logger.name.rsplit(".", 1)[-1]
+    tasks = [
+        (p.page_number, str(Path(p.corrected_render_path or p.render_path)), config, str(config.logs_dir), run_id)
+        for p in pages
+    ]
+    max_workers = max(1, min(getattr(config, "oemer_max_workers", 1), len(tasks)))
 
-    results = []
-    for page in prep.pages:
-        image_path = Path(page.corrected_render_path or page.render_path)
-        try:
-            results.append(process_page(page.page_number, image_path, config, next_id, logger))
-        except Exception as exc:
-            logger.error("page %d failed in phase2: %s", page.page_number, exc, exc_info=True)
-            results.append(PageDetection(page=page.page_number, error=str(exc)))
+    results_by_page = {}
+    if max_workers <= 1:
+        for task in tasks:
+            page_number = task[0]
+            try:
+                results_by_page[page_number] = _process_page_worker(task)
+            except Exception as exc:
+                logger.error("page %d failed in phase2: %s", page_number, exc, exc_info=True)
+                results_by_page[page_number] = PageDetection(page=page_number, error=str(exc))
+    else:
+        logger.info("phase2_detect: processing %d pages across %d worker processes", len(tasks), max_workers)
+        with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
+            future_to_page = {executor.submit(_process_page_worker, task): task[0] for task in tasks}
+            for future in concurrent.futures.as_completed(future_to_page):
+                page_number = future_to_page[future]
+                try:
+                    results_by_page[page_number] = future.result()
+                except Exception as exc:
+                    logger.error("page %d failed in phase2: %s", page_number, exc, exc_info=True)
+                    results_by_page[page_number] = PageDetection(page=page_number, error=str(exc))
+
+    results = [results_by_page[p.page_number] for p in pages]
+
+    # Renumber ids document-wide in page order - worker processes each only
+    # guaranteed uniqueness within their own page (see process_page).
+    next_id = itertools.count(1)
+    for page_det in results:
+        for obj in page_det.objects:
+            obj.id = next(next_id)
 
     total_objects = sum(len(r.objects) for r in results)
     logger.info("phase2_detect: %d objects detected across %d pages", total_objects, len(results))

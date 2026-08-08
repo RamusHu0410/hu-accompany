@@ -1,10 +1,13 @@
 import json
+from django.conf import settings
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
+from imslp_downloader import storage as score_storage
 from imslp_search.main import search_imslp
 from imslp_search.errors import IMSLPNetworkError, WorkNotFoundError
 from imslp_search.services import imslp_service
+from processor import process_pdf
 
 
 @csrf_exempt
@@ -41,6 +44,50 @@ def search_view(request):
     except Exception as e:
         print(f"[search] error for {client_ip}: {e}")
         return JsonResponse({"error": str(e)}, status=500)
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def process_score_view(request):
+    """POST /api/score/process — convert a stored score PDF into a notes JSON
+    file saved alongside it in storage, optionally with a debug PDF showing
+    every detected note circled and pitch-labeled on the original score.
+
+    Body: {"file_path": "storage/scores/<Composer>/<Work>/<file>.pdf",
+           "bpm": 120, "debug_pdf": true}
+    `file_path` matches the format returned by /api/imslp/download's file_path.
+    """
+    try:
+        body = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "invalid JSON"}, status=400)
+
+    file_path = (body.get("file_path") or "").strip()
+    if not file_path:
+        return JsonResponse({"error": "file_path is required"}, status=400)
+
+    if not score_storage.exists(file_path):
+        return JsonResponse({"error": f"file not found: {file_path}"}, status=404)
+
+    bpm = body.get("bpm", 120)
+    debug_pdf = body.get("debug_pdf", True)
+    pdf_path = score_storage.db_path_to_absolute(file_path)
+
+    try:
+        json_path, notes, debug_pdf_path = process_pdf(pdf_path, bpm=bpm, debug_pdf=debug_pdf)
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=500)
+
+    json_relative = json_path.relative_to(settings.STORAGE_ROOT)
+    response = {
+        "file_path": file_path,
+        "json_path": score_storage.to_db_path(json_relative),
+        "note_count": len(notes),
+    }
+    if debug_pdf_path:
+        debug_relative = debug_pdf_path.relative_to(settings.STORAGE_ROOT)
+        response["debug_pdf_path"] = score_storage.to_db_path(debug_relative)
+    return JsonResponse(response)
 
 
 @csrf_exempt

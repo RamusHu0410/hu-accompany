@@ -73,4 +73,6 @@ class PageDetection:
     image_size: Optional[tuple] = None  # (width, height)
     objects: list = field(default_factory=list)  # list[MusicObject]
     barlines: list = field(default_factory=list)  # list[BoundingBox]
+    musicxml_path: Optional[str] = None  # oemer's builder output, one self-contained
+    # document per page (its own measure 1) - Phase 5 stitches these together.
     error: Optional[str] = None
