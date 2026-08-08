@@ -73,17 +73,21 @@ def save(tmp_path, relative_path: Path) -> int:
         raise FileSaveFailed(f"Could not save PDF to {dest}: {exc}") from exc
 
 
-def validate_pdf(relative_path: Path) -> None:
-    """Raise FileSaveFailed if the saved file isn't a usable PDF."""
-    dest = absolute_path(relative_path)
+def validate_pdf(path) -> None:
+    """Raise FileSaveFailed if the file at `path` isn't a usable PDF. Takes
+    an absolute path -- callers validate the downloaded tmp file with this
+    *before* `save()` commits it into permanent storage, so a bad download
+    (e.g. IMSLP serving its "Subscribe" page instead of the file) never
+    lands at the final destination looking like a legitimate score."""
+    path = Path(path)
     try:
-        size = dest.stat().st_size
-        with open(dest, "rb") as f:
+        size = path.stat().st_size
+        with open(path, "rb") as f:
             header = f.read(len(_PDF_MAGIC))
     except OSError as exc:
-        raise FileSaveFailed(f"Could not validate {dest}: {exc}") from exc
+        raise FileSaveFailed(f"Could not validate {path}: {exc}") from exc
 
     if size == 0:
-        raise FileSaveFailed(f"Downloaded file {dest} is empty")
+        raise FileSaveFailed(f"Downloaded file {path} is empty")
     if header != _PDF_MAGIC:
-        raise FileSaveFailed(f"Downloaded file {dest} is not a valid PDF (bad header)")
+        raise FileSaveFailed(f"Downloaded file {path} is not a valid PDF (bad header)")

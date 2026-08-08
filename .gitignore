@@ -25,7 +25,7 @@ backend-web/.env
 __pycache__/
 *.py[cod]
 backend/storage/
-backend/db.sqlite3
+backend/db.sqlite3/
 
 # Music score pipeline - keep folder structure, ignore generated content
 backend/image_processor/output/**

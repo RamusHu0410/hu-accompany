@@ -62,6 +62,13 @@ def download(score_id: str, imslp_url: str) -> Download:
         with IMSLPBrowser() as browser:
             downloaded = browser.download_file(url)
 
+        # Validate before it ever reaches permanent storage: IMSLP will
+        # sometimes serve its "Subscribe" page instead of the actual file
+        # (e.g. anonymous download quota hit), and that shouldn't get copied
+        # into the real score path just because the request itself
+        # succeeded.
+        storage.validate_pdf(downloaded.tmp_path)
+
         work_title = version.work.title if version else ""
         composer = version.work.composer if version else ""
         choice_name = version.name if version else Path(downloaded.suggested_filename).stem
@@ -70,7 +77,6 @@ def download(score_id: str, imslp_url: str) -> Download:
             work_title, composer, choice_name, downloaded.suggested_filename
         )
         size = storage.save(downloaded.tmp_path, relative_path)
-        storage.validate_pdf(relative_path)
         os.remove(downloaded.tmp_path)
 
         record.status = DownloadStatus.COMPLETED

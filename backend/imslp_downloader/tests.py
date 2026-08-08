@@ -196,6 +196,8 @@ class DownloadTests(TestCase):
         with patch(
             "imslp_downloader.downloader.IMSLPBrowser", _mock_browser_cls(downloaded)
         ), patch.object(
+            downloader.storage, "validate_pdf"
+        ), patch.object(
             downloader.storage, "build_relative_path", return_value=Path("scores/x.pdf")
         ), patch.object(
             downloader.storage, "save", side_effect=FileSaveFailed("disk full")
@@ -206,6 +208,29 @@ class DownloadTests(TestCase):
         record = Download.objects.get(score_id_raw=str(self.version.id))
         self.assertEqual(record.status, DownloadStatus.FAILED)
         self.assertEqual(record.error_message, "disk full")
+
+    def test_invalid_pdf_content_never_reaches_permanent_storage(self):
+        """IMSLP sometimes serves its "Subscribe" page instead of the file
+        (e.g. anonymous download quota hit). That must be rejected before
+        `storage.save()` commits it to the real score path -- otherwise a
+        bad file sits there looking like a legitimate, if failed, download."""
+        downloaded = DownloadedFile(
+            tmp_path="/tmp/fake.pdf", suggested_filename="fake.pdf", source_url=self.version.imslp_url
+        )
+        with patch(
+            "imslp_downloader.downloader.IMSLPBrowser", _mock_browser_cls(downloaded)
+        ), patch.object(
+            downloader.storage, "validate_pdf", side_effect=FileSaveFailed("not a valid PDF (bad header)")
+        ), patch.object(
+            downloader.storage, "save"
+        ) as mock_save:
+            with self.assertRaises(FileSaveFailed):
+                downloader.download(str(self.version.id), self.version.imslp_url)
+
+        mock_save.assert_not_called()
+        record = Download.objects.get(score_id_raw=str(self.version.id))
+        self.assertEqual(record.status, DownloadStatus.FAILED)
+        self.assertEqual(record.error_message, "not a valid PDF (bad header)")
 
     def test_unexpected_exception_is_wrapped_as_download_failed(self):
         browser_cls = _mock_browser_cls(enter_side_effect=RuntimeError("boom"))
