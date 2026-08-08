@@ -15,7 +15,9 @@ playwright
 
 # PDF -> image extraction (image_processor phase1_prepare, scripts/pdf_processor.py)
 PyMuPDF
-opencv-python-headless
+# Pinned: opencv 5.0 changed cv2.HoughLinesP's return shape, which breaks
+# oemer's line parsing (oemer/bbox.py) with an IndexError.
+opencv-python-headless==4.11.0.86
 numpy
 
 # Optical music recognition pipeline (image_processor phase2_detect, scripts/pdf_processor.py)
