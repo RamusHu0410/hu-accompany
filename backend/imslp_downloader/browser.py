@@ -78,6 +78,32 @@ def _guess_filename(url: str, headers: dict) -> str:
 
     return Path(urlparse(url).path).name or "score.pdf"
 
+# Where debug artifacts (screenshot + HTML) get dumped when IMSLP never
+# delivers a file, so a failure can be diagnosed after the fact instead of
+# just showing "no download happened" -- e.g. a rate-limit/CAPTCHA page
+# looks identical to a slow page from the download-count check alone.
+DEBUG_DIR = Path(tempfile.gettempdir()) / "imslp_downloader_failures"
+
+
+def _dump_failure_artifacts(page) -> str:
+    """Best-effort screenshot + HTML snapshot of the current page. Never
+    raises -- a failure here should never mask the real DownloadFailed."""
+    DEBUG_DIR.mkdir(parents=True, exist_ok=True)
+    stamp = int(time.time())
+    base = DEBUG_DIR / f"fail_{stamp}"
+
+    try:
+        page.screenshot(path=str(base.with_suffix(".png")), full_page=True)
+    except Exception:
+        pass
+
+    try:
+        base.with_suffix(".html").write_text(page.content())
+    except Exception:
+        pass
+
+    return str(base)
+
 
 class DownloadedFile:
     def __init__(self, tmp_path: str, suggested_filename: str, source_url: str):
