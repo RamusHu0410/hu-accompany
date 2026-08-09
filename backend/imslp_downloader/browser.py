@@ -34,7 +34,7 @@ from urllib.parse import parse_qs, unquote, urlparse
 
 from playwright.sync_api import sync_playwright
 
-from .exceptions import BrowserError, DownloadFailed
+from .exceptions import BrowserError, DownloadFailed, SubscriptionRequired
 
 # IMSLP runs every request through a JS-driven anti-bot redirect chain
 # (friendlyredirect.html -> friendlyredirect2.html -> the real page) before
@@ -150,6 +150,19 @@ class IMSLPBrowser:
                     page.wait_for_load_state("domcontentloaded", timeout=NAV_TIMEOUT_MS)
                 except Exception:
                     pass  # this step's page/button isn't part of this file's flow
+
+            if "subscribe" in (page.title() or "").lower():
+                # imslp.org's own file host caps free/anonymous downloads per
+                # IP per day; once that's used up it serves this page for
+                # every file instead of the real one, regardless of which
+                # disclaimer/confirm steps were just clicked through. Mirrors
+                # (e.g. imslp.eu) aren't affected, so this is per-host, not a
+                # blanket IMSLP-wide block.
+                raise SubscriptionRequired(
+                    "IMSLP asked for a subscription instead of serving the file "
+                    "(likely the free daily download limit for this host was reached) "
+                    f"-- current page: {page.url}"
+                )
 
             # By now we should be sitting on the actual file. Give a real
             # browser download a moment in case IMSLP served this file type

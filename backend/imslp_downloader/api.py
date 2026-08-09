@@ -7,7 +7,13 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
 from . import downloader
-from .exceptions import BrowserError, DownloadFailed, FileSaveFailed, InvalidIMSLPURL
+from .exceptions import (
+    BrowserError,
+    DownloadFailed,
+    FileSaveFailed,
+    InvalidIMSLPURL,
+    SubscriptionRequired,
+)
 from .models import DownloadResponse
 
 
@@ -38,6 +44,14 @@ def download_view(request):
         return JsonResponse(
             DownloadResponse(status="failed", score_id=score_id, error=str(exc)).to_dict(),
             status=400,
+        )
+    except SubscriptionRequired as exc:
+        # Not a transient network/browser problem -- IMSLP's own file host
+        # has capped free downloads from this IP for now. Distinct status so
+        # the client can tell "try again later" apart from "IMSLP is down".
+        return JsonResponse(
+            DownloadResponse(status="failed", score_id=score_id, error=str(exc)).to_dict(),
+            status=503,
         )
     except (BrowserError, DownloadFailed) as exc:
         return JsonResponse(

@@ -14,7 +14,13 @@ from api.models import Version, Work
 
 from . import downloader
 from .browser import DownloadedFile
-from .exceptions import BrowserError, DownloadFailed, FileSaveFailed, InvalidIMSLPURL
+from .exceptions import (
+    BrowserError,
+    DownloadFailed,
+    FileSaveFailed,
+    InvalidIMSLPURL,
+    SubscriptionRequired,
+)
 from .models import Download, DownloadStatus
 
 
@@ -304,6 +310,16 @@ class DownloadViewTests(TestCase):
 
         self.assertEqual(response.status_code, 502)
         self.assertEqual(response.json()["error"], "launch failed")
+
+    def test_subscription_required_returns_503(self):
+        with patch("imslp_downloader.api.downloader.find_existing", return_value=None), patch(
+            "imslp_downloader.api.downloader.download",
+            side_effect=SubscriptionRequired("IMSLP asked for a subscription"),
+        ):
+            response = self._post({"score_id": "1", "imslp_url": "https://imslp.org/wiki/file.pdf"})
+
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response.json()["error"], "IMSLP asked for a subscription")
 
     def test_download_failed_returns_502(self):
         with patch("imslp_downloader.api.downloader.find_existing", return_value=None), patch(
