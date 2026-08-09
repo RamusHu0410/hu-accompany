@@ -11,7 +11,7 @@ use std::time::Instant;
 static RMS_THRESHOLD: Option<f32> = None;
 const FFT_WINDOWSIZE: u32 = 1024;
 const SAMPLE_RATE: u32 = 44100;
-const BUFF_DURATION: f32 = (128.0 / SAMPLE_RATE) * 1000.0;
+const BUFF_DURATION: f32 = (128.0f32 / (SAMPLE_RATE as f32)) * 1000.0f32;
 
 pub fn create_stream(tx: Sender<Vec<f32>>) -> Result<Stream, Box<dyn std::error::Error>> {
     let host = cpal::default_host();
@@ -79,6 +79,7 @@ pub fn start_processing_loop(rx: Receiver<Vec<f32>>) {
                         );
                     }
                     2 | 3 => {}
+                    _ => {}
                 }
             }
             audio_vault.drain(0..128);

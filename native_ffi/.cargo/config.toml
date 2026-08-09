@@ -1,0 +1,20 @@
+# Physical iOS / iPadOS Devices
+[target.aarch64-apple-ios]
+rustflags = [
+    "-C", "link-arg=-framework", "-C", "link-arg=CoreAudio",
+    "-C", "link-arg=-framework", "-C", "link-arg=AudioToolbox"
+]
+
+# iOS / iPadOS Simulators on Apple Silicon
+[target.aarch64-apple-ios-sim]
+rustflags = [
+    "-C", "link-arg=-framework", "-C", "link-arg=CoreAudio",
+    "-C", "link-arg=-framework", "-C", "link-arg=AudioToolbox"
+]
+
+# Mac Catalyst on Apple Silicon
+[target.aarch64-apple-ios-macabi]
+rustflags = [
+    "-C", "link-arg=-framework", "-C", "link-arg=CoreAudio",
+    "-C", "link-arg=-framework", "-C", "link-arg=AudioToolbox"
+]
