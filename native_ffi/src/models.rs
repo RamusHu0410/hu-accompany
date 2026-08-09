@@ -42,7 +42,7 @@ pub struct Notes {
     pub markings: Option<String>
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct PieceData {
     pub piece_name: String,
     pub curr_phase: u8,
