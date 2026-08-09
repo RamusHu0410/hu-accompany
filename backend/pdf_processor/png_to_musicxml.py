@@ -1,12 +1,12 @@
 """
-Run oemer OMR on a single PNG and save the resulting MusicXML.
+Run oemer OMR on a single PNG and save the resulting MusicXML plus a
+debug PNG (detected noteheads/clefs/barlines/etc. boxed and labeled).
+Output is written next to the source PNG, matching the
+storage/scores/<Composer>/<Piece>/ layout.
 
-Usage:
-    python png_to_musicxml.py <path/to/page.png>
+Called from pdf_to_notes.process() -- not meant to be run standalone.
 """
 
-import os
-import sys
 import types
 from pathlib import Path
 
@@ -17,15 +17,14 @@ for _alias, _builtin in (("int", int), ("float", float), ("bool", bool), ("compl
         setattr(np, _alias, _builtin)
 
 from oemer.ete import extract, clear_data
+from oemer.draw_teaser import teaser
 
-STORAGE_DIR = Path(__file__).resolve().parent.parent / "storage" / "musicxml"
 
-
-def convert(png_path: str) -> str:
-    STORAGE_DIR.mkdir(parents=True, exist_ok=True)
+def convert(png_path: str) -> dict:
+    out_dir = Path(png_path).resolve().parent
     args = types.SimpleNamespace(
         img_path=png_path,
-        output_path=str(STORAGE_DIR),
+        output_path=str(out_dir),
         use_tf=False,
         save_cache=False,
         # Deskewing crashes on some scanned pages (AssertionError in
@@ -33,18 +32,11 @@ def convert(png_path: str) -> str:
         without_deskew=True,
     )
     clear_data()
-    return extract(args)
+    mxl_path = extract(args)
 
+    # teaser() reads oemer's global layer state left behind by extract(),
+    # so it must run before the next convert() call clears it.
+    debug_path = str(Path(mxl_path).with_name(Path(mxl_path).stem + "_debug.png"))
+    teaser().save(debug_path)
 
-if __name__ == "__main__":
-    if len(sys.argv) != 2:
-        print("Usage: python3 png_to_musicxml.py <path/to/image.png>")
-        sys.exit(1)
-
-    png_path = sys.argv[1]
-    if not os.path.exists(png_path):
-        print(f"File not found: {png_path}")
-        sys.exit(1)
-
-    out_path = convert(png_path)
-    print(f"MusicXML written to: {out_path}")
+    return {"musicxml": mxl_path, "debug_png": debug_path}

@@ -7,25 +7,37 @@
 
 ## Pipeline
 
-Three stages, one script each. Run in order, each stage's output feeds the next.
+Internally three stages (split → OMR → note parsing), each in its own
+file (`pdf_to_png.py`, `png_to_musicxml.py`, `musicxml_to_notes.py`) and
+each writing its output next to the input file, matching the
+`storage/scores/<Composer>/<Piece>/` layout. Those three files are
+helper modules only — not meant to be run directly.
 
-**1. Split PDF into per-page PNGs**
-```bash
-backend/.venv/bin/python3 backend/pdf_processor/pdf_to_png.py "<path/to/score.pdf>"
-```
-Writes `backend/storage/pages/<pdf_name>/page-001.png`, `page-002.png`, ...
+`pdf_to_notes.py` is the single entry point that drives all three, both
+as a CLI command and as an importable function.
 
-**2. Run OMR on a page PNG → MusicXML**
+**Run from the command line**
 ```bash
-backend/.venv/bin/python3 backend/pdf_processor/png_to_musicxml.py "<path/to/page.png>"
+backend/.venv/bin/python3 backend/pdf_processor/pdf_to_notes.py "<path/to/score.pdf>"
 ```
-Writes `backend/storage/musicxml/<page_name>.musicxml`
 
-**3. Parse MusicXML → timed note events**
-```bash
-backend/.venv/bin/python3 backend/pdf_processor/musicxml_to_notes.py "<path/to/page.musicxml>"
+**Or call it from other Python code**
+```python
+from pdf_to_notes import process
+result = process("<path/to/score.pdf>")
 ```
-Writes `backend/storage/notes/<page_name>_notes.json` — each note has `hz`, `start`, `duration` (start/duration in quarter-note beats).
+Returns a dict:
+```python
+{
+  "pages":      [...],   # png paths, one per page
+  "musicxml":   [...],   # musicxml paths, one per page
+  "notes_json": [...],   # notes json paths, one per page (also written to disk)
+  "bpm": 120, "time_signature": "4/4",
+  "notes": [{"hz": ..., "start": ..., "duration": ...}, ...],  # combined
+            # across all pages onto one continuous timeline
+  "timing": {"split": ..., "omr": ..., "notes": ..., "total": ...},  # seconds
+}
+```
 
 ## Known limitation
 
