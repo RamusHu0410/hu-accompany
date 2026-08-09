@@ -1,4 +1,6 @@
 import json
+from pathlib import Path
+
 from django.conf import settings
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
@@ -8,6 +10,7 @@ from imslp_search.main import search_imslp
 from imslp_search.errors import IMSLPNetworkError, WorkNotFoundError
 from imslp_search.services import imslp_service
 from processor import process_pdf
+import pdf_processor
 
 
 @csrf_exempt
@@ -88,6 +91,57 @@ def process_score_view(request):
         debug_relative = debug_pdf_path.relative_to(settings.STORAGE_ROOT)
         response["debug_pdf_path"] = score_storage.to_db_path(debug_relative)
     return JsonResponse(response)
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def process_score_omr_view(request):
+    """POST /api/score/process-omr — run the oemer-based OMR pipeline
+    (backend/pdf_processor) on a stored score PDF: split into page PNGs,
+    run OMR to MusicXML with a debug PNG per page (every detected
+    notehead/clef/barline/etc. boxed and labeled), then parse timed note
+    events into a notes JSON per page. All output files are written next
+    to the source PDF in storage.
+
+    Body: {"file_path": "storage/scores/<Composer>/<Work>/<file>.pdf"}
+    `file_path` matches the format returned by /api/imslp/download's file_path.
+    """
+    try:
+        body = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "invalid JSON"}, status=400)
+
+    file_path = (body.get("file_path") or "").strip()
+    if not file_path:
+        return JsonResponse({"error": "file_path is required"}, status=400)
+
+    if not score_storage.exists(file_path):
+        return JsonResponse({"error": f"file not found: {file_path}"}, status=404)
+
+    pdf_path = score_storage.db_path_to_absolute(file_path)
+
+    try:
+        result = pdf_processor.process(str(pdf_path))
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=500)
+
+    def to_db_paths(paths):
+        return [
+            score_storage.to_db_path(Path(p).relative_to(settings.STORAGE_ROOT))
+            for p in paths
+        ]
+
+    return JsonResponse({
+        "file_path": file_path,
+        "pages": to_db_paths(result["pages"]),
+        "musicxml": to_db_paths(result["musicxml"]),
+        "debug_png": to_db_paths(result["debug_png"]),
+        "notes_json": to_db_paths(result["notes_json"]),
+        "bpm": result["bpm"],
+        "time_signature": result["time_signature"],
+        "note_count": len(result["notes"]),
+        "timing": result["timing"],
+    })
 
 
 @csrf_exempt
