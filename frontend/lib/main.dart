@@ -6,6 +6,8 @@ import 'Music_Library_Page.dart';
 import 'LiquidGlass.dart';
 import 'Score_Page_Controller.dart';
 import 'Score_Pages_View.dart';
+import 'Record_Navigator_Page.dart';
+import 'Vinyl_Loading_Screen.dart';
 import 'dart:ffi' as ffi;
 import 'dart:typed_data';
 // CHANGED: the backend now returns a literal PDF instead of MusicXML, so
@@ -85,7 +87,11 @@ class HuAccumponistApp extends StatelessWidget {
         scaffoldBackgroundColor: const Color.fromARGB(255, 255, 255, 255),
         colorScheme: const ColorScheme.dark(primary: Color(0xFFE94560)),
       ),
-      home: const ScoreViewerPage(),
+      // App now opens onto the turntable navigator (Practice / Search /
+      // Shelf, chosen by spinning a record) instead of dropping straight
+      // into the score viewer. ScoreViewerPage is still reachable — it's
+      // just one of the records on the platter now.
+      home: const Vinyl_Loading_Screen(child: Record_Navigator_Page()),
     );
   }
 }
