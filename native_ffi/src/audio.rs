@@ -70,7 +70,7 @@ pub fn start_processing_loop(rx: Receiver<Vec<f32>>) {
 
             if let Some(ref piece) = *ACTIVE_PIECE.lock().unwrap() {
                 match &piece.curr_phase {
-                    1 => {
+                    0 | 1 => {
                         let target_notes = crate::dsp::get_current_targets(current_ms, piece);
                         let _ = crate::dsp::process_dsp(&output_spectrum, 
                             &target_notes, 

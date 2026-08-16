@@ -4,6 +4,7 @@
 # Cargo tracks builds in a directory named 'target' by default
 **/*.rs.bk
 **/target/
+.sh
 
 # ==========================================
 # 2. Flutter & Dart (Ignores .dart_tool, .packages, etc.)
