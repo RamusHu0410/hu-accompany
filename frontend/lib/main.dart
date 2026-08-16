@@ -435,6 +435,23 @@
 // }
 
 import 'package:flutter/material.dart';
+import 'package:liquid_glass_easy/liquid_glass_easy.dart';
+import 'Draggable_Recorder_Button.dart';
+import 'Drawing_Overlay.dart';
+import 'Music_Library_Page.dart';
+import 'LiquidGlass.dart';
+import 'Score_Page_Controller.dart';
+import 'Score_Pages_View.dart';
+import 'Record_Navigator_Page.dart';
+import 'Vinyl_Loading_Screen.dart';
+import 'dart:ffi' as ffi;
+import 'dart:typed_data';
+// CHANGED: the backend now returns a literal PDF instead of MusicXML, so
+// the OSMD WebView renderer (Score_osmd_renderer.dart) no longer applies
+// here — swapped for the swipeable PDF page view (Score_Pages_View.dart +
+// Score_Page_Controller.dart). Note this drops the OSMD-based per-note
+// wrong-note coloring feature (colorNotes/resetColors); there's no direct
+// equivalent for a rasterized PDF page yet.
 import 'package:hu_accomponist/src/rust/api/simple.dart';
 import 'package:hu_accomponist/src/rust/frb_generated.dart';
 
@@ -456,6 +473,11 @@ class MyApp extends StatelessWidget {
               'Action: Call Rust `greet("Tom")`\nResult: `${greet(name: "Tom")}`'),
         ),
       ),
+      // App now opens onto the turntable navigator (Practice / Search /
+      // Shelf, chosen by spinning a record) instead of dropping straight
+      // into the score viewer. ScoreViewerPage is still reachable — it's
+      // just one of the records on the platter now.
+      home: const Vinyl_Loading_Screen(child: Record_Navigator_Page()),
     );
   }
 }
