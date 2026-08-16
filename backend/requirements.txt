@@ -24,7 +24,8 @@ numpy
 oemer
 music21
 
-# OCR (legacy archive/Converter script only)
+# OCR (pdf_processor/part2_markings -- composer marking detection; pdfplumber
+# is legacy archive/Converter script only)
 pdfplumber
 pytesseract
 

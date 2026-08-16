@@ -37,4 +37,6 @@ def convert(xml_path: str, default_bpm: float = DEFAULT_BPM) -> dict:
                     notes.append({"hz": round(p.frequency, 3), "start": start, "duration": duration})
 
     notes.sort(key=lambda n: (n["start"], n["hz"]))
+    for i, n in enumerate(notes):
+        n["id"] = i
     return {"bpm": bpm, "time_signature": time_sig, "notes": notes}

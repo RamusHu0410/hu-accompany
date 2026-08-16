@@ -1,0 +1,1481 @@
+{
+  "bpm": 120,
+  "time_signature": "4/4",
+  "notes": [
+    {
+      "hz": 65.406,
+      "start": 0.0,
+      "duration": 4.0
+    },
+    {
+      "hz": 130.813,
+      "start": 0.0,
+      "duration": 4.0
+    },
+    {
+      "hz": 2093.005,
+      "start": 0.0,
+      "duration": 1.0
+    },
+    {
+      "hz": 130.813,
+      "start": 0.25,
+      "duration": 0.25
+    },
+    {
+      "hz": 195.998,
+      "start": 0.5,
+      "duration": 0.25
+    },
+    {
+      "hz": 261.626,
+      "start": 0.75,
+      "duration": 0.25
+    },
+    {
+      "hz": 329.628,
+      "start": 1.0,
+      "duration": 0.25
+    },
+    {
+      "hz": 261.626,
+      "start": 1.25,
+      "duration": 0.25
+    },
+    {
+      "hz": 391.995,
+      "start": 1.5,
+      "duration": 0.25
+    },
+    {
+      "hz": 523.251,
+      "start": 1.75,
+      "duration": 0.25
+    },
+    {
+      "hz": 659.255,
+      "start": 2.0,
+      "duration": 0.25
+    },
+    {
+      "hz": 523.251,
+      "start": 2.25,
+      "duration": 0.25
+    },
+    {
+      "hz": 783.991,
+      "start": 2.5,
+      "duration": 0.25
+    },
+    {
+      "hz": 1046.502,
+      "start": 2.75,
+      "duration": 0.25
+    },
+    {
+      "hz": 659.255,
+      "start": 3.0,
+      "duration": 0.25
+    },
+    {
+      "hz": 523.251,
+      "start": 3.5,
+      "duration": 0.25
+    },
+    {
+      "hz": 783.991,
+      "start": 3.75,
+      "duration": 0.5
+    },
+    {
+      "hz": 1046.502,
+      "start": 3.75,
+      "duration": 0.25
+    },
+    {
+      "hz": 65.406,
+      "start": 6.25,
+      "duration": 4.0
+    },
+    {
+      "hz": 130.813,
+      "start": 6.25,
+      "duration": 4.0
+    },
+    {
+      "hz": 1318.51,
+      "start": 6.25,
+      "duration": 3.0
+    },
+    {
+      "hz": 1046.502,
+      "start": 9.25,
+      "duration": 0.25
+    },
+    {
+      "hz": 783.991,
+      "start": 9.5,
+      "duration": 0.25
+    },
+    {
+      "hz": 523.251,
+      "start": 9.75,
+      "duration": 0.25
+    },
+    {
+      "hz": 1046.502,
+      "start": 10.0,
+      "duration": 0.25
+    },
+    {
+      "hz": 195.998,
+      "start": 10.5,
+      "duration": 1.0
+    },
+    {
+      "hz": 783.991,
+      "start": 10.5,
+      "duration": 0.25
+    },
+    {
+      "hz": 523.251,
+      "start": 10.75,
+      "duration": 0.25
+    },
+    {
+      "hz": 659.255,
+      "start": 11.0,
+      "duration": 0.25
+    },
+    {
+      "hz": 523.251,
+      "start": 11.25,
+      "duration": 0.25
+    },
+    {
+      "hz": 130.813,
+      "start": 11.5,
+      "duration": 1.0
+    },
+    {
+      "hz": 391.995,
+      "start": 11.5,
+      "duration": 0.25
+    },
+    {
+      "hz": 261.626,
+      "start": 11.75,
+      "duration": 0.25
+    },
+    {
+      "hz": 329.628,
+      "start": 12.0,
+      "duration": 0.25
+    },
+    {
+      "hz": 261.626,
+      "start": 12.25,
+      "duration": 0.25
+    },
+    {
+      "hz": 43.654,
+      "start": 14.0,
+      "duration": 4.0
+    },
+    {
+      "hz": 87.307,
+      "start": 14.0,
+      "duration": 4.0
+    },
+    {
+      "hz": 349.228,
+      "start": 14.0,
+      "duration": 0.25
+    },
+    {
+      "hz": 261.626,
+      "start": 14.25,
+      "duration": 0.25
+    },
+    {
+      "hz": 130.813,
+      "start": 14.375,
+      "duration": 0.25
+    },
+    {
+      "hz": 440.0,
+      "start": 14.5,
+      "duration": 0.25
+    },
+    {
+      "hz": 220.0,
+      "start": 14.625,
+      "duration": 0.25
+    },
+    {
+      "hz": 523.251,
+      "start": 14.75,
+      "duration": 0.25
+    },
+    {
+      "hz": 261.626,
+      "start": 14.875,
+      "duration": 0.25
+    },
+    {
+      "hz": 698.456,
+      "start": 15.0,
+      "duration": 0.25
+    },
+    {
+      "hz": 523.251,
+      "start": 15.25,
+      "duration": 0.25
+    },
+    {
+      "hz": 880.0,
+      "start": 15.5,
+      "duration": 0.25
+    },
+    {
+      "hz": 1046.502,
+      "start": 15.75,
+      "duration": 1.0
+    },
+    {
+      "hz": 698.456,
+      "start": 16.75,
+      "duration": 0.25
+    },
+    {
+      "hz": 523.251,
+      "start": 17.0,
+      "duration": 0.25
+    },
+    {
+      "hz": 880.0,
+      "start": 17.25,
+      "duration": 0.25
+    },
+    {
+      "hz": 1046.502,
+      "start": 18.125,
+      "duration": 0.5
+    },
+    {
+      "hz": 87.307,
+      "start": 18.625,
+      "duration": 4.0
+    },
+    {
+      "hz": 1318.51,
+      "start": 18.625,
+      "duration": 0.75
+    },
+    {
+      "hz": 1046.502,
+      "start": 19.375,
+      "duration": 0.25
+    },
+    {
+      "hz": 880.0,
+      "start": 19.625,
+      "duration": 0.25
+    },
+    {
+      "hz": 523.251,
+      "start": 19.875,
+      "duration": 0.25
+    },
+    {
+      "hz": 1318.51,
+      "start": 20.125,
+      "duration": 0.25
+    },
+    {
+      "hz": 1046.502,
+      "start": 20.375,
+      "duration": 0.25
+    },
+    {
+      "hz": 880.0,
+      "start": 20.625,
+      "duration": 0.25
+    },
+    {
+      "hz": 523.251,
+      "start": 20.875,
+      "duration": 0.25
+    },
+    {
+      "hz": 659.255,
+      "start": 21.125,
+      "duration": 0.25
+    },
+    {
+      "hz": 523.251,
+      "start": 21.375,
+      "duration": 0.25
+    },
+    {
+      "hz": 440.0,
+      "start": 21.625,
+      "duration": 0.25
+    },
+    {
+      "hz": 261.626,
+      "start": 21.875,
+      "duration": 0.25
+    },
+    {
+      "hz": 293.665,
+      "start": 22.125,
+      "duration": 0.25
+    },
+    {
+      "hz": 261.626,
+      "start": 22.375,
+      "duration": 0.25
+    },
+    {
+      "hz": 220.0,
+      "start": 22.625,
+      "duration": 1.0
+    },
+    {
+      "hz": 130.813,
+      "start": 23.625,
+      "duration": 1.0
+    },
+    {
+      "hz": 43.654,
+      "start": 26.625,
+      "duration": 2.0
+    },
+    {
+      "hz": 97.999,
+      "start": 26.625,
+      "duration": 2.0
+    },
+    {
+      "hz": 293.665,
+      "start": 26.625,
+      "duration": 0.25
+    },
+    {
+      "hz": 233.082,
+      "start": 26.875,
+      "duration": 0.25
+    },
+    {
+      "hz": 116.541,
+      "start": 27.125,
+      "duration": 0.25
+    },
+    {
+      "hz": 391.995,
+      "start": 27.125,
+      "duration": 0.25
+    },
+    {
+      "hz": 195.998,
+      "start": 27.375,
+      "duration": 0.25
+    },
+    {
+      "hz": 466.164,
+      "start": 27.375,
+      "duration": 0.25
+    },
+    {
+      "hz": 466.164,
+      "start": 27.375,
+      "duration": 0.25
+    },
+    {
+      "hz": 46.249,
+      "start": 27.625,
+      "duration": 1.0
+    },
+    {
+      "hz": 92.499,
+      "start": 27.625,
+      "duration": 1.0
+    },
+    {
+      "hz": 233.082,
+      "start": 27.625,
+      "duration": 0.25
+    },
+    {
+      "hz": 783.991,
+      "start": 27.625,
+      "duration": 0.25
+    },
+    {
+      "hz": 1046.502,
+      "start": 27.875,
+      "duration": 1.0
+    },
+    {
+      "hz": 41.203,
+      "start": 28.125,
+      "duration": 1.0
+    },
+    {
+      "hz": 82.407,
+      "start": 28.125,
+      "duration": 1.0
+    },
+    {
+      "hz": 587.33,
+      "start": 28.125,
+      "duration": 0.25
+    },
+    {
+      "hz": 466.164,
+      "start": 28.375,
+      "duration": 0.25
+    },
+    {
+      "hz": 783.991,
+      "start": 28.625,
+      "duration": 0.25
+    },
+    {
+      "hz": 880.0,
+      "start": 28.875,
+      "duration": 0.25
+    },
+    {
+      "hz": 1174.659,
+      "start": 30.625,
+      "duration": 3.0
+    },
+    {
+      "hz": 36.708,
+      "start": 31.375,
+      "duration": 4.0
+    },
+    {
+      "hz": 73.416,
+      "start": 31.375,
+      "duration": 4.0
+    },
+    {
+      "hz": 880.0,
+      "start": 33.625,
+      "duration": 0.25
+    },
+    {
+      "hz": 739.989,
+      "start": 33.875,
+      "duration": 0.25
+    },
+    {
+      "hz": 523.251,
+      "start": 34.125,
+      "duration": 0.25
+    },
+    {
+      "hz": 1174.659,
+      "start": 34.375,
+      "duration": 0.25
+    },
+    {
+      "hz": 880.0,
+      "start": 34.625,
+      "duration": 0.25
+    },
+    {
+      "hz": 739.989,
+      "start": 34.875,
+      "duration": 0.25
+    },
+    {
+      "hz": 523.251,
+      "start": 35.125,
+      "duration": 0.25
+    },
+    {
+      "hz": 220.0,
+      "start": 35.375,
+      "duration": 1.0
+    },
+    {
+      "hz": 587.33,
+      "start": 35.375,
+      "duration": 0.25
+    },
+    {
+      "hz": 440.0,
+      "start": 35.625,
+      "duration": 0.25
+    },
+    {
+      "hz": 369.994,
+      "start": 35.875,
+      "duration": 0.25
+    },
+    {
+      "hz": 261.626,
+      "start": 36.125,
+      "duration": 0.25
+    },
+    {
+      "hz": 184.997,
+      "start": 36.375,
+      "duration": 1.0
+    },
+    {
+      "hz": 293.665,
+      "start": 36.375,
+      "duration": 1.0
+    },
+    {
+      "hz": 130.813,
+      "start": 37.375,
+      "duration": 1.0
+    },
+    {
+      "hz": 48.999,
+      "start": 41.375,
+      "duration": 4.0
+    },
+    {
+      "hz": 97.999,
+      "start": 41.375,
+      "duration": 4.0
+    },
+    {
+      "hz": 293.665,
+      "start": 41.375,
+      "duration": 0.25
+    },
+    {
+      "hz": 130.813,
+      "start": 41.625,
+      "duration": 0.25
+    },
+    {
+      "hz": 261.626,
+      "start": 41.625,
+      "duration": 0.25
+    },
+    {
+      "hz": 174.614,
+      "start": 41.875,
+      "duration": 0.25
+    },
+    {
+      "hz": 349.228,
+      "start": 41.875,
+      "duration": 0.25
+    },
+    {
+      "hz": 207.652,
+      "start": 42.125,
+      "duration": 0.25
+    },
+    {
+      "hz": 415.305,
+      "start": 42.125,
+      "duration": 0.25
+    },
+    {
+      "hz": 587.33,
+      "start": 42.375,
+      "duration": 0.25
+    },
+    {
+      "hz": 523.251,
+      "start": 42.625,
+      "duration": 0.25
+    },
+    {
+      "hz": 698.456,
+      "start": 42.875,
+      "duration": 0.5
+    },
+    {
+      "hz": 830.609,
+      "start": 43.375,
+      "duration": 0.25
+    },
+    {
+      "hz": 587.33,
+      "start": 43.625,
+      "duration": 0.25
+    },
+    {
+      "hz": 523.251,
+      "start": 43.875,
+      "duration": 0.25
+    },
+    {
+      "hz": 698.456,
+      "start": 44.125,
+      "duration": 0.25
+    },
+    {
+      "hz": 830.609,
+      "start": 45.375,
+      "duration": 0.25
+    },
+    {
+      "hz": 48.999,
+      "start": 45.625,
+      "duration": 2.0
+    },
+    {
+      "hz": 97.999,
+      "start": 45.625,
+      "duration": 4.0
+    },
+    {
+      "hz": 1318.51,
+      "start": 45.625,
+      "duration": 0.5
+    },
+    {
+      "hz": 783.991,
+      "start": 46.125,
+      "duration": 0.25
+    },
+    {
+      "hz": 698.456,
+      "start": 46.375,
+      "duration": 0.25
+    },
+    {
+      "hz": 466.164,
+      "start": 46.625,
+      "duration": 0.25
+    },
+    {
+      "hz": 1318.51,
+      "start": 46.875,
+      "duration": 0.25
+    },
+    {
+      "hz": 783.991,
+      "start": 47.125,
+      "duration": 0.25
+    },
+    {
+      "hz": 698.456,
+      "start": 47.375,
+      "duration": 0.25
+    },
+    {
+      "hz": 195.998,
+      "start": 47.625,
+      "duration": 1.0
+    },
+    {
+      "hz": 466.164,
+      "start": 47.625,
+      "duration": 0.25
+    },
+    {
+      "hz": 587.33,
+      "start": 47.875,
+      "duration": 0.25
+    },
+    {
+      "hz": 391.995,
+      "start": 48.125,
+      "duration": 0.25
+    },
+    {
+      "hz": 233.082,
+      "start": 48.375,
+      "duration": 0.25
+    },
+    {
+      "hz": 174.614,
+      "start": 48.625,
+      "duration": 1.0
+    },
+    {
+      "hz": 293.665,
+      "start": 48.625,
+      "duration": 0.25
+    },
+    {
+      "hz": 116.541,
+      "start": 52.625,
+      "duration": 1.0
+    },
+    {
+      "hz": 130.813,
+      "start": 56.625,
+      "duration": 4.0
+    },
+    {
+      "hz": 329.628,
+      "start": 56.625,
+      "duration": 0.25
+    },
+    {
+      "hz": 130.813,
+      "start": 56.875,
+      "duration": 0.25
+    },
+    {
+      "hz": 261.626,
+      "start": 56.875,
+      "duration": 0.25
+    },
+    {
+      "hz": 195.998,
+      "start": 57.125,
+      "duration": 0.25
+    },
+    {
+      "hz": 391.995,
+      "start": 57.125,
+      "duration": 0.25
+    },
+    {
+      "hz": 261.626,
+      "start": 57.375,
+      "duration": 0.25
+    },
+    {
+      "hz": 523.251,
+      "start": 57.375,
+      "duration": 0.25
+    },
+    {
+      "hz": 659.255,
+      "start": 57.625,
+      "duration": 0.25
+    },
+    {
+      "hz": 523.251,
+      "start": 57.875,
+      "duration": 0.25
+    },
+    {
+      "hz": 783.991,
+      "start": 58.125,
+      "duration": 0.5
+    },
+    {
+      "hz": 1046.502,
+      "start": 58.625,
+      "duration": 0.25
+    },
+    {
+      "hz": 659.255,
+      "start": 58.875,
+      "duration": 0.25
+    },
+    {
+      "hz": 523.251,
+      "start": 59.125,
+      "duration": 0.25
+    },
+    {
+      "hz": 783.991,
+      "start": 59.375,
+      "duration": 0.25
+    },
+    {
+      "hz": 1046.502,
+      "start": 60.625,
+      "duration": 0.25
+    },
+    {
+      "hz": 523.251,
+      "start": 60.875,
+      "duration": 3.0
+    },
+    {
+      "hz": 1318.51,
+      "start": 60.875,
+      "duration": 3.0
+    },
+    {
+      "hz": 65.406,
+      "start": 61.125,
+      "duration": 4.0
+    },
+    {
+      "hz": 130.813,
+      "start": 61.125,
+      "duration": 4.0
+    },
+    {
+      "hz": 1046.502,
+      "start": 63.875,
+      "duration": 0.25
+    },
+    {
+      "hz": 783.991,
+      "start": 64.125,
+      "duration": 0.25
+    },
+    {
+      "hz": 523.251,
+      "start": 64.375,
+      "duration": 0.25
+    },
+    {
+      "hz": 1396.913,
+      "start": 64.625,
+      "duration": 0.25
+    },
+    {
+      "hz": 1174.659,
+      "start": 64.875,
+      "duration": 0.25
+    },
+    {
+      "hz": 195.998,
+      "start": 65.125,
+      "duration": 1.0
+    },
+    {
+      "hz": 783.991,
+      "start": 65.125,
+      "duration": 0.25
+    },
+    {
+      "hz": 523.251,
+      "start": 65.375,
+      "duration": 0.25
+    },
+    {
+      "hz": 659.255,
+      "start": 65.625,
+      "duration": 0.25
+    },
+    {
+      "hz": 523.251,
+      "start": 65.875,
+      "duration": 0.25
+    },
+    {
+      "hz": 130.813,
+      "start": 66.125,
+      "duration": 1.0
+    },
+    {
+      "hz": 391.995,
+      "start": 66.125,
+      "duration": 0.25
+    },
+    {
+      "hz": 261.626,
+      "start": 66.375,
+      "duration": 0.25
+    },
+    {
+      "hz": 329.628,
+      "start": 66.625,
+      "duration": 0.25
+    },
+    {
+      "hz": 261.626,
+      "start": 66.875,
+      "duration": 0.25
+    },
+    {
+      "hz": 55.0,
+      "start": 69.375,
+      "duration": 4.0
+    },
+    {
+      "hz": 349.228,
+      "start": 69.375,
+      "duration": 0.25
+    },
+    {
+      "hz": 261.626,
+      "start": 69.625,
+      "duration": 0.25
+    },
+    {
+      "hz": 349.228,
+      "start": 69.875,
+      "duration": 0.25
+    },
+    {
+      "hz": 523.251,
+      "start": 70.125,
+      "duration": 0.25
+    },
+    {
+      "hz": 130.813,
+      "start": 70.375,
+      "duration": 0.25
+    },
+    {
+      "hz": 698.456,
+      "start": 70.375,
+      "duration": 0.5
+    },
+    {
+      "hz": 174.614,
+      "start": 70.625,
+      "duration": 0.25
+    },
+    {
+      "hz": 261.626,
+      "start": 70.875,
+      "duration": 0.25
+    },
+    {
+      "hz": 523.251,
+      "start": 70.875,
+      "duration": 0.25
+    },
+    {
+      "hz": 698.456,
+      "start": 71.125,
+      "duration": 0.5
+    },
+    {
+      "hz": 1046.502,
+      "start": 71.625,
+      "duration": 0.25
+    },
+    {
+      "hz": 698.456,
+      "start": 71.875,
+      "duration": 0.25
+    },
+    {
+      "hz": 523.251,
+      "start": 72.125,
+      "duration": 0.25
+    },
+    {
+      "hz": 698.456,
+      "start": 72.375,
+      "duration": 0.25
+    },
+    {
+      "hz": 1046.502,
+      "start": 72.625,
+      "duration": 0.25
+    },
+    {
+      "hz": 1318.51,
+      "start": 73.375,
+      "duration": 1.5
+    },
+    {
+      "hz": 55.0,
+      "start": 73.5,
+      "duration": 4.0
+    },
+    {
+      "hz": 110.0,
+      "start": 73.5,
+      "duration": 4.0
+    },
+    {
+      "hz": 1046.502,
+      "start": 74.875,
+      "duration": 0.25
+    },
+    {
+      "hz": 739.989,
+      "start": 75.125,
+      "duration": 0.375
+    },
+    {
+      "hz": 523.251,
+      "start": 75.5,
+      "duration": 0.25
+    },
+    {
+      "hz": 1318.51,
+      "start": 75.75,
+      "duration": 0.25
+    },
+    {
+      "hz": 1046.502,
+      "start": 76.0,
+      "duration": 0.25
+    },
+    {
+      "hz": 698.456,
+      "start": 76.25,
+      "duration": 0.25
+    },
+    {
+      "hz": 523.251,
+      "start": 76.5,
+      "duration": 0.5
+    },
+    {
+      "hz": 659.255,
+      "start": 77.0,
+      "duration": 0.25
+    },
+    {
+      "hz": 523.251,
+      "start": 77.25,
+      "duration": 0.25
+    },
+    {
+      "hz": 184.997,
+      "start": 77.5,
+      "duration": 1.0
+    },
+    {
+      "hz": 369.994,
+      "start": 77.5,
+      "duration": 0.25
+    },
+    {
+      "hz": 233.082,
+      "start": 77.75,
+      "duration": 0.25
+    },
+    {
+      "hz": 329.628,
+      "start": 78.0,
+      "duration": 0.25
+    },
+    {
+      "hz": 261.626,
+      "start": 78.25,
+      "duration": 0.25
+    },
+    {
+      "hz": 130.813,
+      "start": 78.5,
+      "duration": 1.0
+    },
+    {
+      "hz": 293.665,
+      "start": 78.5,
+      "duration": 0.25
+    },
+    {
+      "hz": 261.626,
+      "start": 78.75,
+      "duration": 0.25
+    },
+    {
+      "hz": 391.995,
+      "start": 79.0,
+      "duration": 0.25
+    },
+    {
+      "hz": 523.251,
+      "start": 79.25,
+      "duration": 0.25
+    },
+    {
+      "hz": 97.999,
+      "start": 79.5,
+      "duration": 4.0
+    },
+    {
+      "hz": 587.33,
+      "start": 79.5,
+      "duration": 0.25
+    },
+    {
+      "hz": 523.251,
+      "start": 79.75,
+      "duration": 0.25
+    },
+    {
+      "hz": 130.813,
+      "start": 79.875,
+      "duration": 0.25
+    },
+    {
+      "hz": 783.991,
+      "start": 80.0,
+      "duration": 0.25
+    },
+    {
+      "hz": 195.998,
+      "start": 80.125,
+      "duration": 0.25
+    },
+    {
+      "hz": 1046.502,
+      "start": 80.25,
+      "duration": 0.25
+    },
+    {
+      "hz": 261.626,
+      "start": 80.375,
+      "duration": 0.25
+    },
+    {
+      "hz": 587.33,
+      "start": 80.5,
+      "duration": 0.25
+    },
+    {
+      "hz": 523.251,
+      "start": 80.75,
+      "duration": 0.25
+    },
+    {
+      "hz": 783.991,
+      "start": 81.0,
+      "duration": 0.25
+    },
+    {
+      "hz": 1046.502,
+      "start": 81.375,
+      "duration": 0.25
+    },
+    {
+      "hz": 48.999,
+      "start": 83.5,
+      "duration": 1.0
+    },
+    {
+      "hz": 97.999,
+      "start": 83.5,
+      "duration": 1.0
+    },
+    {
+      "hz": 1318.51,
+      "start": 83.5,
+      "duration": 1.0
+    },
+    {
+      "hz": 195.998,
+      "start": 84.5,
+      "duration": 1.0
+    },
+    {
+      "hz": 932.328,
+      "start": 84.5,
+      "duration": 0.5
+    },
+    {
+      "hz": 783.991,
+      "start": 85.0,
+      "duration": 0.25
+    },
+    {
+      "hz": 466.164,
+      "start": 85.25,
+      "duration": 0.25
+    },
+    {
+      "hz": 1174.659,
+      "start": 85.5,
+      "duration": 0.25
+    },
+    {
+      "hz": 932.328,
+      "start": 85.75,
+      "duration": 0.25
+    },
+    {
+      "hz": 783.991,
+      "start": 86.0,
+      "duration": 0.25
+    },
+    {
+      "hz": 466.164,
+      "start": 86.25,
+      "duration": 0.25
+    },
+    {
+      "hz": 587.33,
+      "start": 86.5,
+      "duration": 0.25
+    },
+    {
+      "hz": 466.164,
+      "start": 86.75,
+      "duration": 0.25
+    },
+    {
+      "hz": 391.995,
+      "start": 87.0,
+      "duration": 0.25
+    },
+    {
+      "hz": 233.082,
+      "start": 87.25,
+      "duration": 0.25
+    },
+    {
+      "hz": 293.665,
+      "start": 87.5,
+      "duration": 0.25
+    },
+    {
+      "hz": 233.082,
+      "start": 87.75,
+      "duration": 0.25
+    },
+    {
+      "hz": 116.541,
+      "start": 88.5,
+      "duration": 1.0
+    },
+    {
+      "hz": 65.406,
+      "start": 89.5,
+      "duration": 4.0
+    },
+    {
+      "hz": 130.813,
+      "start": 89.5,
+      "duration": 4.0
+    },
+    {
+      "hz": 329.628,
+      "start": 89.5,
+      "duration": 0.25
+    },
+    {
+      "hz": 146.832,
+      "start": 89.75,
+      "duration": 0.25
+    },
+    {
+      "hz": 293.665,
+      "start": 89.75,
+      "duration": 0.25
+    },
+    {
+      "hz": 195.998,
+      "start": 90.0,
+      "duration": 0.25
+    },
+    {
+      "hz": 391.995,
+      "start": 90.0,
+      "duration": 0.25
+    },
+    {
+      "hz": 293.665,
+      "start": 90.25,
+      "duration": 0.25
+    },
+    {
+      "hz": 587.33,
+      "start": 90.25,
+      "duration": 0.25
+    },
+    {
+      "hz": 659.255,
+      "start": 90.5,
+      "duration": 0.25
+    },
+    {
+      "hz": 587.33,
+      "start": 90.75,
+      "duration": 0.25
+    },
+    {
+      "hz": 783.991,
+      "start": 91.0,
+      "duration": 0.25
+    },
+    {
+      "hz": 1174.659,
+      "start": 91.25,
+      "duration": 0.25
+    },
+    {
+      "hz": 659.255,
+      "start": 91.5,
+      "duration": 0.25
+    },
+    {
+      "hz": 587.33,
+      "start": 91.75,
+      "duration": 0.25
+    },
+    {
+      "hz": 783.991,
+      "start": 92.0,
+      "duration": 0.25
+    },
+    {
+      "hz": 1174.659,
+      "start": 92.25,
+      "duration": 0.25
+    },
+    {
+      "hz": 1318.51,
+      "start": 93.5,
+      "duration": 3.0
+    },
+    {
+      "hz": 65.406,
+      "start": 93.75,
+      "duration": 4.0
+    },
+    {
+      "hz": 130.813,
+      "start": 93.75,
+      "duration": 4.0
+    },
+    {
+      "hz": 1046.502,
+      "start": 96.5,
+      "duration": 0.25
+    },
+    {
+      "hz": 783.991,
+      "start": 96.75,
+      "duration": 0.25
+    },
+    {
+      "hz": 523.251,
+      "start": 97.0,
+      "duration": 0.25
+    },
+    {
+      "hz": 1396.913,
+      "start": 97.25,
+      "duration": 0.25
+    },
+    {
+      "hz": 1046.502,
+      "start": 97.5,
+      "duration": 0.25
+    },
+    {
+      "hz": 195.998,
+      "start": 97.75,
+      "duration": 1.0
+    },
+    {
+      "hz": 783.991,
+      "start": 97.75,
+      "duration": 0.25
+    },
+    {
+      "hz": 523.251,
+      "start": 98.0,
+      "duration": 0.25
+    },
+    {
+      "hz": 659.255,
+      "start": 98.25,
+      "duration": 0.25
+    },
+    {
+      "hz": 523.251,
+      "start": 98.5,
+      "duration": 0.25
+    },
+    {
+      "hz": 130.813,
+      "start": 98.75,
+      "duration": 1.0
+    },
+    {
+      "hz": 391.995,
+      "start": 98.75,
+      "duration": 0.25
+    },
+    {
+      "hz": 261.626,
+      "start": 99.0,
+      "duration": 0.25
+    },
+    {
+      "hz": 329.628,
+      "start": 99.25,
+      "duration": 0.25
+    },
+    {
+      "hz": 261.626,
+      "start": 99.5,
+      "duration": 0.25
+    },
+    {
+      "hz": 48.999,
+      "start": 99.75,
+      "duration": 4.0
+    },
+    {
+      "hz": 110.0,
+      "start": 99.75,
+      "duration": 4.0
+    },
+    {
+      "hz": 164.814,
+      "start": 101.75,
+      "duration": 1.0
+    },
+    {
+      "hz": 261.626,
+      "start": 102.75,
+      "duration": 1.0
+    },
+    {
+      "hz": 329.628,
+      "start": 103.75,
+      "duration": 0.25
+    },
+    {
+      "hz": 349.228,
+      "start": 104.0,
+      "duration": 0.25
+    },
+    {
+      "hz": 329.628,
+      "start": 104.25,
+      "duration": 0.25
+    },
+    {
+      "hz": 523.251,
+      "start": 104.5,
+      "duration": 0.25
+    },
+    {
+      "hz": 659.255,
+      "start": 104.75,
+      "duration": 0.25
+    },
+    {
+      "hz": 698.456,
+      "start": 105.0,
+      "duration": 0.25
+    },
+    {
+      "hz": 659.255,
+      "start": 105.25,
+      "duration": 0.5
+    },
+    {
+      "hz": 1046.502,
+      "start": 105.75,
+      "duration": 0.5
+    },
+    {
+      "hz": 1318.51,
+      "start": 106.25,
+      "duration": 0.25
+    },
+    {
+      "hz": 698.456,
+      "start": 106.5,
+      "duration": 0.25
+    },
+    {
+      "hz": 659.255,
+      "start": 106.75,
+      "duration": 0.25
+    },
+    {
+      "hz": 1046.502,
+      "start": 107.0,
+      "duration": 0.25
+    }
+  ]
+}

@@ -32,13 +32,21 @@ def _get_nearby_note_id(box, note_id_map):
 
     Instead, search a 2D window around the accidental and pick whichever
     notehead pixel is nearest (Euclidean) to the accidental's center.
+
+    Window is widened beyond a "normal" accidental-to-notehead gap to
+    cover seconds (two noteheads a step apart, stacked in one chord):
+    engraving staggers both the noteheads (one pushed right so they don't
+    overlap) and their accidentals (one pushed further left so the two
+    accidental glyphs don't collide), so the true notehead can sit
+    further right, and/or further off the accidental's own vertical
+    center, than a tight window assumes.
     """
     cen_x, cen_y = get_center(box)
     unit_size = int(round(get_unit_size(cen_x, cen_y)))
-    y1 = max(0, box[1] - unit_size // 2)
-    y2 = min(note_id_map.shape[0], box[3] + unit_size // 2)
+    y1 = max(0, box[1] - unit_size)
+    y2 = min(note_id_map.shape[0], box[3] + unit_size)
     x1 = box[2]
-    x2 = min(note_id_map.shape[1], box[2] + unit_size * 2)
+    x2 = min(note_id_map.shape[1], box[2] + unit_size * 3)
 
     region = note_id_map[y1:y2, x1:x2]
     ys, xs = np.where(region != -1)
@@ -136,9 +144,26 @@ def convert(png_path: str) -> dict:
     clear_data()
     mxl_path = extract(args)
 
-    # teaser() reads oemer's global layer state left behind by extract(),
-    # so it must run before the next convert() call clears it.
+    # teaser() and the barline/image-size/working-image readout below all
+    # read oemer's global layer state left behind by extract(), so they must
+    # run before the next convert() call clears it. Barline positions, the
+    # working image size, and a clean (unannotated) copy of oemer's resized
+    # working image are handed back so part2_markings can anchor OCR'd text
+    # to this same coordinate space and draw its own debug overlay on an
+    # uncluttered base image, without re-running oemer.
     debug_path = str(Path(mxl_path).with_name(Path(mxl_path).stem + "_debug.png"))
     _draw_teaser.teaser().save(debug_path)
 
-    return {"musicxml": mxl_path, "debug_png": debug_path}
+    barlines = [b.bbox for b in layers.get_layer('barlines')]
+    image_size = tuple(layers.get_layer('original_image').shape[1::-1])
+
+    working_path = str(Path(mxl_path).with_name(Path(mxl_path).stem + "_working.png"))
+    Image.fromarray(layers.get_layer('original_image').astype(np.uint8)).save(working_path)
+
+    return {
+        "musicxml": mxl_path,
+        "debug_png": debug_path,
+        "barlines": barlines,
+        "image_size": image_size,
+        "working_png": working_path,
+    }

@@ -1,0 +1,93 @@
+[
+  {
+    "offset_ql": 2.3062,
+    "type": "tempo",
+    "value": 132,
+    "text": "Allegro",
+    "confidence": 0.93
+  },
+  {
+    "offset_ql": 3.4338,
+    "type": "dynamic",
+    "value": 0.25,
+    "text": "P",
+    "confidence": 0.89
+  },
+  {
+    "offset_ql": 4.2794,
+    "type": "expression",
+    "value": "leggiero",
+    "text": "leggrero",
+    "confidence": 0.83
+  },
+  {
+    "offset_ql": 4.3819,
+    "type": "expression",
+    "value": "mosso",
+    "text": "mosso",
+    "confidence": 0.92
+  },
+  {
+    "offset_ql": 9.635,
+    "type": "expression",
+    "value": "scherzando",
+    "text": "scherzando",
+    "confidence": 0.92
+  },
+  {
+    "offset_ql": 15.25,
+    "type": "expression",
+    "value": "cresc",
+    "text": "CrESC,",
+    "confidence": 0.36
+  },
+  {
+    "offset_ql": 27.6677,
+    "type": "expression",
+    "value": "moto",
+    "text": "(Moto",
+    "confidence": 0.96
+  },
+  {
+    "offset_ql": 36.2887,
+    "type": "expression",
+    "value": "primo",
+    "text": "primo",
+    "confidence": 0.93
+  },
+  {
+    "offset_ql": 47.9175,
+    "type": "dynamic",
+    "value": 0.75,
+    "text": "f",
+    "confidence": 0.62
+  },
+  {
+    "offset_ql": 47.9175,
+    "type": "dynamic",
+    "value": 0.75,
+    "text": "f",
+    "confidence": 0.61
+  },
+  {
+    "offset_ql": 72.375,
+    "type": "expression",
+    "value": "accel",
+    "text": "atcel",
+    "confidence": 0.72
+  },
+  {
+    "offset_ql": 92.9651,
+    "type": "dynamic",
+    "value": 0.75,
+    "text": "f",
+    "confidence": 0.9
+  },
+  {
+    "offset_ql": 167.5322,
+    "type": "dynamic",
+    "value": 0.25,
+    "text": "p",
+    "confidence": 0.67
+  }
+]
