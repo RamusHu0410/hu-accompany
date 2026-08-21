@@ -2,11 +2,8 @@ use crate::{ACTIVE_PIECE, USER_DATA};
 use crate::models::PieceData;
 use cpal::Stream;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-use std::mem::MaybeUninit;
-use std::ops::Range;
 use std::sync::mpsc::Receiver;
 use std::sync::mpsc::Sender;
-use std::time::Instant;
 
 static RMS_THRESHOLD: Option<f32> = None;
 const FFT_WINDOWSIZE: u32 = 1024;
@@ -42,7 +39,6 @@ pub fn start_processing_loop(rx: Receiver<Vec<f32>>) {
     let mut audio_vault: Vec<f32> = Vec::new();
     let mut input_data_buffer = vec![0.0f32; 1024];
     let mut output_spectrum = crate::dsp::FFT.make_output_vec();
-    let mut user_data: Option<PieceData> = None;
     let mut processed_windows: u64 = 0;
     let mut note_start_ms: Option<f32> = None;
 
