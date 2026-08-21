@@ -97,13 +97,15 @@ def process_score_view(request):
 @require_http_methods(["POST"])
 def process_score_omr_view(request):
     """POST /api/score/process-omr — run the oemer-based OMR pipeline
-    (backend/pdf_processor) on a stored score PDF: split into page PNGs,
-    run OMR to MusicXML with a debug PNG per page (every detected
-    notehead/clef/barline/accidental/marking/etc. boxed and labeled), then
-    parse timed note events into a notes JSON per page (part1_notes) and
-    OCR composer markings -- dynamics/tempo/expression/technique/time
-    signature -- into a markings JSON per page (part2_markings). All output
-    files are written next to the source PDF in storage.
+    (backend/pdf_processor) on a stored score PDF: clean up scan noise with
+    ImageMagick (backend/image_enhancer), split into page PNGs, run OMR to
+    MusicXML with a debug PNG per page (every detected notehead/clef/
+    barline/accidental/marking/etc. boxed and labeled), then parse timed
+    note events into a notes JSON per page (part1_notes) and OCR composer
+    markings -- dynamics/tempo/expression/technique/time signature -- into
+    a markings JSON per page (part2_markings). All per-page output files
+    are written next to the source PDF in storage, plus one combined
+    piece_json/piece_data for the whole piece.
 
     Body: {"file_path": "storage/scores/<Composer>/<Work>/<file>.pdf"}
     `file_path` matches the format returned by /api/imslp/download's file_path.
@@ -133,14 +135,20 @@ def process_score_omr_view(request):
             for p in paths
         ]
 
+    def to_db_path(path):
+        return score_storage.to_db_path(Path(path).relative_to(settings.STORAGE_ROOT))
+
     return JsonResponse({
         "file_path": file_path,
+        "enhanced_pdf": to_db_path(result["enhanced_pdf"]),
         "pages": to_db_paths(result["pages"]),
         "musicxml": to_db_paths(result["musicxml"]),
         "debug_png": to_db_paths(result["debug_png"]),
         "notes_json": to_db_paths(result["notes_json"]),
         "markings_json": to_db_paths(result["markings_json"]),
         "markings_debug_png": to_db_paths(result["markings_debug_png"]),
+        "piece_json": to_db_path(result["piece_json"]),
+        "piece_data": result["piece_data"],
         "bpm": result["bpm"],
         "time_signature": result["time_signature"],
         "note_count": len(result["notes"]),

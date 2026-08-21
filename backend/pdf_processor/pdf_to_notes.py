@@ -12,9 +12,11 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "image_enhancer"))
 
 from part1_notes import pdf_to_png, png_to_musicxml, musicxml_to_notes
 from part2_markings import detect as markings_detect
+from enhancer_script import enhance_music_pdf
 
 # A marking only gets attached to a note when their timeline offsets are
 # this close (quarter-lengths) -- a straight "nearest marking anywhere on
@@ -84,6 +86,12 @@ def process(pdf_path: str) -> dict:
 
     Returns:
         {
+          "enhanced_pdf": path to the cleaned-up PDF
+                        (image_enhancer/enhancer_script.py) that Part 1
+                        actually splits/OMRs -- adaptive thresholding +
+                        morphology (PyMuPDF + OpenCV, in-process) to clean
+                        up scan noise around accidentals before oemer ever
+                        sees the page,
           "pages":      [png paths, one per page],
           "musicxml":   [musicxml paths, one per page],
           "debug_png":  [debug png paths, one per page -- detected
@@ -123,11 +131,16 @@ def process(pdf_path: str) -> dict:
                         Rust-side schema (see _build_piece_data's
                         docstring for field-by-field notes on what this
                         pipeline can and can't fill in),
-          "timing":     {"split", "omr", "notes", "markings", "total"}  -- seconds
+          "timing":     {"enhance", "split", "omr", "notes", "markings", "total"}  -- seconds
         }
     """
     t0 = time.time()
-    pages = pdf_to_png.convert(pdf_path)
+    enhanced_pdf_path = str(Path(pdf_path).resolve().parent / f"{Path(pdf_path).stem}_enhanced.pdf")
+    enhance_music_pdf(pdf_path, enhanced_pdf_path)
+    enhance_time = time.time() - t0
+
+    t0 = time.time()
+    pages = pdf_to_png.convert(enhanced_pdf_path)
     split_time = time.time() - t0
 
     t0 = time.time()
@@ -207,6 +220,7 @@ def process(pdf_path: str) -> dict:
         json.dump(piece_data, f, indent=2)
 
     return {
+        "enhanced_pdf": enhanced_pdf_path,
         "pages": pages,
         "musicxml": xml_paths,
         "debug_png": debug_paths,
@@ -220,11 +234,12 @@ def process(pdf_path: str) -> dict:
         "markings": all_markings,
         "piece_data": piece_data,
         "timing": {
+            "enhance": round(enhance_time, 2),
             "split": round(split_time, 2),
             "omr": round(omr_time, 2),
             "notes": round(notes_time, 2),
             "markings": round(markings_time, 2),
-            "total": round(split_time + omr_time + notes_time + markings_time, 2),
+            "total": round(enhance_time + split_time + omr_time + notes_time + markings_time, 2),
         },
     }
 
@@ -241,9 +256,10 @@ if __name__ == "__main__":
 
     result = process(pdf_path)
     t = result["timing"]
-    print(f"[1/4] Split PDF -> {len(result['pages'])} page(s): {t['split']}s")
-    print(f"[2/4] OMR ({len(result['pages'])} page(s)): {t['omr']}s")
-    print(f"[3/4] Note parsing ({len(result['notes'])} note(s)): {t['notes']}s")
-    print(f"[4/4] Marking detection ({len(result['markings'])} marking(s)): {t['markings']}s")
+    print(f"[1/5] Enhance scan: {t['enhance']}s")
+    print(f"[2/5] Split PDF -> {len(result['pages'])} page(s): {t['split']}s")
+    print(f"[3/5] OMR ({len(result['pages'])} page(s)): {t['omr']}s")
+    print(f"[4/5] Note parsing ({len(result['notes'])} note(s)): {t['notes']}s")
+    print(f"[5/5] Marking detection ({len(result['markings'])} marking(s)): {t['markings']}s")
     print(f"Total: {t['total']}s")
     print(f"Piece JSON: {result['piece_json']}")

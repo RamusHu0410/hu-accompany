@@ -466,18 +466,33 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      home: Scaffold(
-        appBar: AppBar(title: const Text('flutter_rust_bridge quickstart')),
-        body: Center(
-          child: Text(
-              'Action: Call Rust `greet("Tom")`\nResult: `${greet(name: "Tom")}`'),
-        ),
-      ),
       // App now opens onto the turntable navigator (Practice / Search /
       // Shelf, chosen by spinning a record) instead of dropping straight
       // into the score viewer. ScoreViewerPage is still reachable — it's
       // just one of the records on the platter now.
       home: const Vinyl_Loading_Screen(child: Record_Navigator_Page()),
+    );
+  }
+}
+
+/// Placeholder for the "Practice" record. The full score viewer (drawing
+/// overlay, native recording bridge, PDF page view) is still being wired
+/// back up after the flutter_rust_bridge migration — this stub exists only
+/// so the turntable navigator has somewhere to land and can be exercised
+/// end to end in the meantime.
+class ScoreViewerPage extends StatelessWidget {
+  const ScoreViewerPage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFF1B1B1F),
+      body: const Center(
+        child: Text(
+          'Practice — coming soon',
+          style: TextStyle(color: Color(0xFFEDE6DA)),
+        ),
+      ),
     );
   }
 }
