@@ -44,7 +44,9 @@ def enhance_page(input_pdf_path: str, page_num: int, output_pdf_path: str) -> bo
         return False
 
 
-# Private Function to this file
+# PUBLIC Function!!
+# Call this function to process a pdf
+# Based on the use of multithreading, try not to process more than 3 pdfs at the same time
 def enhance_music_pdf(input_pdf_path: str, output_pdf_path: str):
     """Process an entire music pdf"""
     try:
@@ -76,29 +78,6 @@ def enhance_music_pdf(input_pdf_path: str, output_pdf_path: str):
         print(f"❌ Error Occured during pdf processing of {input_pdf_path}:")
         traceback.print_exc()  # Correct usage to output the actual full traceback trace
         return False
-
-
-# Public function called by external code
-# !! ONLY CALL THIS FUNCTION
-def process_list(pdf_list: list, output_dir: str):
-    os.makedirs(output_dir, exist_ok=True)
-    with concurrent.futures.ProcessPoolExecutor(max_workers=MAX_WORKERS) as executor:
-        futures = {}
-        for pdf in pdf_list:
-            out_name = os.path.basename(pdf)
-            out_path = os.path.join(output_dir, out_name)
-
-            # Dispatch the entire file execution path to a worker process
-            f = executor.submit(enhance_music_pdf, pdf, out_path)
-            futures[f] = pdf
-
-        for future in concurrent.futures.as_completed(futures):
-            pdf_orig = futures[future]
-            # Check the actual True/False result returned by enhance_music_pdf
-            if future.result():
-                print(f"Successfully optimized and written: {pdf_orig}")
-            else:
-                print(f"⚠️ Worker completed with errors for: {pdf_orig}")
 
 
 # This Statement will be removed if code successfully runs
