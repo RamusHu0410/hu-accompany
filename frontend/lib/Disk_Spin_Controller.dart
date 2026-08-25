@@ -10,7 +10,7 @@ import 'Vinyl_Disk_Painter.dart';
 /// that free-spin decay — and [onActivated] fires once, so the caller can
 /// zoom/blur into whatever page this disk represents.
 class SpinnableDisk extends StatefulWidget {
-  final double size;
+  final double size;  
   final String label;
   final String? sublabel;
   final Color labelColor;
@@ -114,10 +114,11 @@ class SpinnableDiskState extends State<SpinnableDisk>
 
   void _onPanEnd(DragEndDetails details) {
     _dragging = false;
-    // Only a real flick sends it spinning — a slow drag just leaves the
-    // disk where it was, like nudging a real record by hand.
+  // Only a real clockwise flick sends it spinning and can activate —
+  // counter-clockwise flicks (and slow drags) just leave the disk where it
+  // is, like nudging a record without cueing it up.
     const minSpinVelocity = 3.0; // rad/s
-    if (_angularVelocity.abs() < minSpinVelocity) {
+    if (_angularVelocity < minSpinVelocity) {
       return;
     }
     final simulation = FrictionSimulation(0.86, _rotation, _angularVelocity);

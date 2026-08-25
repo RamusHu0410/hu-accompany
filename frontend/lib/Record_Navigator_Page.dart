@@ -99,13 +99,27 @@ class _Record_Navigator_PageState extends State<Record_Navigator_Page>
   void _onHorizontalDragUpdate(DragUpdateDetails d) {
     if (!_swiping || _launching) return;
     final delta = d.globalPosition.dx - _dragStartX;
-    final width = MediaQuery.of(context).size.width;
-    final dir = delta < 0 ? 1 : -1; // dragging left → cue up the next record
-    _incomingIndex = (_activeIndex + dir) % _records.length;
-    setState(() {
-      _swapProgress = (delta.abs() / (width * 0.5)).clamp(0.0, 1.0);
-    });
-  }
+
+  // Only a right-to-left drag cues up the next record. A rightward drag is
+  // ignored outright — no incoming disk, no progress — so it can't be
+  // mistaken for a swap and doesn't compete with the disk's own spin
+  // gesture for the touch.
+    if (delta >= 0) {
+      if (_incomingIndex != null || _swapProgress != 0) {
+        setState(() {
+          _incomingIndex = null;
+          _swapProgress = 0;
+        });
+      }
+      return;
+    }
+
+  final width = MediaQuery.of(context).size.width;
+  _incomingIndex = (_activeIndex + 1) % _records.length;
+  setState(() {
+    _swapProgress = (delta.abs() / (width * 0.5)).clamp(0.0, 1.0);
+  });
+}
 
   void _onHorizontalDragEnd(DragEndDetails d) {
     if (!_swiping || _launching) return;
@@ -309,7 +323,7 @@ class _Record_Navigator_PageState extends State<Record_Navigator_Page>
     required bool outgoing,
     bool spinnable = false,
   }) {
-    final progress = outgoing ? _swapProgress : (_incomingIndex != null ? _swapProgress : 0.0);
+    final progress = outgoing ? _swapProgress : (_incomingIndex != null ? _swapProgress : 1.0);
     final dx = outgoing ? -progress * 260 : (1 - progress) * 260;
     final dy = outgoing ? -progress * 90 : (1 - progress) * 40;
     final scale = outgoing ? (1 - progress * 0.25) : (0.85 + progress * 0.15);
