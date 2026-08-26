@@ -9,14 +9,15 @@ import os
 import sys
 import json
 import time
+import multiprocessing
 from pathlib import Path
+from image_enhancer.enhancer_script import enhance_music_pdf
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "image_enhancer"))
 
 from part1_notes import pdf_to_png, png_to_musicxml, musicxml_to_notes
 from part2_markings import detect as markings_detect
-from enhancer_script import enhance_music_pdf
 
 # A marking only gets attached to a note when their timeline offsets are
 # this close (quarter-lengths) -- a straight "nearest marking anywhere on
@@ -245,6 +246,8 @@ def process(pdf_path: str) -> dict:
 
 
 if __name__ == "__main__":
+    multiprocessing.freeze_support()  # enhance_music_pdf uses concurrent.futures internally -- see image_enhancer/enhancer_script.py
+
     if len(sys.argv) != 2:
         print("Usage: python pdf_to_notes.py <path/to/score.pdf>")
         sys.exit(1)
