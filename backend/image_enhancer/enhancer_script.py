@@ -1,125 +1,86 @@
+import concurrent.futures
 import os
-import subprocess
-import glob
-import sys
-from pathlib import Path
+import multiprocessing
+from pyvips import Image
+from typing import cast
+import traceback
 
-def check_imagemagick():
-    """Checks if ImageMagick is installed and accessible in the system PATH."""
+# CONSTANTS
+MAX_WORKERS: int = 8
+MAX_PAGES_BASE: int = 50
+
+
+# Private Function to this file
+def enhance_page(input_pdf_path: str, page_num: int, output_pdf_path: str) -> bool:
+    """Process a single page of the pdf by executing different operations to intensify wanted pixels and minimize unwanted ones"""
     try:
-        # Check for modern ImageMagick v7+ syntax
-        subprocess.run(["magick", "-version"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
-        return "magick"
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        try:
-            # Check for older ImageMagick v6 syntax
-            subprocess.run(["convert", "-version"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
-            return "convert"
-        except (subprocess.CalledProcessError, FileNotFoundError):
-            print("ERROR: ImageMagick is not installed or not found in your system PATH.")
-            print("Please download and install it from https://imagemagick.org")
-            sys.exit(1)
+        piece_name = os.path.splitext(os.path.basename(input_pdf_path))[0]
 
-def enhance_music_pdf(input_pdf_path, output_pdf_path):
-    cmd_base = check_imagemagick()
-    
-    input_path = Path(input_pdf_path)
-    output_path = Path(output_pdf_path)
-    
-    if not input_path.exists():
-        print(f"ERROR: Input file '{input_pdf_path}' does not exist.")
-        return
+        img: Image = cast(
+            Image,
+            Image.pdfload(input_pdf_path, dpi=400, page=page_num, access="sequential"),
+        )
+        gray: Image = img.colourspace("b-w").cast("uchar")  # type: ignore
 
-    # Create a temporary workplace directory
-    temp_dir = Path("omr_cleanup_temp")
-    temp_dir.mkdir(exist_ok=True)
-    
-    print("Step 1: Extracting PDF pages to high-resolution images (400 DPI)...")
-    # %03d handles page numbering sequentially (page-000.png, page-001.png, etc.)
-    extract_pattern = temp_dir / "page-%03d.png"
-    
-    if cmd_base == "magick":
-        extract_cmd = ["magick", "-density", "600", str(input_path), str(extract_pattern)]
-    else:
-        extract_cmd = ["convert", "-density", "600", str(input_path), str(extract_pattern)]
-        
-    subprocess.run(extract_cmd, check=True)
-    
-    # Get all extracted pages
-    extracted_pages = sorted(glob.glob(str(temp_dir / "page-*.png")))
-    if not extracted_pages:
-        print("ERROR: Failed to extract pages from PDF.")
-        return
-        
-    print(f"Found {len(extracted_pages)} pages to process.")
-    cleaned_pages = []
-    
-    print("Step 2: Processing pages with Local Adaptive Thresholding & Morphology filters...")
-    for page in extracted_pages:
-        page_path = Path(page)
-        clean_page_path = temp_dir / f"clean-{page_path.name}"
-        
-        # Adaptive thresholding preserves tiny loops in sharps/flats. 
-        # Morphology eliminates jagged edges and clears visual noise around accidentals.
-        if cmd_base == "magick":
-            process_cmd = [
-                "magick", str(page_path),
-                "-colorspace", "gray",
-                "-negate",
-                "-lat", "25x25+10%",
-                "-negate",
-                "-morphology", "intermediate", "hexagon:1",
-                str(clean_page_path)
-            ]
-        else:
-            process_cmd = [
-                "convert", str(page_path),
-                "-colorspace", "gray",
-                "-negate",
-                "-lat", "25x25+10%",
-                "-negate",
-                "-morphology", "intermediate", "hexagon:1",
-                str(clean_page_path)
-            ]
-            
-        subprocess.run(process_cmd, check=True)
-        cleaned_pages.append(str(clean_page_path))
-        print(f"Processed: {page_path.name}")
+        blur: Image = gray.gaussblur(10)  # type: ignore
+        binary_clear = (gray < (blur - 7.5)).cast("uchar") * 255  # type: ignore
 
-    print("Step 3: Compiling enhanced images back into a unified PDF...")
-    # Grab all clean files using glob sorted naturally
-    clean_pattern = sorted(glob.glob(str(temp_dir / "clean-page-*.png")))
-    
-    if cmd_base == "magick":
-        compile_cmd = ["magick"] + clean_pattern + [str(output_path)]
-    else:
-        compile_cmd = ["convert"] + clean_pattern + [str(output_path)]
-        
-    subprocess.run(compile_cmd, check=True)
-    print(f"SUCCESS: Enhanced music sheet generated successfully at: {output_path}")
-    
-    # Cleanup temporary images
-    print("Cleaning up intermediate workspace files...")
-    for f in glob.glob(str(temp_dir / "*")):
-        os.remove(f)
-    os.rmdir(temp_dir)
+        # FIX 1: Wrap the Python list inside an explicit pyvips Image array
+        mask_structure = [[255, 255, 255], [255, 255, 255], [255, 255, 255]]
+        mask_matrix = Image.new_from_array(mask_structure)
 
+        dilated = binary_clear.morph(mask_matrix, "dilate")
+        dilated2 = dilated.morph(mask_matrix, "dilate")
+        eroded = dilated2.morph(mask_matrix, "erode")
+        eroded2 = eroded.morph(mask_matrix, "erode")
+
+        finished_pg = eroded2.invert()
+
+        page_output_path = os.path.join(output_pdf_path, f"{piece_name}-{page_num}.png")
+        finished_pg.write_to_file(page_output_path)
+        return True
+    except Exception as e:
+        print(f"❌ Error processing page {page_num}: {e}")
+        return False
+
+
+# PUBLIC Function!!
+# Call this function to process a pdf
+# Based on the use of multithreading, try not to process more than 3 pdfs at the same time
+def enhance_music_pdf(input_pdf_path: str, output_pdf_path: str):
+    """Process an entire music pdf"""
+    try:
+        meta = Image.pdfload(input_pdf_path, page=0, n=1)
+        n_pages: int = meta.get("n-pages")  # type: ignore
+
+        if n_pages >= MAX_PAGES_BASE:
+            raise ValueError(
+                "Exceeded page limit"
+            )  # Use 'raise' instead of 'return' to halt processing
+
+        output_dir = os.path.dirname(output_pdf_path)
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as exec:
+            futures = []
+            for p in range(n_pages):
+                f = exec.submit(
+                    enhance_page,
+                    input_pdf_path=input_pdf_path,
+                    page_num=p,
+                    output_pdf_path=output_dir,
+                )
+                futures.append(f)
+            concurrent.futures.wait(futures)
+        print("All pages are processed!")
+        return True
+
+    except Exception as e:
+        print(f"❌ Error Occured during pdf processing of {input_pdf_path}:")
+        traceback.print_exc()  # Correct usage to output the actual full traceback trace
+        return False
+
+
+# This Statement will be removed if code successfully runs
 if __name__ == "__main__":
-    # Example usage configuration
-    # Change these filenames to match your local file names
-    INPUT_FILE = "input_sheet_music.pdf"
-    OUTPUT_FILE = "enhanced_sheet_music.pdf"
-    
-    print("--- OMR Sheet Music Visual Enhancer Script ---")
-    print(f"Targeting input file: {INPUT_FILE}")
-    print(f"Targeting output file: {OUTPUT_FILE}\n")
-    
-    # Check if user passed arguments via terminal command
-    if len(sys.argv) > 2:
-        INPUT_FILE = sys.argv[1]
-        OUTPUT_FILE = sys.argv[2]
-    elif len(sys.argv) == 2:
-        INPUT_FILE = sys.argv[1]
-        OUTPUT_FILE = "enhanced_" + INPUT_FILE
-        
-    enhance_music_pdf(INPUT_FILE, OUTPUT_FILE)
+    multiprocessing.freeze_support()  # For future self: NEED THIS STATEMENT FOR CONCURRENT OPERATIONS EVERYTIME
+    enhance_music_pdf("/Users/kingsleyleon/Downloads/ysaye.pdf", "test/")

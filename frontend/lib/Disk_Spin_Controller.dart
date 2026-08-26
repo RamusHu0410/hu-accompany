@@ -6,11 +6,11 @@ import 'Vinyl_Disk_Painter.dart';
 /// Wraps a [VinylDisk] with real touch-and-spin physics: drag it in a
 /// circle and it picks up angular momentum; let go and it keeps spinning
 /// while friction slows it down, exactly like flicking a real record on a
-/// platter. Spin it hard enough — enough total rotation travelled during
-/// that free-spin decay — and [onActivated] fires once, so the caller can
-/// zoom/blur into whatever page this disk represents.
+/// platter. Spin it hard enough clockwise — enough total rotation travelled
+/// during that free-spin decay — and [onActivated] fires once, so the
+/// caller can zoom/blur into whatever page this disk represents.
 class SpinnableDisk extends StatefulWidget {
-  final double size;  
+  final double size;
   final String label;
   final String? sublabel;
   final Color labelColor;
@@ -114,9 +114,12 @@ class SpinnableDiskState extends State<SpinnableDisk>
 
   void _onPanEnd(DragEndDetails details) {
     _dragging = false;
-  // Only a real clockwise flick sends it spinning and can activate —
-  // counter-clockwise flicks (and slow drags) just leave the disk where it
-  // is, like nudging a record without cueing it up.
+    // Only a real CLOCKWISE flick sends it spinning and can activate.
+    // atan2(dy, dx) is in screen coordinates (y grows downward), so a
+    // clockwise flick as the user sees it is a positive _angularVelocity
+    // here. Counter-clockwise flicks (negative velocity) and slow drags
+    // just leave the disk where it is, like nudging a record without
+    // cueing it up.
     const minSpinVelocity = 3.0; // rad/s
     if (_angularVelocity < minSpinVelocity) {
       return;

@@ -22,12 +22,14 @@ class _RecordEntry {
   });
 }
 
-/// Full-screen turntable navigator — the app's home screen. Swipe left or
-/// right on the background to cue up a different record (Practice / Search
-/// / Shelf); the old disk lifts off and the new one drops onto the platter,
-/// like swapping a record by hand. Grab the loaded disk and spin it and it
-/// keeps spinning with real momentum; spin it far enough and the screen
-/// zooms into the label and blurs for a beat before opening that page.
+/// Full-screen turntable navigator — the app's home screen. Swipe right to
+/// left on the background to cue up the next record (Practice / Search /
+/// Shelf); the old disk lifts off and the new one drops onto the platter,
+/// like swapping a record by hand. A left-to-right drag is ignored — swaps
+/// only ever move in one direction. Grab the loaded disk and spin it
+/// clockwise and it keeps spinning with real momentum; spin it far enough
+/// and the screen zooms into the label and blurs for a beat before opening
+/// that page.
 class Record_Navigator_Page extends StatefulWidget {
   const Record_Navigator_Page({super.key});
 
@@ -100,10 +102,10 @@ class _Record_Navigator_PageState extends State<Record_Navigator_Page>
     if (!_swiping || _launching) return;
     final delta = d.globalPosition.dx - _dragStartX;
 
-  // Only a right-to-left drag cues up the next record. A rightward drag is
-  // ignored outright — no incoming disk, no progress — so it can't be
-  // mistaken for a swap and doesn't compete with the disk's own spin
-  // gesture for the touch.
+    // Only a right-to-left drag cues up the next record. A rightward drag
+    // is ignored outright — no incoming disk, no progress — so it can't be
+    // mistaken for a swap and doesn't compete with the disk's own spin
+    // gesture for the touch.
     if (delta >= 0) {
       if (_incomingIndex != null || _swapProgress != 0) {
         setState(() {
@@ -114,12 +116,12 @@ class _Record_Navigator_PageState extends State<Record_Navigator_Page>
       return;
     }
 
-  final width = MediaQuery.of(context).size.width;
-  _incomingIndex = (_activeIndex + 1) % _records.length;
-  setState(() {
-    _swapProgress = (delta.abs() / (width * 0.5)).clamp(0.0, 1.0);
-  });
-}
+    final width = MediaQuery.of(context).size.width;
+    _incomingIndex = (_activeIndex + 1) % _records.length;
+    setState(() {
+      _swapProgress = (delta.abs() / (width * 0.5)).clamp(0.0, 1.0);
+    });
+  }
 
   void _onHorizontalDragEnd(DragEndDetails d) {
     if (!_swiping || _launching) return;
@@ -323,7 +325,12 @@ class _Record_Navigator_PageState extends State<Record_Navigator_Page>
     required bool outgoing,
     bool spinnable = false,
   }) {
-    final progress = outgoing ? _swapProgress : (_incomingIndex != null ? _swapProgress : 1.0);
+    // At rest (no swap in flight) the "current" layer is treated as fully
+    // arrived — progress: 1.0 — so it renders centered on the platter
+    // instead of collapsing back to the off-screen "incoming" pose.
+    final progress = outgoing
+        ? _swapProgress
+        : (_incomingIndex != null ? _swapProgress : 1.0);
     final dx = outgoing ? -progress * 260 : (1 - progress) * 260;
     final dy = outgoing ? -progress * 90 : (1 - progress) * 40;
     final scale = outgoing ? (1 - progress * 0.25) : (0.85 + progress * 0.15);
