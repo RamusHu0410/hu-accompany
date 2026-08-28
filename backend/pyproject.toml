@@ -1,4 +1,0 @@
-# pyproject.toml
-[tool.basedpyright]
-typeCheckingMode = "standard" # Options: "off", "basic", "standard", "recommended", "all"
-
