@@ -16,6 +16,7 @@ import 'dart:typed_data';
 // equivalent for a rasterized PDF page yet.
 import 'Vinyl_Loading_Screen.dart';
 import 'Record_Navigator_Page.dart';
+import 'Desk_Practice_Controls.dart';
 import 'package:hu_accomponist/src/rust/frb_generated.dart';
 
 typedef StartRecordingFunc = ffi.Void Function();
@@ -73,10 +74,20 @@ class NativeBridge {
 final NativeBridge _nativeBridge = NativeBridge();
 
 Future<void> main() async {
-  // Must complete before runApp — anything that calls into the Rust side
-  // (FRB-generated bindings under package:hu_accomponist/src/rust/) needs
-  // the native library loaded and the bridge initialized first.
-  await RustLib.init();
+  // Attempt to load the native Rust library, but never let a failure here
+  // block the UI from rendering — same reasoning as NativeBridge above.
+  // Right now this is expected to potentially fail while the Xcode/cargokit
+  // integration for native_ffi is still being fixed; once that's sorted,
+  // this try/catch can stay as a permanent safety net regardless.
+  try {
+    await RustLib.init();
+    debugPrint('RustLib: initialized successfully.');
+  } catch (e) {
+    debugPrint('RustLib: init failed — $e');
+    debugPrint('RustLib: continuing without Rust bindings. '
+        'Any feature that calls into native_ffi will be unavailable '
+        'until the native library is rebuilt/relinked.');
+  }
   runApp(const HuAccumponistApp());
 }
 
@@ -191,18 +202,54 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
           // captured for the lenses on Skia backends like macOS desktop.
           backgroundWidget: Stack(
             children: [
-              // LAYER 1: PDF score pages (or placeholder background)
+              // LAYER 0: warm wooden desk backdrop — always present, the
+              // "surface" everything else sits on.
+              const Positioned.fill(child: WoodDeskBackground()),
+
+              // LAYER 1: PDF score pages, framed like a sheet of paper
+              // resting on the desk (or an empty desk when nothing's
+              // loaded). Score_Pages_View itself is completely untouched.
               if (_hasScore)
                 Positioned.fill(
-                  child: Score_Pages_View(
-                    controller: _pageController!,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(18, 28, 18, 28),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFAF3E6),
+                        borderRadius: BorderRadius.circular(4),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.45),
+                            blurRadius: 24,
+                            offset: const Offset(0, 10),
+                          ),
+                        ],
+                      ),
+                      clipBehavior: Clip.antiAlias,
+                      child: Score_Pages_View(controller: _pageController!),
+                    ),
                   ),
                 )
               else
-                Positioned.fill(
-                  child: Container(color: const Color.fromARGB(255, 255, 255, 255)),
+                const Positioned.fill(
+                  child: Center(
+                    child: Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 40),
+                      child: Text(
+                        'No score on the desk yet —\ntap the search button below to browse the library.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: Color(0xCCFFF3E0),
+                          fontSize: 14,
+                          fontStyle: FontStyle.italic,
+                          height: 1.5,
+                        ),
+                      ),
+                    ),
+                  ),
                 ),
-              // LAYER 2: Drawing overlay
+
+              // LAYER 2: Drawing overlay — unchanged.
               Positioned.fill(
                 child: Drawing_Overlay(
                   isDrawingMode: _isDrawingMode,
@@ -216,196 +263,65 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
 
           child: Stack(
             children: [
-              // LAYER 3: Floating Toolbar
+              // LAYER 3: Pencil + eraser + palette toggle, sitting side by
+              // side on the desk top-right — same three toggles as before
+              // (_isDrawingMode / _isErasing / _showPenSettings), just
+              // reskinned as physical objects instead of a glass toolbar.
               Positioned(
                 top: 16,
                 right: 16,
-                child: LiquidGlass(
-                  borderRadius: BorderRadius.circular(30),
-                  blur: 18,
-                  tintOpacity: 0.14,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        // Small "reveal pen settings" arrow — leads the row
-                        // so it sits closest to (and points toward) the
-                        // panel that pops out further left of the toolbar.
-                        IconButton(
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(
-                            minWidth: 28,
-                            minHeight: 28,
-                          ),
-                          icon: Icon(
-                            Icons.chevron_left,
-                            size: 18,
-                            color: _showPenSettings
-                                ? const Color(0xFFE94560)
-                                : const Color.fromARGB(255, 170, 170, 170),
-                          ),
-                          onPressed: () => setState(
-                              () => _showPenSettings = !_showPenSettings),
-                        ),
-                        IconButton(
-                          icon: Icon(
-                            Icons.edit_outlined,
-                            size: 22,
-                            color: _isDrawingMode
-                                ? const Color(0xFFE94560)
-                                : const Color.fromARGB(255, 170, 170, 170),
-                          ),
-                          onPressed: () => setState(() {
-                            _isDrawingMode = !_isDrawingMode;
-                            // Pen and eraser are mutually exclusive tools.
-                            if (_isDrawingMode) _isErasing = false;
-                          }),
-                        ),
-                        IconButton(
-                          icon: Icon(
-                            Icons.backspace_outlined,
-                            size: 20,
-                            color: _isErasing
-                                ? const Color(0xFFE94560)
-                                : const Color.fromARGB(255, 170, 170, 170),
-                          ),
-                          onPressed: () => setState(() {
-                            _isErasing = !_isErasing;
-                            if (_isErasing) _isDrawingMode = false;
-                          }),
-                        ),
-                      ],
+                child: Row(
+                  children: [
+                    PencilToolButton(
+                      active: _isDrawingMode,
+                      penColor: _penColor,
+                      penSize: _penSize,
+                      onTap: () => setState(() {
+                        _isDrawingMode = !_isDrawingMode;
+                        // Pen and eraser are still mutually exclusive.
+                        if (_isDrawingMode) _isErasing = false;
+                      }),
                     ),
-                  ),
+                    const SizedBox(width: 10),
+                    EraserToolButton(
+                      active: _isErasing,
+                      onTap: () => setState(() {
+                        _isErasing = !_isErasing;
+                        if (_isErasing) _isDrawingMode = false;
+                      }),
+                    ),
+                    const SizedBox(width: 10),
+                    PaintPaletteButton(
+                      open: _showPenSettings,
+                      currentColor: _penColor,
+                      onTap: () => setState(
+                        () => _showPenSettings = !_showPenSettings,
+                      ),
+                    ),
+                  ],
                 ),
               ),
 
-              // LAYER 3b: Pen settings panel — pops out to the left of the
-              // toolbar when the small arrow is tapped.
+              // LAYER 3b: Opened palette panel — same color-select and
+              // size-select state/logic as before (_penColor, _penSize),
+              // now a wooden palette board with paint blobs and a wooden
+              // ruler instead of a glass swatch row and a Slider.
               if (_showPenSettings)
                 Positioned(
-                  top: 16,
-                  right: 132,
-                  child: LiquidGlass(
-                    borderRadius: BorderRadius.circular(20),
-                    blur: 18,
-                    tintOpacity: 0.05,
-                    child: Container(
-                      width: 210,
-                      padding: const EdgeInsets.all(14),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Text(
-                            'Pen',
-                            style: TextStyle(
-                              color: Color.fromARGB(255, 170, 170, 170),
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          const SizedBox(height: 10),
-                          // Color swatches
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: _penColorOptions.map((color) {
-                              final bool selected = color == _penColor;
-                              return GestureDetector(
-                                onTap: () => setState(() => _penColor = color),
-                                child: AnimatedContainer(
-                                  duration: const Duration(milliseconds: 150),
-                                  width: 26,
-                                  height: 26,
-                                  decoration: BoxDecoration(
-                                    color: color,
-                                    shape: BoxShape.circle,
-                                    border: Border.all(
-                                      color: selected
-                                          ? Colors.white
-                                          : Colors.transparent,
-                                      width: 2,
-                                    ),
-                                    boxShadow: selected
-                                        ? [
-                                            BoxShadow(
-                                              color: color.withValues(alpha:0.6),
-                                              blurRadius: 6,
-                                            ),
-                                          ]
-                                        : null,
-                                  ),
-                                ),
-                              );
-                            }).toList(),
-                          ),
-                          const SizedBox(height: 14),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              const Text(
-                                'Size',
-                                style: TextStyle(
-                                  color: Color.fromARGB(255, 170, 170, 170),
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                              Text(
-                                _penSize.toStringAsFixed(0),
-                                style: const TextStyle(
-                                  color: Color.fromARGB(255, 170, 170, 170),
-                                  fontSize: 12,
-                                ),
-                              ),
-                            ],
-                          ),
-                          SliderTheme(
-                            data: SliderTheme.of(context).copyWith(
-                              trackHeight: 3,
-                              thumbShape: const RoundSliderThumbShape(
-                                  enabledThumbRadius: 7),
-                              overlayShape: const RoundSliderOverlayShape(
-                                  overlayRadius: 14),
-                              activeTrackColor: const Color(0xFFE94560),
-                              inactiveTrackColor:
-                                  const Color.fromARGB(60, 170, 170, 170),
-                              thumbColor: const Color(0xFFE94560),
-                            ),
-                            child: Slider(
-                              min: 1,
-                              max: 14,
-                              value: _penSize,
-                              onChanged: (v) => setState(() => _penSize = v),
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          // Texture — placeholder for a future update.
-                          Opacity(
-                            opacity: 0.4,
-                            child: Row(
-                              children: const [
-                                Icon(Icons.texture, size: 16,
-                                    color: Color.fromARGB(255, 170, 170, 170)),
-                                SizedBox(width: 8),
-                                Text(
-                                  'Texture — coming soon',
-                                  style: TextStyle(
-                                    color: Color.fromARGB(255, 170, 170, 170),
-                                    fontSize: 12,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
+                  top: 76,
+                  right: 16,
+                  child: PaintPalettePanel(
+                    colors: _penColorOptions,
+                    selected: _penColor,
+                    onSelect: (c) => setState(() => _penColor = c),
+                    penSize: _penSize,
+                    minSize: 1,
+                    maxSize: 14,
+                    onSizeChanged: (v) => setState(() => _penSize = v),
                   ),
                 ),
 
-              // LAYER 4: Draggable Recorder Button
+              // LAYER 4: Draggable Recorder Button — untouched.
               Draggable_Recorder_Button(
                 onToggle: (isRecording) {
                   if (isRecording) {
@@ -416,7 +332,14 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
                 },
               ),
 
-              // LAYER 5: Nav Button
+              // LAYER 5: Search. Reliable free-form handwriting/gesture
+              // recognition (drawing a "?" or writing "search" to
+              // navigate) isn't practical to build without a proper
+              // handwriting-recognition/ML library and real training —
+              // a hand-rolled heuristic would misfire constantly against
+              // the same canvas the drawing tool uses. Keeping the
+              // existing, reliable tap target instead, per the fallback
+              // — just reskinned to sit on the desk.
               Positioned(
                 bottom: 32,
                 left: 16,
@@ -434,6 +357,17 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
                       ),
                     ),
                   ),
+                ),
+              ),
+
+              // LAYER 6: Exit — new physical push-button to leave
+              // Practice and pop back to wherever it was opened from
+              // (the turntable navigator).
+              Positioned(
+                bottom: 32,
+                right: 16,
+                child: DeskExitButton(
+                  onTap: () => Navigator.of(context).maybePop(),
                 ),
               ),
             ], // closes children of foreground Stack
