@@ -15,6 +15,10 @@ playwright
 
 # PDF -> image extraction (image_processor phase1_prepare, scripts/pdf_processor.py)
 PyMuPDF
+# image_enhancer/enhancer_script.py's scan cleanup. Needs the libvips system
+# library too (not pip-installable): `brew install vips` on macOS,
+# `apt install libvips` on Debian/Ubuntu.
+pyvips
 # Pinned: opencv 5.0 changed cv2.HoughLinesP's return shape, which breaks
 # oemer's line parsing (oemer/bbox.py) with an IndexError.
 opencv-python-headless==4.11.0.86
