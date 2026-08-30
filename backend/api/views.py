@@ -10,6 +10,8 @@ from imslp_search.main import search_imslp
 from imslp_search.errors import IMSLPNetworkError, WorkNotFoundError
 from imslp_search.services import imslp_service
 import pdf_processor
+from feedback_generator import generate_feedback
+from feedback_generator.errors import InvalidNoteData
 
 
 @csrf_exempt
@@ -110,6 +112,66 @@ def process_score_view(request):
         "marking_count": len(result["markings"]),
         "timing": result["timing"],
     })
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def phrase_feedback_view(request):
+    """POST /api/feedback/phrase — compare one recorded musical phrase's
+    detected user notes against the corresponding expected-performance
+    notes (same schema as pdf_processor's piece_data notes / native_ffi's
+    Notes struct) and generate feedback: per-note "immediate" feedback
+    items for significant pitch/timing/duration/missing/extra/articulation
+    errors, plus a phrase-level "phrase_summary" with 0-100 pitch/rhythm/
+    tempo/dynamics/articulation/overall scores, a short summary, up to 3
+    prioritized main_feedback problems, and positive_feedback.
+
+    Numeric comparison/error-detection (feedback_generator.analysis) is
+    kept architecturally separate from natural-language message/summary
+    generation (feedback_generator.nlg). Pedal analysis is a no-op
+    placeholder (feedback_generator.pedaling.analyze_pedaling) and is not
+    called from this endpoint yet. The "dynamics" score is always null --
+    see feedback_generator/README.md.
+
+    Body: {"phrase": int, "timing": {"bpm": float},
+           "expected_notes": [ {note_id, pitch_hz, start_time_ms,
+             end_time_ms, duration_ms, vibrato_depth, pedal_action,
+             has_accent, markings}, ... ],
+           "user_notes": [ {note_id, pitch_hz, start_time_ms, end_time_ms,
+             duration_ms, has_accent}, ... ]}
+    `expected_notes` must be non-empty. `user_notes` may be empty (silence
+    -> every expected note comes back as "missing").
+    """
+    try:
+        body = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "invalid JSON"}, status=400)
+
+    phrase = body.get("phrase")
+    timing = body.get("timing") or {}
+    bpm = timing.get("bpm")
+    expected_notes = body.get("expected_notes")
+    user_notes = body.get("user_notes")
+
+    if not isinstance(phrase, int):
+        return JsonResponse({"error": "phrase (int) is required"}, status=400)
+    if not isinstance(bpm, (int, float)) or isinstance(bpm, bool) or bpm <= 0:
+        return JsonResponse({"error": "timing.bpm (positive number) is required"}, status=400)
+    if not isinstance(expected_notes, list) or not expected_notes:
+        return JsonResponse({"error": "expected_notes (non-empty list) is required"}, status=400)
+    if not isinstance(user_notes, list):
+        return JsonResponse({"error": "user_notes (list) is required"}, status=400)
+
+    try:
+        result = generate_feedback(
+            phrase=phrase, bpm=bpm, expected_notes=expected_notes, user_notes=user_notes
+        )
+    except InvalidNoteData as e:
+        return JsonResponse({"error": str(e)}, status=400)
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=500)
+
+    return JsonResponse(result)
 
 
 @csrf_exempt
