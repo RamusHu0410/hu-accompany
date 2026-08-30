@@ -23,10 +23,8 @@ class RenderedPage {
 
 /// Renders page [pageNumber] (1-indexed) of [pdfBytes] into a displayable
 /// widget, returning the page count alongside it.
-typedef PageRenderer = Future<RenderedPage> Function(
-  Uint8List pdfBytes,
-  int pageNumber,
-);
+typedef PageRenderer =
+    Future<RenderedPage> Function(Uint8List pdfBytes, int pageNumber);
 
 // Keeps the last-opened pdfx.PdfDocument around so swiping through pages
 // of the SAME score doesn't re-parse the whole PDF from bytes on every
@@ -52,10 +50,7 @@ Future<pdfx.PdfDocument> _openCached(Uint8List pdfBytes) async {
 
 /// Renders one PDF page to an image widget. Pass this (or just rely on the
 /// default) as the `render` argument to [ScorePageController].
-Future<RenderedPage> pdfPageRenderer(
-  Uint8List pdfBytes,
-  int pageNumber,
-) async {
+Future<RenderedPage> pdfPageRenderer(Uint8List pdfBytes, int pageNumber) async {
   final doc = await _openCached(pdfBytes);
   final page = await doc.getPage(pageNumber);
   try {

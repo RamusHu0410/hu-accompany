@@ -1,7 +1,5 @@
 import 'dart:math';
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter/services.dart';
 import 'LiquidGlass.dart';
 import 'Search_Validator.dart';
@@ -33,7 +31,11 @@ class SelectedSheet {
 }
 
 const String _bookFont = 'Georgia';
-const List<String> _bookFontFallback = ['Times New Roman', 'Iowan Old Style', 'serif'];
+const List<String> _bookFontFallback = [
+  'Times New Roman',
+  'Iowan Old Style',
+  'serif',
+];
 const Color _ink = Color(0xFF3B2E22);
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -65,7 +67,9 @@ class _Music_Library_PageState extends State<Music_Library_Page> {
     if (_results.isEmpty) return const [];
     final leaves = <List<WorkSummary>>[];
     for (var i = 0; i < _results.length; i += _resultsPerLeaf) {
-      leaves.add(_results.sublist(i, min(i + _resultsPerLeaf, _results.length)));
+      leaves.add(
+        _results.sublist(i, min(i + _resultsPerLeaf, _results.length)),
+      );
     }
     return leaves;
   }
@@ -299,7 +303,11 @@ class _Music_Library_PageState extends State<Music_Library_Page> {
               if (_search.text.isNotEmpty)
                 GestureDetector(
                   onTap: () => setState(_search.clear),
-                  child: Icon(Icons.close, size: 14, color: _ink.withValues(alpha: 0.4)),
+                  child: Icon(
+                    Icons.close,
+                    size: 14,
+                    color: _ink.withValues(alpha: 0.4),
+                  ),
                 ),
             ],
           ),
@@ -383,7 +391,8 @@ class _Music_Library_PageState extends State<Music_Library_Page> {
                 animation: _bookPages,
                 builder: (context, child) {
                   double t = 0;
-                  if (_bookPages.hasClients && _bookPages.position.haveDimensions) {
+                  if (_bookPages.hasClients &&
+                      _bookPages.position.haveDimensions) {
                     t = (_bookPages.page ?? index.toDouble()) - index;
                   }
                   final clamped = t.clamp(-1.0, 1.0);
@@ -441,8 +450,11 @@ class _ResultLeaf extends StatelessWidget {
       physics: const NeverScrollableScrollPhysics(),
       padding: EdgeInsets.zero,
       itemCount: works.length,
-      separatorBuilder: (_, __) =>
-          Divider(height: 10, thickness: 0.6, color: _ink.withValues(alpha: 0.15)),
+      separatorBuilder: (_, _) => Divider(
+        height: 10,
+        thickness: 0.6,
+        color: _ink.withValues(alpha: 0.15),
+      ),
       itemBuilder: (context, i) {
         final work = works[i];
         return InkWell(
@@ -464,7 +476,11 @@ class _ResultLeaf extends StatelessWidget {
                     ),
                   ),
                 ),
-                Icon(Icons.chevron_right, size: 14, color: _ink.withValues(alpha: 0.4)),
+                Icon(
+                  Icons.chevron_right,
+                  size: 14,
+                  color: _ink.withValues(alpha: 0.4),
+                ),
               ],
             ),
           ),
@@ -508,7 +524,9 @@ class _OpenBook extends StatelessWidget {
               bottom: -i * 1.4,
               child: DecoratedBox(
                 decoration: BoxDecoration(
-                  color: const Color(0xFFE9E0CB).withValues(alpha: 0.9 - i * 0.12),
+                  color: const Color(
+                    0xFFE9E0CB,
+                  ).withValues(alpha: 0.9 - i * 0.12),
                   borderRadius: BorderRadius.circular(4),
                 ),
               ),
@@ -542,7 +560,9 @@ class _OpenBook extends StatelessWidget {
               ),
               child: Row(
                 children: [
-                  Expanded(child: _PagePaper(spineOnRight: true, child: leftPage)),
+                  Expanded(
+                    child: _PagePaper(spineOnRight: true, child: leftPage),
+                  ),
                   Container(
                     width: 14,
                     decoration: BoxDecoration(
@@ -555,7 +575,9 @@ class _OpenBook extends StatelessWidget {
                       ),
                     ),
                   ),
-                  Expanded(child: _PagePaper(spineOnRight: false, child: rightPage)),
+                  Expanded(
+                    child: _PagePaper(spineOnRight: false, child: rightPage),
+                  ),
                 ],
               ),
             ),
@@ -674,13 +696,16 @@ class _EditionPicker extends StatelessWidget {
               child: ListView.separated(
                 shrinkWrap: true,
                 itemCount: editions.length,
-                separatorBuilder: (_, __) => const SizedBox(height: 8),
+                separatorBuilder: (_, _) => const SizedBox(height: 8),
                 itemBuilder: (_, i) {
                   final edition = editions[i];
                   return GestureDetector(
                     onTap: () => Navigator.pop(context, edition),
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 12,
+                      ),
                       decoration: BoxDecoration(
                         color: _ink.withValues(alpha: 0.06),
                         borderRadius: BorderRadius.circular(12),
@@ -703,7 +728,11 @@ class _EditionPicker extends StatelessWidget {
                             ),
                           ),
                           const SizedBox(width: 8),
-                          Icon(Icons.chevron_right_rounded, size: 18, color: _ink.withValues(alpha: 0.4)),
+                          Icon(
+                            Icons.chevron_right_rounded,
+                            size: 18,
+                            color: _ink.withValues(alpha: 0.4),
+                          ),
                         ],
                       ),
                     ),

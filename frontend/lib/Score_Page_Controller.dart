@@ -40,7 +40,10 @@ class ScorePageController {
     if (totalPages == null || next <= totalPages!) {
       getPage(next).catchError((_) {
         _pages.remove(next);
-        return RenderedPage(totalPages: totalPages ?? 1, widget: const SizedBox());
+        return RenderedPage(
+          totalPages: totalPages ?? 1,
+          widget: const SizedBox(),
+        );
       });
     }
 

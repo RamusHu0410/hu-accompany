@@ -81,16 +81,15 @@ class _Drawing_OverlayState extends State<Drawing_Overlay> {
     final toolActive = widget.isDrawingMode || widget.isErasing;
     return GestureDetector(
       // Pass touches through when neither drawing nor erasing
-      behavior: toolActive ? HitTestBehavior.opaque : HitTestBehavior.translucent,
+      behavior: toolActive
+          ? HitTestBehavior.opaque
+          : HitTestBehavior.translucent,
       onPanStart: toolActive ? (d) => _startStroke(d.localPosition) : null,
       onPanUpdate: toolActive ? (d) => _extendStroke(d.localPosition) : null,
       onPanEnd: toolActive ? (d) => _endStroke() : null,
       child: CustomPaint(
         painter: _strokes.isNotEmpty || _currentStroke != null
-            ? _StrokePainter(
-                strokes: _strokes,
-                currentStroke: _currentStroke,
-              )
+            ? _StrokePainter(strokes: _strokes, currentStroke: _currentStroke)
             : null, // no painter = no repaint cost when canvas is empty
       ),
     );

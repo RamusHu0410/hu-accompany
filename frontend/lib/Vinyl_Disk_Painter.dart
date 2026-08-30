@@ -127,7 +127,11 @@ class _VinylPainter extends CustomPainter {
         Colors.white.withValues(alpha: 0),
       ],
     );
-    canvas.drawCircle(center, radius, Paint()..shader = gradient.createShader(rect));
+    canvas.drawCircle(
+      center,
+      radius,
+      Paint()..shader = gradient.createShader(rect),
+    );
   }
 
   @override

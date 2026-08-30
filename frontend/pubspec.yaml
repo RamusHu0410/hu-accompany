@@ -15,11 +15,17 @@ dependencies:
   webview_flutter: ^4.14.1
   nsd: ^5.0.1
   pdfx: ^2.9.2
+  flutter_rust_bridge: 2.13.0
+  rust_lib_hu_accomponist:
+    path: rust_builder
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0
+  ffigen: ^21.0.0
+  integration_test:
+    sdk: flutter
   
 
 flutter:

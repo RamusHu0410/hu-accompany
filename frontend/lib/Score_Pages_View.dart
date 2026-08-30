@@ -25,11 +25,15 @@ class _Score_Pages_ViewState extends State<Score_Pages_View> {
   void initState() {
     super.initState();
     // Kick off page 1 (and its prefetch of page 2) right away.
-    widget.controller.warmPage(1).then((_) {
-      if (mounted) setState(() => _totalPages = widget.controller.totalPages);
-    }).catchError((Object error) {
-      if (mounted) setState(() => _initialLoadError = error);
-    });
+    widget.controller
+        .warmPage(1)
+        .then((_) {
+          if (mounted)
+            setState(() => _totalPages = widget.controller.totalPages);
+        })
+        .catchError((Object error) {
+          if (mounted) setState(() => _initialLoadError = error);
+        });
   }
 
   @override
@@ -47,7 +51,7 @@ class _Score_Pages_ViewState extends State<Score_Pages_View> {
           child: Text(
             "Couldn't load score: $_initialLoadError",
             textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.black.withOpacity(0.6)),
+            style: TextStyle(color: Colors.black.withValues(alpha: 0.6)),
           ),
         ),
       );
@@ -73,7 +77,9 @@ class _Score_Pages_ViewState extends State<Score_Pages_View> {
                   child: Text(
                     "Couldn't load page $pageNumber: ${snapshot.error}",
                     textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.black.withOpacity(0.6)),
+                    style: TextStyle(
+                      color: Colors.black.withValues(alpha: 0.6),
+                    ),
                   ),
                 ),
               );

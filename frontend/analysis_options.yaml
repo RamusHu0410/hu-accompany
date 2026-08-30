@@ -1,1 +1,5 @@
+analyzer:
+  exclude:
+    - rust_builder/cargokit/**
+
 include: package:flutter_lints/flutter.yaml

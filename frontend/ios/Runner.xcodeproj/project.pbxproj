@@ -9,8 +9,9 @@
 /* Begin PBXBuildFile section */
 		1498D2341E8E89220040F4C2 /* GeneratedPluginRegistrant.m in Sources */ = {isa = PBXBuildFile; fileRef = 1498D2331E8E89220040F4C2 /* GeneratedPluginRegistrant.m */; };
 		1D70D9540286C1A39A6E8701 /* Pods_Runner.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 09E39CEFD5663CB4CD459B13 /* Pods_Runner.framework */; };
+		2D285BFB3043216C00A7ADBE /* libnative_ffi_sim.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 2D285BFA3043216C00A7ADBE /* libnative_ffi_sim.a */; };
+		2D285BFC3043218E00A7ADBE /* libnative_ffi_sim.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 2D285BFA3043216C00A7ADBE /* libnative_ffi_sim.a */; };
 		2D52E1B72FF01479004C5BAD /* recording_bridge.c in Sources */ = {isa = PBXBuildFile; fileRef = 2D52E1B62FF01479004C5BAD /* recording_bridge.c */; };
-		2D52E1B92FF016AB004C5BAD /* libnative_ffi.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 2D52E1B82FF016AB004C5BAD /* libnative_ffi.a */; };
 		331C808B294A63AB00263BE5 /* RunnerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 331C807B294A618700263BE5 /* RunnerTests.swift */; };
 		3B3967161E833CAA004F5970 /* AppFrameworkInfo.plist in Resources */ = {isa = PBXBuildFile; fileRef = 3B3967151E833CAA004F5970 /* AppFrameworkInfo.plist */; };
 		74858FAF1ED2DC5600515810 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74858FAE1ED2DC5600515810 /* AppDelegate.swift */; };
@@ -50,6 +51,7 @@
 		1498D2321E8E86230040F4C2 /* GeneratedPluginRegistrant.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = GeneratedPluginRegistrant.h; sourceTree = "<group>"; };
 		1498D2331E8E89220040F4C2 /* GeneratedPluginRegistrant.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = GeneratedPluginRegistrant.m; sourceTree = "<group>"; };
 		2559BB678B2CE7B39EEF17B0 /* Pods-Runner.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.release.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.release.xcconfig"; sourceTree = "<group>"; };
+		2D285BFA3043216C00A7ADBE /* libnative_ffi_sim.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; path = libnative_ffi_sim.a; sourceTree = "<group>"; };
 		2D52E1B62FF01479004C5BAD /* recording_bridge.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = recording_bridge.c; sourceTree = "<group>"; };
 		2D52E1B82FF016AB004C5BAD /* libnative_ffi.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; path = libnative_ffi.a; sourceTree = "<group>"; };
 		331C807B294A618700263BE5 /* RunnerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunnerTests.swift; sourceTree = "<group>"; };
@@ -80,6 +82,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				2D285BFB3043216C00A7ADBE /* libnative_ffi_sim.a in Frameworks */,
 				B0B55CE6408977C3A030DD48 /* Pods_RunnerTests.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -88,7 +91,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				2D52E1B92FF016AB004C5BAD /* libnative_ffi.a in Frameworks */,
+				2D285BFC3043218E00A7ADBE /* libnative_ffi_sim.a in Frameworks */,
 				78A318202AECB46A00862997 /* FlutterGeneratedPluginSwiftPackage in Frameworks */,
 				1D70D9540286C1A39A6E8701 /* Pods_Runner.framework in Frameworks */,
 			);
@@ -100,6 +103,7 @@
 		0038EC6910725DCD84FE66C9 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
+				2D285BFA3043216C00A7ADBE /* libnative_ffi_sim.a */,
 				2D52E1B82FF016AB004C5BAD /* libnative_ffi.a */,
 				09E39CEFD5663CB4CD459B13 /* Pods_Runner.framework */,
 				A8C5DD3FBF2AC7D14EA57ACA /* Pods_RunnerTests.framework */,
@@ -340,7 +344,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "/bin/sh \"$FLUTTER_ROOT/packages/flutter_tools/bin/xcode_backend.sh\" build";
+			shellScript = "/bin/sh \"$FLUTTER_ROOT/packages/flutter_tools/bin/xcode_backend.sh\" build\n";
 		};
 		ACD19BDA2975B7A40C088B1A /* [CP] Embed Pods Frameworks */ = {
 			isa = PBXShellScriptBuildPhase;
@@ -519,6 +523,10 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
+				LIBRARY_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(PROJECT_DIR)",
+				);
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.example.huAccomponist.RunnerTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -537,6 +545,10 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
+				LIBRARY_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(PROJECT_DIR)",
+				);
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.example.huAccomponist.RunnerTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -553,6 +565,10 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
+				LIBRARY_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(PROJECT_DIR)",
+				);
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.example.huAccomponist.RunnerTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";

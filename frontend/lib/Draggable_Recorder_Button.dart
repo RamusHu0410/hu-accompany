@@ -8,7 +8,8 @@ class Draggable_Recorder_Button extends StatefulWidget {
   const Draggable_Recorder_Button({super.key, required this.onToggle});
 
   @override
-  State<Draggable_Recorder_Button> createState() => _Draggable_Recorder_ButtonState();
+  State<Draggable_Recorder_Button> createState() =>
+      _Draggable_Recorder_ButtonState();
 }
 
 class _Draggable_Recorder_ButtonState extends State<Draggable_Recorder_Button>
@@ -27,7 +28,7 @@ class _Draggable_Recorder_ButtonState extends State<Draggable_Recorder_Button>
   late final AnimationController _pulseCtrl;
   late final Animation<double> _pulseAnim;
 
-  static const _idleColor  = Color(0xFF6C5CE7);
+  static const _idleColor = Color(0xFF6C5CE7);
   static const _activeColor = Color(0xFFFF4757);
 
   @override
@@ -37,9 +38,10 @@ class _Draggable_Recorder_ButtonState extends State<Draggable_Recorder_Button>
       vsync: this,
       duration: const Duration(milliseconds: 900),
     );
-    _pulseAnim = Tween<double>(begin: 1.0, end: 1.5).animate(
-      CurvedAnimation(parent: _pulseCtrl, curve: Curves.easeInOut),
-    );
+    _pulseAnim = Tween<double>(
+      begin: 1.0,
+      end: 1.5,
+    ).animate(CurvedAnimation(parent: _pulseCtrl, curve: Curves.easeInOut));
   }
 
   @override
@@ -56,7 +58,10 @@ class _Draggable_Recorder_ButtonState extends State<Draggable_Recorder_Button>
       _pulseCtrl.reset();
       setState(() => _isRecording = false);
     } else {
-      setState(() { _isRecording = true; _elapsed = Duration.zero; });
+      setState(() {
+        _isRecording = true;
+        _elapsed = Duration.zero;
+      });
       _pulseCtrl.repeat(reverse: true);
       _timer = Timer.periodic(const Duration(seconds: 1), (_) {
         setState(() => _elapsed += const Duration(seconds: 1));
@@ -110,7 +115,9 @@ class _Draggable_Recorder_ButtonState extends State<Draggable_Recorder_Button>
                 _isRecording ? _elapsedLabel : 'Tap to record',
                 key: ValueKey(_isRecording),
                 style: TextStyle(
-                  color: _isRecording ? const Color.fromARGB(255, 95, 95, 95) : const Color.fromARGB(137, 109, 109, 109),
+                  color: _isRecording
+                      ? const Color.fromARGB(255, 95, 95, 95)
+                      : const Color.fromARGB(137, 109, 109, 109),
                   fontSize: 14,
                   fontWeight: FontWeight.w600,
                   letterSpacing: 1.2,
@@ -159,8 +166,10 @@ class _Draggable_Recorder_ButtonState extends State<Draggable_Recorder_Button>
                       ),
                       child: LiquidGlassLens(
                         style: LiquidGlassStyle(
-                          shape: const LiquidGlassShape
-                              .continuousRoundedRectangle(cornerRadius: 32),
+                          shape:
+                              const LiquidGlassShape.continuousRoundedRectangle(
+                                cornerRadius: 32,
+                              ),
                           appearance: LiquidGlassAppearance(
                             color: color.withValues(alpha: 0.55),
                           ),
@@ -174,7 +183,9 @@ class _Draggable_Recorder_ButtonState extends State<Draggable_Recorder_Button>
                           child: AnimatedSwitcher(
                             duration: const Duration(milliseconds: 200),
                             child: Icon(
-                              _isRecording ? Icons.stop_rounded : Icons.mic_rounded,
+                              _isRecording
+                                  ? Icons.stop_rounded
+                                  : Icons.mic_rounded,
                               key: ValueKey(_isRecording),
                               color: const Color.fromARGB(255, 110, 110, 110),
                               size: 30,

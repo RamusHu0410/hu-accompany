@@ -12,9 +12,7 @@ class ServerDiscovery {
   /// Finds the backend server using mDNS/Bonjour.
   ///
   /// If a server was already found, the cached address is returned immediately.
-  static Future<String?> resolveBaseUrl({
-    bool forceRefresh = false,
-  }) async {
+  static Future<String?> resolveBaseUrl({bool forceRefresh = false}) async {
     // Use the previously discovered server when possible.
     if (!forceRefresh && _cachedBaseUrl != null) {
       print(
@@ -50,12 +48,9 @@ class ServerDiscovery {
             service.port != null &&
             service.port! > 0 &&
             !completer.isCompleted) {
-          final baseUrl =
-              'http://${service.host}:${service.port}';
+          final baseUrl = 'http://${service.host}:${service.port}';
 
-          print(
-            'ServerDiscovery: backend found at $baseUrl',
-          );
+          print('ServerDiscovery: backend found at $baseUrl');
 
           _cachedBaseUrl = baseUrl;
           completer.complete(baseUrl);
@@ -75,16 +70,12 @@ class ServerDiscovery {
       );
 
       if (result == null) {
-        print(
-          'ServerDiscovery: no backend server was found.',
-        );
+        print('ServerDiscovery: no backend server was found.');
       }
 
       return result;
     } catch (e, stackTrace) {
-      print(
-        'ServerDiscovery: discovery failed: $e',
-      );
+      print('ServerDiscovery: discovery failed: $e');
       print(stackTrace);
 
       return null;
@@ -92,13 +83,9 @@ class ServerDiscovery {
       if (discovery != null) {
         try {
           await stopDiscovery(discovery);
-          print(
-            'ServerDiscovery: discovery stopped.',
-          );
+          print('ServerDiscovery: discovery stopped.');
         } catch (e) {
-          print(
-            'ServerDiscovery: could not stop discovery: $e',
-          );
+          print('ServerDiscovery: could not stop discovery: $e');
         }
       }
     }
@@ -107,22 +94,22 @@ class ServerDiscovery {
   /// Clears the saved backend address.
   ///
   /// Call this when the server changes address or when a request fails.
-/// Clears the saved backend address.
-///
-/// Call this when the server changes address or when a request fails.
-static void invalidateCache() {
-  print(
-    'ServerDiscovery: clearing cached backend URL: '
-    '$_cachedBaseUrl',
-  );
+  /// Clears the saved backend address.
+  ///
+  /// Call this when the server changes address or when a request fails.
+  static void invalidateCache() {
+    print(
+      'ServerDiscovery: clearing cached backend URL: '
+      '$_cachedBaseUrl',
+    );
 
-  _cachedBaseUrl = null;
-}
+    _cachedBaseUrl = null;
+  }
 
-/// Alias for invalidateCache().
-///
-/// Kept so either method name can be used.
-static void clearCache() {
-  invalidateCache();
-}
+  /// Alias for invalidateCache().
+  ///
+  /// Kept so either method name can be used.
+  static void clearCache() {
+    invalidateCache();
+  }
 }
