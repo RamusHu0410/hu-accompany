@@ -134,7 +134,8 @@ class SpinnableDiskState extends State<SpinnableDisk>
     _traveledSinceRelease += delta.abs();
     setState(() => _rotation = newRotation);
 
-    if (!_activatedThisSpin && _traveledSinceRelease >= widget.activationRadians) {
+    if (!_activatedThisSpin &&
+        _traveledSinceRelease >= widget.activationRadians) {
       _activatedThisSpin = true;
       widget.onActivated();
     }

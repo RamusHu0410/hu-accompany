@@ -179,8 +179,8 @@ class _Record_Navigator_PageState extends State<Record_Navigator_Page>
     await Navigator.of(context).push(
       PageRouteBuilder(
         transitionDuration: const Duration(milliseconds: 250),
-        pageBuilder: (_, __, ___) => entry.pageBuilder(context),
-        transitionsBuilder: (_, anim, __, child) =>
+        pageBuilder: (_, _, _) => entry.pageBuilder(context),
+        transitionsBuilder: (_, anim, _, child) =>
             FadeTransition(opacity: anim, child: child),
       ),
     );
@@ -289,8 +289,9 @@ class _Record_Navigator_PageState extends State<Record_Navigator_Page>
                     width: active ? 16 : 6,
                     height: 6,
                     decoration: BoxDecoration(
-                      color: const Color(0xFFEDE6DA)
-                          .withValues(alpha: active ? 0.85 : 0.25),
+                      color: const Color(
+                        0xFFEDE6DA,
+                      ).withValues(alpha: active ? 0.85 : 0.25),
                       borderRadius: BorderRadius.circular(3),
                     ),
                   );
@@ -308,7 +309,9 @@ class _Record_Navigator_PageState extends State<Record_Navigator_Page>
                 return Positioned.fill(
                   child: BackdropFilter(
                     filter: ImageFilter.blur(sigmaX: 24 * t, sigmaY: 24 * t),
-                    child: Container(color: Colors.black.withValues(alpha: 0.35 * t)),
+                    child: Container(
+                      color: Colors.black.withValues(alpha: 0.35 * t),
+                    ),
                   ),
                 );
               },
@@ -334,7 +337,9 @@ class _Record_Navigator_PageState extends State<Record_Navigator_Page>
     final dx = outgoing ? -progress * 260 : (1 - progress) * 260;
     final dy = outgoing ? -progress * 90 : (1 - progress) * 40;
     final scale = outgoing ? (1 - progress * 0.25) : (0.85 + progress * 0.15);
-    final opacity = outgoing ? (1 - progress) : (progress == 0 ? 1.0 : progress);
+    final opacity = outgoing
+        ? (1 - progress)
+        : (progress == 0 ? 1.0 : progress);
     final rotationTilt = outgoing ? progress * 0.6 : (1 - progress) * -0.5;
 
     return Center(
@@ -398,7 +403,11 @@ class _TonearmPainter extends CustomPainter {
     final pivot = Offset(size.width * 0.55, size.height * 0.55);
     final tip = Offset(size.width * 0.15, size.height * 0.85);
 
-    canvas.drawCircle(base, size.width * 0.09, Paint()..color = const Color(0xFF2A2A2E));
+    canvas.drawCircle(
+      base,
+      size.width * 0.09,
+      Paint()..color = const Color(0xFF2A2A2E),
+    );
     canvas.drawCircle(
       base,
       size.width * 0.09,

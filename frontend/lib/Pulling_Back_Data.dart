@@ -120,7 +120,8 @@ class ApiService {
     final bytes = response.bodyBytes;
     // Sanity-check it's actually a PDF (starts with "%PDF") rather than,
     // say, an HTML 404 page served with a 200 status.
-    final looksLikePdf = bytes.length > 4 &&
+    final looksLikePdf =
+        bytes.length > 4 &&
         bytes[0] == 0x25 &&
         bytes[1] == 0x50 &&
         bytes[2] == 0x44 &&

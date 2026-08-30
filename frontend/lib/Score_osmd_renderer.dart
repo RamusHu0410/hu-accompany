@@ -17,10 +17,10 @@ class NoteRef {
   });
 
   Map<String, int> toJson() => {
-        'measure': measure,
-        'voiceEntry': voiceEntry,
-        'noteIndex': noteIndex,
-      };
+    'measure': measure,
+    'voiceEntry': voiceEntry,
+    'noteIndex': noteIndex,
+  };
 }
 
 /// Drives the OSMD WebView: loads MusicXML, and colors or resets individual
@@ -72,7 +72,7 @@ class ScoreOsmdController {
   }) async {
     if (notes.isEmpty) return;
     final hex =
-        '#${color.value.toRadixString(16).padLeft(8, '0').substring(2)}';
+        '#${color.toARGB32().toRadixString(16).padLeft(8, '0').substring(2)}';
     final refsJson = jsonEncode(notes.map((n) => n.toJson()).toList());
     _call('OSMDBridge.colorNotes($refsJson, "$hex");');
   }
@@ -115,7 +115,10 @@ class _Score_Osmd_ViewState extends State<Score_Osmd_View> {
     _web = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setBackgroundColor(const Color(0x00000000))
-      ..addJavaScriptChannel('FlutterBridge', onMessageReceived: _onBridgeMessage)
+      ..addJavaScriptChannel(
+        'FlutterBridge',
+        onMessageReceived: _onBridgeMessage,
+      )
       ..setNavigationDelegate(
         NavigationDelegate(
           // NOTE: we deliberately do NOT call loadScore() here. This only
@@ -191,7 +194,7 @@ class _Score_Osmd_ViewState extends State<Score_Osmd_View> {
               child: Text(
                 "Couldn't render score: $_error",
                 textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.black.withOpacity(0.5)),
+                style: TextStyle(color: Colors.black.withValues(alpha: 0.5)),
               ),
             ),
           ),

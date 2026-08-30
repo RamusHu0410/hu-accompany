@@ -15,7 +15,11 @@ class Shelf_Page extends StatelessWidget {
         elevation: 0,
         title: const Text(
           'Shelf',
-          style: TextStyle(color: Color(0xFFEDE6DA), letterSpacing: 2, fontSize: 14),
+          style: TextStyle(
+            color: Color(0xFFEDE6DA),
+            letterSpacing: 2,
+            fontSize: 14,
+          ),
         ),
         iconTheme: const IconThemeData(color: Color(0xFFEDE6DA)),
       ),

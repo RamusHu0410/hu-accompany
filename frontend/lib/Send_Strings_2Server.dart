@@ -117,8 +117,9 @@ class MusicSheetService {
         if (arranger != null && arranger.isNotEmpty) 'arr. $arranger',
         if (editor != null && editor.isNotEmpty) 'ed. $editor',
       ];
-      final descriptor =
-          details.isEmpty ? name : '$name (${details.join(', ')})';
+      final descriptor = details.isEmpty
+          ? name
+          : '$name (${details.join(', ')})';
 
       final title = composer.isEmpty
           ? '$resolvedTitle — $descriptor'

@@ -25,8 +25,10 @@ class _Vinyl_Loading_ScreenState extends State<Vinyl_Loading_Screen>
   @override
   void initState() {
     super.initState();
-    _spin = AnimationController(vsync: this, duration: const Duration(seconds: 2))
-      ..repeat();
+    _spin = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 2),
+    )..repeat();
     Future.delayed(widget.minDuration, () {
       if (mounted) setState(() => _done = true);
     });
