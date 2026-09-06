@@ -9,6 +9,14 @@ data upstream (mobile app / `native_ffi`). Stub in `analysis.compute_dynamics_sc
 
 Pedal analysis not implemented — see `pedaling.py`.
 
+Era-aware overall feedback is **structure only** — see `era_score.py`. Era
+detection from a composition date (`parse_composed_year` / `detect_era` /
+`adjacent_era`) and the per-era trait data (`ERA_PROFILES`) are done; the
+per-era prose builders and `build_era_summary` are unimplemented stubs, so
+`build_era_feedback` currently returns an `EraFeedback` with `items: []` and
+an empty `summary`. Not called from `orchestrator.py`, and nothing upstream
+carries a composition date yet — the caller has to supply it.
+
 ## Testing
 
 - Env: `DYLD_LIBRARY_PATH=/opt/homebrew/lib` (libvips not on default linker path, macOS)

@@ -80,3 +80,30 @@ class PhraseFeedbackResult:
     phrase: int
     immediate_feedback: list
     phrase_summary: PhraseSummary
+
+
+@dataclass
+class EraFeedbackItem:
+    """One piece of style-period advice, keyed to a specific era trait
+    (see era_score.EraProfile.traits)."""
+
+    trait: str
+    severity: str  # "info" | "minor" | "major"
+    description: str
+    practice_action: str
+
+
+@dataclass
+class EraFeedback:
+    """Era-aware slice of the overall (whole-piece) feedback -- what the
+    piece's composition date implies about how it should be played. Built by
+    era_score.build_era_feedback(); `era`/`composed_year` are None when the
+    composition date is unknown or unparseable."""
+
+    era: Optional[str]
+    label: Optional[str]
+    composed_year: Optional[int]
+    traits: list = field(default_factory=list)
+    items: list = field(default_factory=list)
+    summary: str = ""
+    type: str = "era_feedback"
