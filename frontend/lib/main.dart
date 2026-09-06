@@ -1,22 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:liquid_glass_easy/liquid_glass_easy.dart';
 import 'Draggable_Recorder_Button.dart';
 import 'Drawing_Overlay.dart';
 import 'Music_Library_Page.dart';
-import 'LiquidGlass.dart';
 import 'Score_Page_Controller.dart';
 import 'Score_Pages_View.dart';
 import 'dart:ffi' as ffi;
 import 'dart:typed_data';
-// CHANGED: the backend now returns a literal PDF instead of MusicXML, so
-// the OSMD WebView renderer (Score_osmd_renderer.dart) no longer applies
-// here — swapped for the swipeable PDF page view (Score_Pages_View.dart +
-// Score_Page_Controller.dart). Note this drops the OSMD-based per-note
-// wrong-note coloring feature (colorNotes/resetColors); there's no direct
-// equivalent for a rasterized PDF page yet.
 import 'Vinyl_Loading_Screen.dart';
 import 'Record_Navigator_Page.dart';
-import 'Desk_Practice_Controls.dart';
 import 'package:hu_accomponist/src/rust/frb_generated.dart';
 
 typedef StartRecordingFunc = ffi.Void Function();
@@ -25,8 +16,10 @@ typedef StopRecordingFunc = ffi.Void Function();
 typedef StopRecordingFuncDart = void Function();
 
 // ─── Safe no-op stubs used when native symbols are unavailable ───────────────
-void _stubStart() => debugPrint('NativeBridge: start_recording stub (symbols not linked yet)');
-void _stubStop()  => debugPrint('NativeBridge: stop_recording stub (symbols not linked yet)');
+void _stubStart() =>
+    debugPrint('NativeBridge: start_recording stub (symbols not linked yet)');
+void _stubStop() =>
+    debugPrint('NativeBridge: stop_recording stub (symbols not linked yet)');
 
 class NativeBridge {
   // Nullable so we know whether real lookup succeeded
@@ -34,7 +27,7 @@ class NativeBridge {
 
   // Always callable — fall back to stubs if lookup failed
   StartRecordingFuncDart _startRecording = _stubStart;
-  StopRecordingFuncDart  _stopRecording  = _stubStop;
+  StopRecordingFuncDart _stopRecording = _stubStop;
 
   bool get isNativeAvailable => _nativeLib != null;
 
@@ -57,9 +50,11 @@ class NativeBridge {
     } on ArgumentError catch (e) {
       // Symbol not found — app keeps running with stubs
       debugPrint('NativeBridge: symbol lookup failed — $e');
-      debugPrint('NativeBridge: running with no-op stubs. '
-          'Make sure start_recording / stop_recording are compiled '
-          'into the iOS Runner target with external "C" linkage.');
+      debugPrint(
+        'NativeBridge: running with no-op stubs. '
+        'Make sure start_recording / stop_recording are compiled '
+        'into the iOS Runner target with external "C" linkage.',
+      );
     } catch (e) {
       debugPrint('NativeBridge: unexpected init error — $e');
     }
@@ -67,7 +62,7 @@ class NativeBridge {
 
   // Public API — callers never touch private fields directly
   void startRecording() => _startRecording();
-  void stopRecording()  => _stopRecording();
+  void stopRecording() => _stopRecording();
 }
 
 // Single shared instance — safe because constructor never throws now
@@ -84,10 +79,13 @@ Future<void> main() async {
     debugPrint('RustLib: initialized successfully.');
   } catch (e) {
     debugPrint('RustLib: init failed — $e');
-    debugPrint('RustLib: continuing without Rust bindings. '
-        'Any feature that calls into native_ffi will be unavailable '
-        'until the native library is rebuilt/relinked.');
+    debugPrint(
+      'RustLib: continuing without Rust bindings. '
+      'Any feature that calls into native_ffi will be unavailable '
+      'until the native library is rebuilt/relinked.',
+    );
   }
+
   runApp(const HuAccumponistApp());
 }
 
@@ -99,16 +97,20 @@ class HuAccumponistApp extends StatelessWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        brightness: Brightness.dark,
-        scaffoldBackgroundColor: const Color.fromARGB(255, 255, 255, 255),
-        colorScheme: const ColorScheme.dark(primary: Color(0xFFE94560)),
+        brightness: Brightness.light,
+        scaffoldBackgroundColor: const Color(0xFFF7F2E7),
+        colorScheme: const ColorScheme.light(
+          primary: Color(0xFF9A7A2C),
+        ),
       ),
       // App now opens onto the vinyl spin-up splash and lands on the
       // turntable navigator (Practice / Search / Shelf, chosen by spinning
       // a record) instead of dropping straight into the score viewer.
       // ScoreViewerPage is still fully intact below — it's just one of the
       // records on the platter now (see Record_Navigator_Page.dart).
-      home: const Vinyl_Loading_Screen(child: Record_Navigator_Page()),
+      home: const Vinyl_Loading_Screen(
+        child: Record_Navigator_Page(),
+      ),
     );
   }
 }
@@ -131,38 +133,38 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
 
   // Owns the fetched-and-parsed pages for whatever score is currently
   // loaded — kept as a stable field (not rebuilt in build()) so it isn't
-  // torn down and its cache/prefetch thrown away on every setState (e.g.
-  // toggling pen color). Null alongside _pdfBytes until a sheet is picked.
+  // torn down and its cache/prefetch thrown away on every setState.
   ScorePageController? _pageController;
 
   // Swaps in a new score, or clears it if [pdfBytes] is null.
   void _setScore(Uint8List? pdfBytes) {
     _pdfBytes = pdfBytes;
-    _pageController = pdfBytes != null ? ScorePageController(pdfBytes) : null;
+    _pageController =
+        pdfBytes != null ? ScorePageController(pdfBytes) : null;
   }
 
   @override
   void initState() {
     super.initState();
-    // ASSUMPTION: SelectedSheet (defined in Music_Library_Page.dart, not
-    // reviewed here) needs a `pdfBytes` field now instead of `musicXml`,
-    // and whatever populates it needs to call ApiService.fetchScorePdf()
-    // instead of the old fetchMusicSheet(). Flag this to Ramus/update it
-    // there too — this file alone can't fix that part.
+
+    // ASSUMPTION: SelectedSheet (defined in Music_Library_Page.dart) needs
+    // a pdfBytes field now instead of musicXml, and whatever populates it
+    // needs to call ApiService.fetchScorePdf() instead of the old
+    // fetchMusicSheet().
     _setScore(widget.selected?.pdfBytes);
   }
 
   // Pen settings
   bool _showPenSettings = false;
-  Color _penColor = const Color(0xFFE94560);
+  Color _penColor = const Color(0xFF9A7A2C);
   double _penSize = 3.0;
 
   static const List<Color> _penColorOptions = [
-    Color(0xFFE94560), // brand red/pink
-    Color(0xFF2C2C2C), // near-black
-    Color(0xFF2D6CDF), // blue
-    Color(0xFF2FA84F), // green
-    Color(0xFFF2A93B), // amber
+    Color(0xFF9A7A2C), // muted gold
+    Color(0xFF30271F), // dark brown
+    Color(0xFF5B7188), // muted blue
+    Color(0xFF62765B), // muted green
+    Color(0xFFB1844D), // warm amber
   ];
 
   void _goToNavPage() async {
@@ -171,11 +173,13 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
         transitionDuration: const Duration(milliseconds: 400),
         pageBuilder: (context, animation, secondaryAnimation) =>
             const Music_Library_Page(),
-        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+        transitionsBuilder:
+            (context, animation, secondaryAnimation, child) {
           final tween = Tween(
             begin: const Offset(0.0, 1.0),
             end: Offset.zero,
           ).chain(CurveTween(curve: Curves.easeOutCubic));
+
           return SlideTransition(
             position: animation.drive(tween),
             child: child,
@@ -193,187 +197,475 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: SafeArea(
-        child: LiquidGlassView(
-          // Everything the glass buttons should refract goes here. This is
-          // still rendered normally and stays fully interactive (e.g. the
-          // Drawing_Overlay's gestures keep working) — it's just *also*
-          // captured for the lenses on Skia backends like macOS desktop.
-          backgroundWidget: Stack(
-            children: [
-              // LAYER 0: warm wooden desk backdrop — always present, the
-              // "surface" everything else sits on.
-              const Positioned.fill(child: WoodDeskBackground()),
+    const ivory = Color(0xFFF7F2E7);
+    const paper = Color(0xFFFFFCF4);
+    const brown = Color(0xFF30271F);
+    const mutedBrown = Color(0xFF75695B);
+    const gold = Color(0xFF9A7A2C);
+    const lightGold = Color(0xFFD8C58D);
 
-              // LAYER 1: PDF score pages, framed like a sheet of paper
-              // resting on the desk (or an empty desk when nothing's
-              // loaded). Score_Pages_View itself is completely untouched.
-              if (_hasScore)
-                Positioned.fill(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(18, 28, 18, 28),
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFFAF3E6),
-                        borderRadius: BorderRadius.circular(4),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.45),
-                            blurRadius: 24,
-                            offset: const Offset(0, 10),
-                          ),
-                        ],
-                      ),
-                      clipBehavior: Clip.antiAlias,
-                      child: Score_Pages_View(controller: _pageController!),
+    return Scaffold(
+      backgroundColor: ivory,
+      body: SafeArea(
+        child: Stack(
+          children: [
+            // ─────────────────────────────────────────────
+            // CLEAN IVORY BACKGROUND
+            // ─────────────────────────────────────────────
+            Positioned.fill(
+              child: Container(color: ivory),
+            ),
+
+            // Very subtle top border, matching the reference page.
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              child: Container(
+                height: 1,
+                color: lightGold.withValues(alpha: 0.35),
+              ),
+            ),
+
+            // ─────────────────────────────────────────────
+            // SCORE
+            // ─────────────────────────────────────────────
+            Positioned.fill(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(54, 54, 54, 58),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: paper,
+                    border: Border.all(
+                      color: lightGold.withValues(alpha: 0.65),
+                      width: 1,
                     ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: brown.withValues(alpha: 0.10),
+                        blurRadius: 22,
+                        offset: const Offset(0, 8),
+                      ),
+                    ],
                   ),
-                )
-              else
-                const Positioned.fill(
-                  child: Center(
-                    child: Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 40),
-                      child: Text(
-                        'No score on the desk yet —\ntap the search button below to browse the library.',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: Color(0xCCFFF3E0),
-                          fontSize: 14,
-                          fontStyle: FontStyle.italic,
-                          height: 1.5,
+                  clipBehavior: Clip.antiAlias,
+                  child: Stack(
+                    children: [
+                      if (_hasScore)
+                        Positioned.fill(
+                          child: Score_Pages_View(
+                            controller: _pageController!,
+                          ),
+                        )
+                      else
+                        const Center(
+                          child: Padding(
+                            padding: EdgeInsets.all(30),
+                            child: Text(
+                              'Select a score from the library',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                color: mutedBrown,
+                                fontSize: 15,
+                                letterSpacing: 0.4,
+                              ),
+                            ),
+                          ),
+                        ),
+
+                      // Small restrained ornament at the top of the score area.
+                      Positioned(
+                        top: 18,
+                        left: 0,
+                        right: 0,
+                        child: IgnorePointer(
+                          child: Center(
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Container(
+                                  width: 38,
+                                  height: 1,
+                                  color: lightGold.withValues(alpha: 0.65),
+                                ),
+                                const SizedBox(width: 10),
+                                Container(
+                                  width: 7,
+                                  height: 7,
+                                  decoration: BoxDecoration(
+                                    border: Border.all(
+                                      color: gold.withValues(alpha: 0.75),
+                                    ),
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                Container(
+                                  width: 38,
+                                  height: 1,
+                                  color: lightGold.withValues(alpha: 0.65),
+                                ),
+                              ],
+                            ),
+                          ),
                         ),
                       ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+
+            // ─────────────────────────────────────────────
+            // DRAWING OVERLAY
+            // ─────────────────────────────────────────────
+            Positioned.fill(
+              child: Drawing_Overlay(
+                isDrawingMode: _isDrawingMode,
+                isErasing: _isErasing,
+                penColor: _penColor,
+                penSize: _penSize,
+              ),
+            ),
+
+            // ─────────────────────────────────────────────
+            // TOP RIGHT TOOLS
+            // ─────────────────────────────────────────────
+            Positioned(
+              top: 16,
+              right: 22,
+              child: Row(
+                children: [
+                  _ElegantToolButton(
+                    icon: Icons.edit_outlined,
+                    active: _isDrawingMode,
+                    color: gold,
+                    onTap: () {
+                      setState(() {
+                        _isDrawingMode = !_isDrawingMode;
+                        if (_isDrawingMode) {
+                          _isErasing = false;
+                        }
+                      });
+                    },
+                  ),
+                  const SizedBox(width: 8),
+                  _ElegantToolButton(
+                    icon: Icons.auto_fix_normal_outlined,
+                    active: _isErasing,
+                    color: gold,
+                    onTap: () {
+                      setState(() {
+                        _isErasing = !_isErasing;
+                        if (_isErasing) {
+                          _isDrawingMode = false;
+                        }
+                      });
+                    },
+                  ),
+                  const SizedBox(width: 8),
+                  _ElegantToolButton(
+                    icon: Icons.palette_outlined,
+                    active: _showPenSettings,
+                    color: gold,
+                    onTap: () {
+                      setState(() {
+                        _showPenSettings = !_showPenSettings;
+                      });
+                    },
+                  ),
+                ],
+              ),
+            ),
+
+            // ─────────────────────────────────────────────
+            // PEN SETTINGS
+            // ─────────────────────────────────────────────
+            if (_showPenSettings)
+              Positioned(
+                top: 68,
+                right: 22,
+                child: _ElegantPenPanel(
+                  colors: _penColorOptions,
+                  selectedColor: _penColor,
+                  penSize: _penSize,
+                  onColorSelected: (color) {
+                    setState(() {
+                      _penColor = color;
+                    });
+                  },
+                  onSizeChanged: (size) {
+                    setState(() {
+                      _penSize = size;
+                    });
+                  },
+                ),
+              ),
+
+            // ─────────────────────────────────────────────
+            // ANIME MUSIC GIRL
+            // ─────────────────────────────────────────────
+            Positioned(
+              right: 14,
+              bottom: 4,
+              child: IgnorePointer(
+                child: SizedBox(
+                  width: 145,
+                  height: 175,
+                  child: Image.asset(
+                    'assets/images/wave.jpg',
+                    fit: BoxFit.contain,
+                  ),
+                ),
+              ),
+            ),
+
+            // ─────────────────────────────────────────────
+            // SEARCH
+            // ─────────────────────────────────────────────
+            Positioned(
+              left: 22,
+              bottom: 20,
+              child: _MinimalBottomButton(
+                icon: Icons.search,
+                color: mutedBrown,
+                onTap: _goToNavPage,
+              ),
+            ),
+
+            // ─────────────────────────────────────────────
+            // EXIT
+            // ─────────────────────────────────────────────
+            Positioned(
+              right: 22,
+              bottom: 20,
+              child: _MinimalBottomButton(
+                icon: Icons.arrow_back,
+                color: mutedBrown,
+                onTap: () => Navigator.of(context).maybePop(),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ElegantToolButton extends StatelessWidget {
+  final IconData icon;
+  final bool active;
+  final Color color;
+  final VoidCallback onTap;
+
+  const _ElegantToolButton({
+    required this.icon,
+    required this.active,
+    required this.color,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(30),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          width: 46,
+          height: 46,
+          decoration: BoxDecoration(
+            color: active ? color : const Color(0xFFFFFCF4),
+            shape: BoxShape.circle,
+            border: Border.all(
+              color: active ? color : const Color(0xFFD8C58D),
+              width: 1,
+            ),
+            boxShadow: active
+                ? [
+                    BoxShadow(
+                      color: color.withValues(alpha: 0.18),
+                      blurRadius: 10,
+                      offset: const Offset(0, 3),
+                    ),
+                  ]
+                : null,
+          ),
+          child: Icon(
+            icon,
+            size: 20,
+            color: active ? const Color(0xFFFFFCF4) : color,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ElegantPenPanel extends StatelessWidget {
+  final List<Color> colors;
+  final Color selectedColor;
+  final double penSize;
+  final ValueChanged<Color> onColorSelected;
+  final ValueChanged<double> onSizeChanged;
+
+  const _ElegantPenPanel({
+    required this.colors,
+    required this.selectedColor,
+    required this.penSize,
+    required this.onColorSelected,
+    required this.onSizeChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    const paper = Color(0xFFFFFCF4);
+    const brown = Color(0xFF30271F);
+    const gold = Color(0xFF9A7A2C);
+    const lightGold = Color(0xFFD8C58D);
+
+    return Container(
+      width: 230,
+      padding: const EdgeInsets.fromLTRB(18, 16, 18, 14),
+      decoration: BoxDecoration(
+        color: paper,
+        border: Border.all(
+          color: lightGold,
+          width: 1,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: brown.withValues(alpha: 0.12),
+            blurRadius: 18,
+            offset: const Offset(0, 7),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'PEN',
+            style: TextStyle(
+              color: gold,
+              fontSize: 10,
+              letterSpacing: 2.5,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: colors.map((color) {
+              final selected = color == selectedColor;
+
+              return GestureDetector(
+                onTap: () => onColorSelected(color),
+                child: Container(
+                  margin: const EdgeInsets.only(right: 10),
+                  width: 25,
+                  height: 25,
+                  decoration: BoxDecoration(
+                    color: color,
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: selected ? gold : Colors.transparent,
+                      width: 2,
                     ),
                   ),
                 ),
-
-              // LAYER 2: Drawing overlay — unchanged.
-              Positioned.fill(
-                child: Drawing_Overlay(
-                  isDrawingMode: _isDrawingMode,
-                  isErasing: _isErasing,
-                  penColor: _penColor,
-                  penSize: _penSize,
+              );
+            }).toList(),
+          ),
+          const SizedBox(height: 12),
+          Container(
+            height: 1,
+            color: lightGold.withValues(alpha: 0.5),
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              const Icon(
+                Icons.line_weight,
+                size: 15,
+                color: gold,
+              ),
+              Expanded(
+                child: SliderTheme(
+                  data: SliderTheme.of(context).copyWith(
+                    activeTrackColor: gold,
+                    inactiveTrackColor:
+                        lightGold.withValues(alpha: 0.45),
+                    thumbColor: gold,
+                    overlayColor: gold.withValues(alpha: 0.10),
+                    trackHeight: 1,
+                    thumbShape: const RoundSliderThumbShape(
+                      enabledThumbRadius: 5,
+                    ),
+                  ),
+                  child: Slider(
+                    value: penSize,
+                    min: 1,
+                    max: 14,
+                    onChanged: onSizeChanged,
+                  ),
+                ),
+              ),
+              SizedBox(
+                width: 25,
+                child: Text(
+                  penSize.toStringAsFixed(1),
+                  textAlign: TextAlign.right,
+                  style: const TextStyle(
+                    color: brown,
+                    fontSize: 11,
+                  ),
                 ),
               ),
             ],
-          ), // closes Stack (backgroundWidget)
+          ),
+        ],
+      ),
+    );
+  }
+}
 
-          child: Stack(
-            children: [
-              // LAYER 3: Pencil + eraser + palette toggle, sitting side by
-              // side on the desk top-right — same three toggles as before
-              // (_isDrawingMode / _isErasing / _showPenSettings), just
-              // reskinned as physical objects instead of a glass toolbar.
-              Positioned(
-                top: 16,
-                right: 16,
-                child: Row(
-                  children: [
-                    PencilToolButton(
-                      active: _isDrawingMode,
-                      penColor: _penColor,
-                      penSize: _penSize,
-                      onTap: () => setState(() {
-                        _isDrawingMode = !_isDrawingMode;
-                        // Pen and eraser are still mutually exclusive.
-                        if (_isDrawingMode) _isErasing = false;
-                      }),
-                    ),
-                    const SizedBox(width: 10),
-                    EraserToolButton(
-                      active: _isErasing,
-                      onTap: () => setState(() {
-                        _isErasing = !_isErasing;
-                        if (_isErasing) _isDrawingMode = false;
-                      }),
-                    ),
-                    const SizedBox(width: 10),
-                    PaintPaletteButton(
-                      open: _showPenSettings,
-                      currentColor: _penColor,
-                      onTap: () => setState(
-                        () => _showPenSettings = !_showPenSettings,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+class _MinimalBottomButton extends StatelessWidget {
+  final IconData icon;
+  final Color color;
+  final VoidCallback onTap;
 
-              // LAYER 3b: Opened palette panel — same color-select and
-              // size-select state/logic as before (_penColor, _penSize),
-              // now a wooden palette board with paint blobs and a wooden
-              // ruler instead of a glass swatch row and a Slider.
-              if (_showPenSettings)
-                Positioned(
-                  top: 76,
-                  right: 16,
-                  child: PaintPalettePanel(
-                    colors: _penColorOptions,
-                    selected: _penColor,
-                    onSelect: (c) => setState(() => _penColor = c),
-                    penSize: _penSize,
-                    minSize: 1,
-                    maxSize: 14,
-                    onSizeChanged: (v) => setState(() => _penSize = v),
-                  ),
-                ),
+  const _MinimalBottomButton({
+    required this.icon,
+    required this.color,
+    required this.onTap,
+  });
 
-              // LAYER 4: Draggable Recorder Button — untouched.
-              Draggable_Recorder_Button(
-                onToggle: (isRecording) {
-                  if (isRecording) {
-                    _nativeBridge.startRecording();
-                  } else {
-                    _nativeBridge.stopRecording();
-                  }
-                },
-              ),
-
-              // LAYER 5: Search. Reliable free-form handwriting/gesture
-              // recognition (drawing a "?" or writing "search" to
-              // navigate) isn't practical to build without a proper
-              // handwriting-recognition/ML library and real training —
-              // a hand-rolled heuristic would misfire constantly against
-              // the same canvas the drawing tool uses. Keeping the
-              // existing, reliable tap target instead, per the fallback
-              // — just reskinned to sit on the desk.
-              Positioned(
-                bottom: 32,
-                left: 16,
-                child: GestureDetector(
-                  onTap: _goToNavPage,
-                  child: LiquidGlass(
-                    borderRadius: BorderRadius.circular(16),
-                    blur: 14,
-                    tintOpacity: 0.14,
-                    child: Padding(
-                      padding: const EdgeInsets.all(14),
-                      child: Icon(
-                        Icons.search,
-                        color: const Color.fromARGB(255, 170, 170, 170),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-
-              // LAYER 6: Exit — new physical push-button to leave
-              // Practice and pop back to wherever it was opened from
-              // (the turntable navigator).
-              Positioned(
-                bottom: 32,
-                right: 16,
-                child: DeskExitButton(
-                  onTap: () => Navigator.of(context).maybePop(),
-                ),
-              ),
-            ], // closes children of foreground Stack
-          ), // closes foreground Stack (child:)
-        ), // closes LiquidGlassView
-      ), // closes SafeArea
-    ); // closes Scaffold
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(30),
+        child: Container(
+          width: 48,
+          height: 48,
+          decoration: BoxDecoration(
+            color: const Color(0xFFFFFCF4),
+            shape: BoxShape.circle,
+            border: Border.all(
+              color: const Color(0xFFD8C58D),
+              width: 1,
+            ),
+          ),
+          child: Icon(
+            icon,
+            size: 20,
+            color: color,
+          ),
+        ),
+      ),
+    );
   }
 }

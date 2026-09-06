@@ -9,6 +9,7 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+
   device_info_plus: ^13.2.0
   liquid_glass_easy: ^3.5.0
   http: ^1.6.0
@@ -17,7 +18,6 @@ dependencies:
   pdfx: ^2.9.2
   flutter_rust_bridge: 2.13.0
 
-
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -25,10 +25,11 @@ dev_dependencies:
   ffigen: ^21.0.0
   integration_test:
     sdk: flutter
-  
 
 flutter:
   uses-material-design: true
 
+  assets:
+    - assets/images/wave.jpg
   
 
