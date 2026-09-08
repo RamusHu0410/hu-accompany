@@ -18,10 +18,21 @@ PyMuPDF
 # image_enhancer/enhancer_script.py's scan cleanup. Needs the libvips system
 # library too (not pip-installable): `brew install vips` on macOS,
 # `apt install libvips` on Debian/Ubuntu.
+# On Apple Silicon, Homebrew installs libvips.42.dylib to /opt/homebrew/lib,
+# which macOS does not search by default, so pyvips' dlopen fails with
+# "cannot load library 'libvips.42.dylib'". Fix by exporting
+#   DYLD_LIBRARY_PATH=/opt/homebrew/lib
+# (this repo appends that export to .venv/bin/activate).
 pyvips
 # Pinned: opencv 5.0 changed cv2.HoughLinesP's return shape, which breaks
 # oemer's line parsing (oemer/bbox.py) with an IndexError.
+# Both packages must be pinned: oemer depends on non-headless
+# opencv-python>=4.5.3.56, so pinning headless alone lets pip pull opencv-python
+# 5.x in alongside it. The two share the same cv2/ directory, so whichever
+# installs last wins -- pinning only one makes the effective cv2 version
+# depend on install order.
 opencv-python-headless==4.11.0.86
+opencv-python==4.11.0.86
 numpy
 
 # Optical music recognition pipeline (image_processor phase2_detect, scripts/pdf_processor.py)

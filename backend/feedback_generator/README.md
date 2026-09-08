@@ -1,37 +1,171 @@
-# feedback_generator
+Feedback generation, in two phases: phase 1 judges one phrase at a time,
+phase 2 summarizes the whole session.
 
-Compares user's recorded phrase vs expected-performance notes. Generates
-per-note immediate feedback + phrase summary + scores. Plain-Python package
-(no Django app), wired via `api/views.py`'s `phrase_feedback_view`.
+Run everything from `backend/` with `DYLD_LIBRARY_PATH=/opt/homebrew/lib`
+(libvips isn't on the default linker path on macOS).
 
-**Known limitation:** `dynamics` score always `null` — no velocity/loudness
-data upstream (mobile app / `native_ffi`). Stub in `analysis.compute_dynamics_score`.
+## 1. Layout
 
-Pedal analysis not implemented — see `pedaling.py`.
+```
+feedback_generator/
+  orchestrator.py   wiring only -- parse, align, call judges, return dicts
+  summarizer.py     phase 2 -- aggregates every phrase into one summary
+  store.py          reads/writes storage/feedback/
+  errors.py
+  judges/           all feedback text and all 0-100 ratings live here
+    __init__.py     shared notes/context/Finding types, pitch + bar math,
+                    thresholds, judge registry
+    phase1/         one phrase at a time
+      __init__.py     JUDGES = run order
+      pitch.py        intonation, wrong notes
+      rhythm.py       note onsets (early/late) and note lengths
+      tempo.py        pulse drift across a phrase
+      articulation.py staccato / legato / marcato vs. markings
+      notes.py        notes not played, notes not written
+      dynamics.py     no loudness data upstream -- scores null, says nothing
+      pedaling.py     no pedal data upstream -- scores null, says nothing
+    phase2/         the whole session at once
+      __init__.py     JUDGES = run order
+      era.py          style-period performance practice
+```
 
-Era-aware overall feedback is **structure only** — see `era_score.py`. Era
-detection from a composition date (`parse_composed_year` / `detect_era` /
-`adjacent_era`) and the per-era trait data (`ERA_PROFILES`) are done; the
-per-era prose builders and `build_era_summary` are unimplemented stubs, so
-`build_era_feedback` currently returns an `EraFeedback` with `items: []` and
-an empty `summary`. Not called from `orchestrator.py`, and nothing upstream
-carries a composition date yet — the caller has to supply it.
+- Each judge owns one dimension: its detection, its rating, its wording.
+- Judge contract, same in both phases: `NAME`, `PHASE` (1 or 2),
+  `judge(ctx) -> JudgeResult`. Phase 1 gets a `PhraseContext` (that phrase's
+  aligned notes), phase 2 a `PieceContext` (every stored phrase, aggregated
+  scores, every finding).
+- Nothing outside `judges/` writes feedback text; nothing outside
+  `summarizer.py` aggregates across phrases.
+- Adding a dimension = one new file in `judges/phase1/` or `judges/phase2/`
+  + one entry in that package's `JUDGES`.
 
-## Testing
+## 2. Storage
 
-- Env: `DYLD_LIBRARY_PATH=/opt/homebrew/lib` (libvips not on default linker path, macOS)
-- Unit + view tests:
-  ```
-  cd backend
-  DYLD_LIBRARY_PATH=/opt/homebrew/lib python manage.py test feedback_generator.tests api.tests -v 2
-  ```
-- Manual smoke test:
-  ```
-  DYLD_LIBRARY_PATH=/opt/homebrew/lib python manage.py runserver
-  curl -X POST http://127.0.0.1:8000/api/feedback/phrase -H "Content-Type: application/json" -d '{...}'
-  ```
-- Endpoint: `POST /api/feedback/phrase`
-- Body: `phrase`, `timing.bpm`, `expected_notes[]`, `user_notes[]` (see `phrase_feedback_view` docstring for full schema)
+```
+storage/feedback/<date>-<piece>/       e.g. 2026-09-07-Prelude_in_C
+  Phase1/
+    Phrase1.json    one file per phrase
+    Phrase2.json
+  Phase2/
+    Summary.json    summarizer.py
+    Era.json        judges/phase2/era.py
+```
 
-Result:
-{"phrase": 0, "immediate_feedback": [{"note_id": 1, "category": "pitch", "severity": "major", "message": "Wrong note \u2014 you played D5 instead of D#5.", "suggestion": "Practice this transition slowly and focus on the correct note.", "type": "immediate"}, {"note_id": 2, "category": "pitch", "severity": "major", "message": "Wrong note \u2014 you played C3 instead of G2.", "suggestion": "Practice this transition slowly and focus on the correct note.", "type": "immediate"}, {"note_id": 2, "category": "timing", "severity": "major", "message": "This note came in late, disrupting the rhythm.", "suggestion": "Practice this passage with a metronome, focusing on landing the note exactly on the beat.", "type": "immediate"}, {"note_id": 3, "category": "timing", "severity": "major", "message": "This note came in late, disrupting the rhythm.", "suggestion": "Practice this passage with a metronome, focusing on landing the note exactly on the beat.", "type": "immediate"}, {"note_id": 4, "category": "pitch", "severity": "major", "message": "Wrong note \u2014 you played D#3 instead of C3.", "suggestion": "Practice this transition slowly and focus on the correct note.", "type": "immediate"}, {"note_id": 4, "category": "duration", "severity": "major", "message": "This note was cut short compared to what's written.", "suggestion": "Slow down and count out this note's full written duration before returning to full tempo.", "type": "immediate"}, {"note_id": 5, "category": "missing_note", "severity": "major", "message": "This note was not played.", "suggestion": "Go through this passage slowly, note-by-note, to make sure this note is included.", "type": "immediate"}], "phrase_summary": {"phrase": 0, "scores": {"overall": 54, "pitch": 43, "rhythm": 64, "tempo": 58, "dynamics": null, "articulation": null}, "summary": "Pitch was inaccurate on 3 notes in this phrase.", "main_feedback": [{"category": "pitch", "severity": "major", "description": "Pitch was inaccurate on 3 notes in this phrase.", "practice_action": "Isolate the affected note(s) and check them against the expected pitch before playing the phrase at full tempo."}, {"category": "timing", "severity": "major", "description": "2 notes were noticeably early or late.", "practice_action": "Practice this phrase with a metronome, focusing on landing each note exactly on the beat."}, {"category": "missing_note", "severity": "major", "description": "One expected note was not played.", "practice_action": "Go through the phrase slowly note-by-note to make sure every note is played."}], "positive_feedback": [], "type": "phrase_summary"}}%   
+- No DB table -- JSON on disk, like `pdf_processor`'s piece_data.
+- Session directory defaults to today's date + the piece title, so phrases
+  of one piece group themselves; pass `session_id` to target one explicitly.
+- Phrases are 1-based, and re-sending a phrase overwrites just that file.
+- Phase 2 is re-runnable: each run overwrites `Phase2/` with a snapshot of
+  every phrase stored so far.
+- Piece metadata (title/composer/composed_date) is stored in each phase-1
+  file header; phase 2 reads it back from there.
+
+Phase-1 file:
+
+```json
+{"piece": {...}, "recorded_at": "...", "phrase": 1, "bpm": 96.0,
+ "time_signature": "4/4", "bars": [1, 4],
+ "scores": {"overall": 85, "pitch": 79, "rhythm": 92, "tempo": null,
+            "dynamics": null, "articulation": null},
+ "feedback": [{"bars": 1, "category": "pitch", "severity": "major",
+               "confidence": 1.0, "message": "...", "details": {...}}]}
+```
+
+- `feedback` is the unit everywhere -- phase 2 uses the same shape.
+- `bars` on a finding = the bar it happened in, numbered from the piece
+  start using `bpm` + `time_signature`; `bars` on the file = the span.
+- `severity` is `minor`/`major`; `confidence` is 0.5 at the "this is an
+  error" threshold, rising to 1.0 for an unmistakable one.
+- `details` carries the numbers behind the call (cents, ms, ratio) plus a
+  `suggestion`.
+- A `null` score means that judge had nothing to measure, and it drops out
+  of `overall` instead of counting as zero. `dynamics` and `pedaling` are
+  always null: no note schema upstream (mobile app / native_ffi /
+  pdf_processor) carries loudness or pedal events.
+
+## 3. Quick test
+
+```
+python manage.py test feedback_generator.tests api.tests -v 2
+```
+
+- 77 tests, no server needed.
+- Writes nothing into `backend/storage/` — `STORAGE_ROOT` points at a temp dir.
+
+## 4. Debug test to storage
+
+```
+python manage.py runserver 0.0.0.0:8000
+```
+
+Phase 1 — POST one phrase (the same request the app sends,
+`frontend/lib/Send_Strings_2Server.dart`):
+
+```
+curl -s -X POST http://127.0.0.1:8000/api/feedback/phrase \
+  -H "Content-Type: application/json" \
+  -d '{
+    "phrase": 1,
+    "timing": {"bpm": 96, "time_signature": "4/4"},
+    "piece": {"title": "Prelude in C", "composer": "Bach", "composed_date": "1722"},
+    "expected_notes": [
+      {"note_id": 1, "pitch_hz": 261.63, "start_time_ms": 0,   "end_time_ms": 625,  "duration_ms": 625},
+      {"note_id": 2, "pitch_hz": 293.66, "start_time_ms": 625, "end_time_ms": 1250, "duration_ms": 625}
+    ],
+    "user_notes": [
+      {"note_id": 1, "pitch_hz": 261.63, "start_time_ms": 0,   "end_time_ms": 625,  "duration_ms": 625},
+      {"note_id": 2, "pitch_hz": 277.18, "start_time_ms": 765, "end_time_ms": 1390, "duration_ms": 625}
+    ]
+  }' | python -m json.tool
+```
+
+- Note 2 is a semitone flat and 140 ms late, so there's something to say;
+  `expected_notes` must be non-empty, `user_notes` may be (silence -> every
+  note comes back missing).
+- The response ends with what it wrote:
+
+```
+    "session_id": "2026-09-07-Prelude_in_C",
+    "stored_at": "storage/feedback/2026-09-07-Prelude_in_C/Phase1/Phrase1.json"
+```
+
+- Send `"phrase": 2` with the same `session_id` for the next phrase; reuse a
+  phrase number to overwrite that take.
+- Use the LAN address (`ipconfig getifaddr en0`) to test from the phone.
+
+Phase 2 — summarize everything stored for that session:
+
+```
+curl -s -X POST http://127.0.0.1:8000/api/feedback/summary \
+  -H "Content-Type: application/json" \
+  -d '{"session_id": "2026-09-07-Prelude_in_C"}' | python -m json.tool
+```
+
+- Writes `Phase2/Summary.json` (piece-wide scores, top 3 recurring
+  problems, what went well, one-line summary) and `Phase2/Era.json`.
+- 404 if the session has no phase-1 phrases yet.
+- `backend/storage/` is **not** gitignored — clean up with
+  `rm -r storage/feedback`.
+
+## 5. `judges/phase2/era.py` status
+
+- Structure only: date parsing, era detection and the per-era trait tables
+  work; the `_<era>_feedback` builders and `build_era_summary` are
+  deliberately unimplemented, so `Era.json` comes out with
+  `era`/`label`/`traits` filled in and `feedback: []`.
+
+```
+python -c "
+from feedback_generator.judges.phase2.era import parse_composed_year, detect_era, adjacent_era
+for d in [1722, '1810', 'ca. 1785', '1830s', '1802-1804', '18th century', None, 'unknown']:
+    y = parse_composed_year(d); e = detect_era(d); a = adjacent_era(y)
+    print(repr(d), '->', y, e.label if e else None, '| adjacent:', a.label if a else None)
+"
+```
+
+- Expect `1722 -> 1722 Baroque`, `'1810' -> 1810 Classical | adjacent: Romantic`
+  (within `TRANSITION_MARGIN_YEARS` of 1820), `'1830s' -> 1835`,
+  `'1802-1804' -> 1803` (midpoint), `'18th century' -> 1750`.
+- `None`/`''`/`'unknown' -> None None`, i.e. the era section stays empty.
+- Once the builders produce prose, extend `EraDetectionTests`/`JudgePieceTests`
+  in `tests.py` with the boundary years (1749/1750, 1819/1820).

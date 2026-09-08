@@ -11,4 +11,5 @@ urlpatterns = [
     path("api/imslp/download", imslp_downloader_api.download_view),
     path("api/score/process", views.process_score_view),
     path("api/feedback/phrase", views.phrase_feedback_view),
+    path("api/feedback/summary", views.summary_feedback_view),
 ]

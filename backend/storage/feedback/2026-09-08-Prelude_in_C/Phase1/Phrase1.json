@@ -1,0 +1,57 @@
+{
+  "piece": {
+    "title": "Prelude in C",
+    "composer": "Bach",
+    "composed_date": "1722"
+  },
+  "recorded_at": "2026-09-08T02:32:36.278909+00:00",
+  "phrase": 1,
+  "bpm": 96,
+  "time_signature": "4/4",
+  "bars": [
+    1,
+    1
+  ],
+  "scores": {
+    "overall": 85,
+    "pitch": 79,
+    "rhythm": 92,
+    "tempo": null,
+    "dynamics": null,
+    "articulation": null,
+    "notes": null,
+    "pedaling": null
+  },
+  "feedback": [
+    {
+      "bars": 1,
+      "category": "pitch",
+      "severity": "major",
+      "confidence": 1.0,
+      "message": "Wrong note \u2014 you played C#4 instead of D4.",
+      "details": {
+        "note_id": 2,
+        "cents": -100.0,
+        "expected_hz": 293.66,
+        "user_hz": 277.18,
+        "expected_note": "D4",
+        "user_note": "C#4",
+        "suggestion": "Practice this transition slowly and focus on the correct note."
+      }
+    },
+    {
+      "bars": 1,
+      "category": "rhythm",
+      "severity": "minor",
+      "confidence": 0.66,
+      "message": "This note came in late, disrupting the rhythm.",
+      "details": {
+        "note_id": 2,
+        "issue": "onset",
+        "diff_ms": 140,
+        "direction": "late",
+        "suggestion": "Practice this passage with a metronome, focusing on landing the note exactly on the beat."
+      }
+    }
+  ]
+}

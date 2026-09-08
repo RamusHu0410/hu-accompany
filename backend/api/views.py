@@ -10,8 +10,9 @@ from imslp_search.main import search_imslp
 from imslp_search.errors import IMSLPNetworkError, WorkNotFoundError
 from imslp_search.services import imslp_service
 import pdf_processor
-from feedback_generator import generate_feedback
-from feedback_generator.errors import InvalidNoteData
+from feedback_generator import judge_phrase, judge_piece
+from feedback_generator import store as feedback_store
+from feedback_generator.errors import InvalidNoteData, InvalidSessionId, StorageFailed
 
 
 @csrf_exempt
@@ -117,30 +118,45 @@ def process_score_view(request):
 @csrf_exempt
 @require_http_methods(["POST"])
 def phrase_feedback_view(request):
-    """POST /api/feedback/phrase — compare one recorded musical phrase's
-    detected user notes against the corresponding expected-performance
-    notes (same schema as pdf_processor's piece_data notes / native_ffi's
-    Notes struct) and generate feedback: per-note "immediate" feedback
-    items for significant pitch/timing/duration/missing/extra/articulation
-    errors, plus a phrase-level "phrase_summary" with 0-100 pitch/rhythm/
-    tempo/dynamics/articulation/overall scores, a short summary, up to 3
-    prioritized main_feedback problems, and positive_feedback.
+    """POST /api/feedback/phrase — phase 1: compare one recorded phrase's
+    detected user notes against the corresponding expected-performance notes
+    (same schema as pdf_processor's piece_data notes / native_ffi's Notes
+    struct) and return that phrase's feedback: one finding per significant
+    pitch/rhythm/tempo/articulation/missing/extra problem, each tagged with
+    the bar it happened in, plus 0-100 per-dimension scores.
 
-    Numeric comparison/error-detection (feedback_generator.analysis) is
-    kept architecturally separate from natural-language message/summary
-    generation (feedback_generator.nlg). Pedal analysis is a no-op
-    placeholder (feedback_generator.pedaling.analyze_pedaling) and is not
-    called from this endpoint yet. The "dynamics" score is always null --
-    see feedback_generator/README.md.
+    Phase 1 is deliberately bar-by-bar only -- no summary. Summarizing every
+    phrase is phase 2 (/api/feedback/summary). One judge per dimension owns
+    both its rating and its wording (feedback_generator/judges/); the
+    orchestrator only wires them together. "dynamics" and "pedaling" score
+    null because nothing upstream carries loudness or pedal data — see
+    feedback_generator/README.md.
 
-    Body: {"phrase": int, "timing": {"bpm": float},
+    Each phrase is written to
+    storage/feedback/<date>-<piece>/Phase1/Phrase<n>.json
+    (feedback_generator.store) -- there is no DB table for feedback. The
+    session directory defaults to today's date plus the piece title, so
+    consecutive phrases of the same piece group themselves; pass
+    `session_id` to target one explicitly. Re-sending a phrase number
+    overwrites that phrase's file. Saving is best-effort: if the write fails
+    the feedback is still returned, with the reason in `storage_error`.
+
+    Body: {"phrase": int >= 1,
+           "timing": {"bpm": float, "time_signature": "4/4" (optional,
+             used to number bars)},
            "expected_notes": [ {note_id, pitch_hz, start_time_ms,
              end_time_ms, duration_ms, vibrato_depth, pedal_action,
              has_accent, markings}, ... ],
            "user_notes": [ {note_id, pitch_hz, start_time_ms, end_time_ms,
-             duration_ms, has_accent}, ... ]}
+             duration_ms, has_accent}, ... ],
+           "session_id": str (optional),
+           "piece": {...} (optional, stored as-is -- e.g. title, composer,
+             composed_date, which phase 2's era judge reads back)}
     `expected_notes` must be non-empty. `user_notes` may be empty (silence
-    -> every expected note comes back as "missing").
+    -> every expected note comes back as a missing-note finding).
+
+    Response: judge_phrase()'s dict plus "session_id" and "stored_at"
+    (a storage/... path), or "storage_error" if it couldn't be saved.
     """
     try:
         body = json.loads(request.body)
@@ -150,28 +166,122 @@ def phrase_feedback_view(request):
     phrase = body.get("phrase")
     timing = body.get("timing") or {}
     bpm = timing.get("bpm")
+    time_signature = timing.get("time_signature")
     expected_notes = body.get("expected_notes")
     user_notes = body.get("user_notes")
+    session_id = body.get("session_id")
+    piece = body.get("piece")
 
-    if not isinstance(phrase, int):
-        return JsonResponse({"error": "phrase (int) is required"}, status=400)
+    if not isinstance(phrase, int) or isinstance(phrase, bool) or phrase < 1:
+        return JsonResponse({"error": "phrase (int >= 1) is required"}, status=400)
     if not isinstance(bpm, (int, float)) or isinstance(bpm, bool) or bpm <= 0:
         return JsonResponse({"error": "timing.bpm (positive number) is required"}, status=400)
     if not isinstance(expected_notes, list) or not expected_notes:
         return JsonResponse({"error": "expected_notes (non-empty list) is required"}, status=400)
     if not isinstance(user_notes, list):
         return JsonResponse({"error": "user_notes (list) is required"}, status=400)
+    if piece is not None and not isinstance(piece, dict):
+        return JsonResponse({"error": "piece must be an object"}, status=400)
+    if session_id is not None:
+        try:
+            feedback_store.validate_session_id(session_id)
+        except InvalidSessionId as e:
+            return JsonResponse({"error": str(e)}, status=400)
 
     try:
-        result = generate_feedback(
-            phrase=phrase, bpm=bpm, expected_notes=expected_notes, user_notes=user_notes
+        result = judge_phrase(
+            phrase=phrase,
+            bpm=bpm,
+            expected_notes=expected_notes,
+            user_notes=user_notes,
+            time_signature=time_signature,
         )
     except InvalidNoteData as e:
         return JsonResponse({"error": str(e)}, status=400)
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=500)
 
+    # Persisting is best-effort: a full disk shouldn't cost the user their
+    # feedback, so a failed write is reported alongside the result.
+    try:
+        session_id, stored_path = feedback_store.save_phrase(
+            settings.STORAGE_ROOT, result, session_id=session_id, piece=piece
+        )
+        result["session_id"] = session_id
+        result["stored_at"] = _storage_path(stored_path)
+    except (StorageFailed, OSError) as e:
+        result["session_id"] = session_id
+        result["stored_at"] = None
+        result["storage_error"] = str(e)
+
     return JsonResponse(result)
+
+
+def _storage_path(path) -> str:
+    return score_storage.to_db_path(Path(path).relative_to(settings.STORAGE_ROOT))
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def summary_feedback_view(request):
+    """POST /api/feedback/summary — phase 2: summarize a whole practice
+    session.
+
+    Reads back every Phase1/Phrase<n>.json of `session_id`, aggregates the
+    judges' per-phrase scores, ranks the recurring problems
+    (feedback_generator.summarizer), and runs the phase-2-only judges
+    (feedback_generator/judges/phase2/era.py, which needs piece.composed_date --
+    stored with the phrases in phase 1, or overridden by `piece` here).
+
+    Writes one file per phase-2 judge into
+    storage/feedback/<session_id>/Phase2/ (Summary.json, Era.json) and
+    returns them. Re-runnable: each run overwrites Phase2 with a snapshot of
+    every phrase judged so far.
+
+    Body: {"session_id": str, "piece": {...} (optional override)}
+    Response: {"session_id", "phrases": [n, ...], "stored_at": {name: path},
+               "phase2": {"Summary": {...}, "Era": {...}}}
+    """
+    try:
+        body = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "invalid JSON"}, status=400)
+
+    session_id = body.get("session_id")
+    piece = body.get("piece")
+
+    if piece is not None and not isinstance(piece, dict):
+        return JsonResponse({"error": "piece must be an object"}, status=400)
+    try:
+        feedback_store.validate_session_id(session_id)
+    except InvalidSessionId as e:
+        return JsonResponse({"error": str(e)}, status=400)
+
+    try:
+        phrases = feedback_store.load_phrases(settings.STORAGE_ROOT, session_id)
+    except StorageFailed as e:
+        return JsonResponse({"error": str(e)}, status=500)
+    if not phrases:
+        return JsonResponse({"error": f"no phase-1 phrases stored for session {session_id}"}, status=404)
+
+    try:
+        phase2 = judge_piece(phrases, piece=piece or feedback_store.load_piece(phrases))
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=500)
+
+    response = {
+        "session_id": session_id,
+        "phrases": [entry.get("phrase") for entry in phrases],
+        "phase2": phase2,
+    }
+    try:
+        written = feedback_store.save_phase2(settings.STORAGE_ROOT, session_id, phase2)
+        response["stored_at"] = {name: _storage_path(path) for name, path in written.items()}
+    except (StorageFailed, OSError) as e:
+        response["stored_at"] = None
+        response["storage_error"] = str(e)
+
+    return JsonResponse(response)
 
 
 @csrf_exempt

@@ -1,24 +1,32 @@
-"""Era-aware feedback for the overall (whole-piece) summary: maps a piece's
-composition date onto a stylistic period, then turns that period's
-performance-practice traits into feedback.
+"""Era judge -- phase 2 only.
 
-Kept as its own module -- like pedaling.py -- because nothing upstream
-currently carries a composition date (imslp_search's WorkResult/Choice and
-pdf_processor's piece_data have title/composer but no date), so the caller
-has to supply it. Not wired into orchestrator.py yet.
+Maps the piece's composition date onto a stylistic period, then measures the
+whole performance against that period's performance-practice traits: not
+"were the notes right" (phase 1 already answered that) but "was this played
+the way music of this era is played".
 
-Status: structure only. Era detection and the per-era trait data below are
-implemented; the prose generation in each `_<era>_feedback` builder is
-deliberately left unimplemented.
+Phase 2 only, because a style period is a property of the piece, not of any
+one phrase, and the traits below only mean something across a whole
+performance. Nothing upstream carries a composition date (imslp_search's
+WorkResult/Choice and pdf_processor's piece_data have title/composer but no
+date), so the caller supplies it as piece["composed_date"].
+
+Status: structure only. Era detection and the per-era trait data are
+implemented; the prose in each `_<era>_feedback` builder is deliberately
+left unimplemented, so Era.json comes out with era/label/traits filled in
+and an empty findings list.
 """
 
 import re
 from dataclasses import dataclass
 from typing import Callable, Dict, List, Optional, Tuple
 
-from .models import EraFeedback, EraFeedbackItem, ScoreBreakdown
+from .. import Finding, JudgeResult, PieceContext
 
-# Era keys -- also the values surfaced in EraFeedback.era.
+NAME = "era"
+PHASE = 2
+
+# Era keys -- also the values surfaced in the stored Era.json.
 RENAISSANCE = "renaissance"
 BAROQUE = "baroque"
 CLASSICAL = "classical"
@@ -37,8 +45,8 @@ TRANSITION_MARGIN_YEARS = 15
 class EraProfile:
     """A style period plus the performance-practice traits feedback for that
     period should key on. `start_year`/`end_year` are inclusive; None means
-    open-ended. `emphasis` multiplies a ScoreBreakdown dimension's importance
-    when weighing which traits matter most for this era."""
+    open-ended. `emphasis` multiplies a score dimension's importance when
+    weighing which traits matter most for this era."""
 
     era: str
     label: str
@@ -228,41 +236,42 @@ def adjacent_era(year: Optional[int], margin_years: int = TRANSITION_MARGIN_YEAR
 
 # --- Per-era feedback builders (not implemented yet) -------------------------
 #
-# Each builder receives the detected era's profile, the piece-level scores,
-# and the piece-level errors (analysis.NoteError), and returns the
-# EraFeedbackItem list for that era -- i.e. how this performance measured up
-# against *that era's* traits, not just against the notes. Deliberately left
-# blank; only the dispatch structure is in place.
+# Each builder receives the detected era's profile and the whole-piece
+# context (piece metadata, every phase-1 phrase file, aggregated scores, and
+# every phase-1 finding), and returns this era's Findings -- i.e. how the
+# performance measured up against *that era's* traits, not just against the
+# notes. Deliberately left blank; only the dispatch structure is in place.
 
-def _renaissance_feedback(profile: EraProfile, scores: ScoreBreakdown, errors: List) -> List[EraFeedbackItem]:
+
+def _renaissance_feedback(profile: EraProfile, ctx: PieceContext) -> List[Finding]:
     pass
 
 
-def _baroque_feedback(profile: EraProfile, scores: ScoreBreakdown, errors: List) -> List[EraFeedbackItem]:
+def _baroque_feedback(profile: EraProfile, ctx: PieceContext) -> List[Finding]:
     pass
 
 
-def _classical_feedback(profile: EraProfile, scores: ScoreBreakdown, errors: List) -> List[EraFeedbackItem]:
+def _classical_feedback(profile: EraProfile, ctx: PieceContext) -> List[Finding]:
     pass
 
 
-def _romantic_feedback(profile: EraProfile, scores: ScoreBreakdown, errors: List) -> List[EraFeedbackItem]:
+def _romantic_feedback(profile: EraProfile, ctx: PieceContext) -> List[Finding]:
     pass
 
 
-def _late_romantic_feedback(profile: EraProfile, scores: ScoreBreakdown, errors: List) -> List[EraFeedbackItem]:
+def _late_romantic_feedback(profile: EraProfile, ctx: PieceContext) -> List[Finding]:
     pass
 
 
-def _modern_feedback(profile: EraProfile, scores: ScoreBreakdown, errors: List) -> List[EraFeedbackItem]:
+def _modern_feedback(profile: EraProfile, ctx: PieceContext) -> List[Finding]:
     pass
 
 
-def _contemporary_feedback(profile: EraProfile, scores: ScoreBreakdown, errors: List) -> List[EraFeedbackItem]:
+def _contemporary_feedback(profile: EraProfile, ctx: PieceContext) -> List[Finding]:
     pass
 
 
-_ERA_FEEDBACK_BUILDERS: Dict[str, Callable[[EraProfile, ScoreBreakdown, List], List[EraFeedbackItem]]] = {
+_ERA_FEEDBACK_BUILDERS: Dict[str, Callable[[EraProfile, PieceContext], List[Finding]]] = {
     RENAISSANCE: _renaissance_feedback,
     BAROQUE: _baroque_feedback,
     CLASSICAL: _classical_feedback,
@@ -273,33 +282,42 @@ _ERA_FEEDBACK_BUILDERS: Dict[str, Callable[[EraProfile, ScoreBreakdown, List], L
 }
 
 
-def build_era_summary(profile: EraProfile, items: List[EraFeedbackItem], transitional: Optional[EraProfile]) -> str:
-    """One-line era framing for the overall summary. Not implemented yet."""
+def build_era_summary(profile: EraProfile, findings: List[Finding], transitional: Optional[EraProfile]) -> str:
+    """One-line era framing for the phase-2 summary. Not implemented yet."""
     pass
 
 
-def build_era_feedback(composed_date, scores: ScoreBreakdown, errors: Optional[List] = None) -> EraFeedback:
-    """Era-aware slice of the overall feedback for one piece.
+def judge(ctx: PieceContext) -> JudgeResult:
+    """Era-aware slice of the whole-piece feedback.
 
-    Detects the style period from `composed_date` and dispatches to that
-    era's builder. When the date is missing/unparseable or falls outside the
-    covered ranges, returns an EraFeedback with era/label/composed_year None
-    and no items, so callers can simply omit the section.
+    Detects the style period from piece["composed_date"] and dispatches to
+    that era's builder. When the date is missing/unparseable or falls
+    outside the covered ranges, `era`/`label` come back None with no
+    findings, so callers can simply omit the section.
     """
-    year = parse_composed_year(composed_date)
+    year = parse_composed_year((ctx.piece or {}).get("composed_date"))
     profile = era_for_year(year)
     if profile is None:
-        return EraFeedback(era=None, label=None, composed_year=year)
+        return JudgeResult(
+            category=NAME,
+            score=None,
+            details={"era": None, "label": None, "composed_year": year, "traits": [], "summary": ""},
+        )
 
     builder = _ERA_FEEDBACK_BUILDERS.get(profile.era)
-    items = builder(profile, scores, errors or []) if builder is not None else None
-    summary = build_era_summary(profile, items or [], adjacent_era(year))
+    findings = (builder(profile, ctx) if builder is not None else None) or []
+    transitional = adjacent_era(year)
 
-    return EraFeedback(
-        era=profile.era,
-        label=profile.label,
-        composed_year=year,
-        traits=list(profile.traits),
-        items=items or [],
-        summary=summary or "",
+    return JudgeResult(
+        category=NAME,
+        score=None,
+        findings=findings,
+        details={
+            "era": profile.era,
+            "label": profile.label,
+            "composed_year": year,
+            "transitional_with": transitional.label if transitional else None,
+            "traits": list(profile.traits),
+            "summary": build_era_summary(profile, findings, transitional) or "",
+        },
     )
