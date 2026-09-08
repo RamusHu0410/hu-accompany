@@ -1,3 +1,4 @@
-rust_input: crate::api
-rust_root: ../native_ffi/
-dart_output: lib/src/rust
+rust_root: "../native_ffi/"
+rust_input: "crate::api"
+dart_output: "lib/src/rust"
+

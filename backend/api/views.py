@@ -2,7 +2,7 @@ import json
 from pathlib import Path
 
 from django.conf import settings
-from django.http import JsonResponse
+from django.http import JsonResponse, HttpRequest
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 from imslp_downloader import storage as score_storage
@@ -17,7 +17,7 @@ from feedback_generator.errors import InvalidNoteData, InvalidSessionId, Storage
 
 @csrf_exempt
 @require_http_methods(["POST"])
-def chat_view(request):
+def chat_view(request: HttpRequest):
     try:
         body = json.loads(request.body)
         prompt = body.get("prompt", "").strip()
@@ -32,7 +32,7 @@ def chat_view(request):
 
 @csrf_exempt
 @require_http_methods(["POST"])
-def search_view(request):
+def search_view(request: HttpRequest):
     client_ip = request.META.get("REMOTE_ADDR")
     try:
         body = json.loads(request.body)
@@ -53,7 +53,7 @@ def search_view(request):
 
 @csrf_exempt
 @require_http_methods(["POST"])
-def process_score_view(request):
+def process_score_view(request: HttpRequest):
     """POST /api/score/process — run the oemer-based OMR pipeline
     (backend/pdf_processor) on a stored score PDF: clean up scan noise with
     adaptive thresholding + morphology (backend/image_enhancer), split into
@@ -96,23 +96,25 @@ def process_score_view(request):
     def to_db_path(path):
         return score_storage.to_db_path(Path(path).relative_to(settings.STORAGE_ROOT))
 
-    return JsonResponse({
-        "file_path": file_path,
-        "enhanced_pdf": to_db_path(result["enhanced_pdf"]),
-        "pages": to_db_paths(result["pages"]),
-        "musicxml": to_db_paths(result["musicxml"]),
-        "debug_png": to_db_paths(result["debug_png"]),
-        "notes_json": to_db_paths(result["notes_json"]),
-        "markings_json": to_db_paths(result["markings_json"]),
-        "markings_debug_png": to_db_paths(result["markings_debug_png"]),
-        "piece_json": to_db_path(result["piece_json"]),
-        "piece_data": result["piece_data"],
-        "bpm": result["bpm"],
-        "time_signature": result["time_signature"],
-        "note_count": len(result["notes"]),
-        "marking_count": len(result["markings"]),
-        "timing": result["timing"],
-    })
+    return JsonResponse(
+        {
+            "file_path": file_path,
+            "enhanced_pdf": to_db_path(result["enhanced_pdf"]),
+            "pages": to_db_paths(result["pages"]),
+            "musicxml": to_db_paths(result["musicxml"]),
+            "debug_png": to_db_paths(result["debug_png"]),
+            "notes_json": to_db_paths(result["notes_json"]),
+            "markings_json": to_db_paths(result["markings_json"]),
+            "markings_debug_png": to_db_paths(result["markings_debug_png"]),
+            "piece_json": to_db_path(result["piece_json"]),
+            "piece_data": result["piece_data"],
+            "bpm": result["bpm"],
+            "time_signature": result["time_signature"],
+            "note_count": len(result["notes"]),
+            "marking_count": len(result["markings"]),
+            "timing": result["timing"],
+        }
+    )
 
 
 @csrf_exempt
@@ -175,9 +177,13 @@ def phrase_feedback_view(request):
     if not isinstance(phrase, int) or isinstance(phrase, bool) or phrase < 1:
         return JsonResponse({"error": "phrase (int >= 1) is required"}, status=400)
     if not isinstance(bpm, (int, float)) or isinstance(bpm, bool) or bpm <= 0:
-        return JsonResponse({"error": "timing.bpm (positive number) is required"}, status=400)
+        return JsonResponse(
+            {"error": "timing.bpm (positive number) is required"}, status=400
+        )
     if not isinstance(expected_notes, list) or not expected_notes:
-        return JsonResponse({"error": "expected_notes (non-empty list) is required"}, status=400)
+        return JsonResponse(
+            {"error": "expected_notes (non-empty list) is required"}, status=400
+        )
     if not isinstance(user_notes, list):
         return JsonResponse({"error": "user_notes (list) is required"}, status=400)
     if piece is not None and not isinstance(piece, dict):
@@ -286,7 +292,20 @@ def summary_feedback_view(request):
 
 @csrf_exempt
 @require_http_methods(["POST"])
-def imslp_search_view(request):
+def pdmx_search_view(request: HttpRequest):
+    client_ip = request.META.get("REMOTE_ADDR")
+    try:
+        body = json.loads(request.body)
+        url = (body.get("url") or "").strip()
+        query = (body.get("query") or "").strip()
+        return
+    except Exception as e:
+        ...
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def imslp_search_view(request: HttpRequest):
     client_ip = request.META.get("REMOTE_ADDR")
     try:
         body = json.loads(request.body)

@@ -9,6 +9,7 @@ urlpatterns = [
     path("developer/api/search", views.search_view),
     path("api/imslp/search", views.imslp_search_view),
     path("api/imslp/download", imslp_downloader_api.download_view),
+    path("api/pdmx/search", views.pdmx_search_view),
     path("api/score/process", views.process_score_view),
     path("api/feedback/phrase", views.phrase_feedback_view),
     path("api/feedback/summary", views.summary_feedback_view),

@@ -4,7 +4,7 @@ publish_to: 'none'
 version: 0.1.0+1
 
 environment:
-  sdk: ^3.12.2
+  sdk: '>=3.10.0 <4.0.0'
 
 dependencies:
   flutter:
@@ -16,7 +16,7 @@ dependencies:
   webview_flutter: ^4.14.1
   nsd: ^5.0.1
   pdfx: ^2.9.2
-  flutter_rust_bridge: 2.13.0
+  flutter_rust_bridge: 2.12.0
 
 dev_dependencies:
   flutter_test:
