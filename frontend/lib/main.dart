@@ -15,6 +15,15 @@ typedef StartRecordingFuncDart = void Function();
 typedef StopRecordingFunc = ffi.Void Function();
 typedef StopRecordingFuncDart = void Function();
 
+/// Which companion is shown beside the score.
+enum CharacterType { wave, tsundereMusic }
+
+/// The three visual reactions available for Tsundere Music.
+///
+/// The Rust performance callback should set this to [mad] for a wrong note,
+/// [enjoying] for a correct note, and [normal] while idle or between phrases.
+enum CharacterMood { normal, mad, enjoying }
+
 // ─── Safe no-op stubs used when native symbols are unavailable ───────────────
 void _stubStart() =>
     debugPrint('NativeBridge: start_recording stub (symbols not linked yet)');
@@ -99,18 +108,14 @@ class HuAccumponistApp extends StatelessWidget {
       theme: ThemeData(
         brightness: Brightness.light,
         scaffoldBackgroundColor: const Color(0xFFF7F2E7),
-        colorScheme: const ColorScheme.light(
-          primary: Color(0xFF9A7A2C),
-        ),
+        colorScheme: const ColorScheme.light(primary: Color(0xFF9A7A2C)),
       ),
       // App now opens onto the vinyl spin-up splash and lands on the
       // turntable navigator (Practice / Search / Shelf, chosen by spinning
       // a record) instead of dropping straight into the score viewer.
       // ScoreViewerPage is still fully intact below — it's just one of the
       // records on the platter now (see Record_Navigator_Page.dart).
-      home: const Vinyl_Loading_Screen(
-        child: Record_Navigator_Page(),
-      ),
+      home: const Vinyl_Loading_Screen(child: Record_Navigator_Page()),
     );
   }
 }
@@ -124,8 +129,59 @@ class ScoreViewerPage extends StatefulWidget {
 }
 
 class _ScoreViewerPageState extends State<ScoreViewerPage> {
+  final _scaffoldKey = GlobalKey<ScaffoldState>();
+
   bool _isDrawingMode = false;
   bool _isErasing = false;
+  bool _isRecording = false;
+
+  CharacterType _selectedCharacter = CharacterType.wave;
+  CharacterMood _tsundereMood = CharacterMood.normal;
+
+  String get _characterAsset {
+    switch (_selectedCharacter) {
+      case CharacterType.wave:
+        return 'assets/images/wave.png';
+      case CharacterType.tsundereMusic:
+        switch (_tsundereMood) {
+          case CharacterMood.normal:
+            return 'assets/images/Tsundere_Music.png';
+          case CharacterMood.mad:
+            return 'assets/images/Tsundere_Music_Mad.png';
+          case CharacterMood.enjoying:
+            return 'assets/images/Tsundere_Music_Listen.png';
+        }
+    }
+  }
+
+  /// Call this from the Flutter-Rust-Bridge performance-result callback.
+  void setCharacterMood(CharacterMood mood) {
+    if (!mounted) return;
+    setState(() => _tsundereMood = mood);
+  }
+
+  /// Convenience entry point for a Rust result that reports whether a note
+  /// was correct. Replace the bool with the Rust result type when it is wired
+  /// into Flutter-Rust-Bridge.
+  void applyPerformanceResult({required bool playedCorrectly}) {
+    setCharacterMood(
+      playedCorrectly ? CharacterMood.enjoying : CharacterMood.mad,
+    );
+  }
+
+  void _onRecordingChanged(bool isRecording) {
+    if (isRecording) {
+      _nativeBridge.startRecording();
+    } else {
+      _nativeBridge.stopRecording();
+      // The next Rust analysis result will replace this idle expression.
+      setCharacterMood(CharacterMood.normal);
+    }
+
+    if (mounted) {
+      setState(() => _isRecording = isRecording);
+    }
+  }
 
   // Null until a sheet has been picked from the library.
   Uint8List? _pdfBytes;
@@ -139,8 +195,7 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
   // Swaps in a new score, or clears it if [pdfBytes] is null.
   void _setScore(Uint8List? pdfBytes) {
     _pdfBytes = pdfBytes;
-    _pageController =
-        pdfBytes != null ? ScorePageController(pdfBytes) : null;
+    _pageController = pdfBytes != null ? ScorePageController(pdfBytes) : null;
   }
 
   @override
@@ -173,8 +228,7 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
         transitionDuration: const Duration(milliseconds: 400),
         pageBuilder: (context, animation, secondaryAnimation) =>
             const Music_Library_Page(),
-        transitionsBuilder:
-            (context, animation, secondaryAnimation, child) {
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
           final tween = Tween(
             begin: const Offset(0.0, 1.0),
             end: Offset.zero,
@@ -205,16 +259,25 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
     const lightGold = Color(0xFFD8C58D);
 
     return Scaffold(
+      key: _scaffoldKey,
       backgroundColor: ivory,
+      drawerEnableOpenDragGesture: false,
+      drawer: _CharacterSettingsDrawer(
+        selectedCharacter: _selectedCharacter,
+        selectedMood: _tsundereMood,
+        isRecording: _isRecording,
+        onCharacterChanged: (character) {
+          setState(() => _selectedCharacter = character);
+        },
+        onMoodChanged: setCharacterMood,
+      ),
       body: SafeArea(
         child: Stack(
           children: [
             // ─────────────────────────────────────────────
             // CLEAN IVORY BACKGROUND
             // ─────────────────────────────────────────────
-            Positioned.fill(
-              child: Container(color: ivory),
-            ),
+            Positioned.fill(child: Container(color: ivory)),
 
             // Very subtle top border, matching the reference page.
             Positioned(
@@ -232,7 +295,9 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
             // ─────────────────────────────────────────────
             Positioned.fill(
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(54, 54, 54, 58),
+                // Keep the score clear of the top tools and bottom actions,
+                // while using nearly the entire available width on a phone.
+                padding: const EdgeInsets.fromLTRB(12, 72, 12, 82),
                 child: Container(
                   decoration: BoxDecoration(
                     color: paper,
@@ -253,9 +318,7 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
                     children: [
                       if (_hasScore)
                         Positioned.fill(
-                          child: Score_Pages_View(
-                            controller: _pageController!,
-                          ),
+                          child: Score_Pages_View(controller: _pageController!),
                         )
                       else
                         const Center(
@@ -329,7 +392,21 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
             ),
 
             // ─────────────────────────────────────────────
-            // TOP RIGHT TOOLS
+            // SETTINGS
+            // ─────────────────────────────────────────────
+            Positioned(
+              top: 16,
+              left: 22,
+              child: _ElegantToolButton(
+                icon: Icons.tune_rounded,
+                active: false,
+                color: gold,
+                onTap: () => _scaffoldKey.currentState?.openDrawer(),
+              ),
+            ),
+
+            // ─────────────────────────────────────────────
+            // TOP RIGHT DRAWING TOOLS
             // ─────────────────────────────────────────────
             Positioned(
               top: 16,
@@ -403,22 +480,38 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
               ),
 
             // ─────────────────────────────────────────────
-            // ANIME MUSIC GIRL
+            // CHARACTER COMPANION
             // ─────────────────────────────────────────────
             Positioned(
-              right: 14,
-              bottom: 4,
+              right: 0,
+              bottom: 0,
               child: IgnorePointer(
                 child: SizedBox(
-                  width: 145,
-                  height: 175,
-                  child: Image.asset(
-                    'assets/images/wave.jpg',
-                    fit: BoxFit.contain,
+                  // Tsundere is intentionally smaller than Wave so the score
+                  // remains easy to read. Both images are bottom-right aligned
+                  // so their feet sit on the screen's bottom edge.
+                  width: _selectedCharacter == CharacterType.tsundereMusic
+                      ? 205
+                      : 250,
+                  height: _selectedCharacter == CharacterType.tsundereMusic
+                      ? 285
+                      : 310,
+                  child: AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 220),
+                    child: Image.asset(
+                      _characterAsset,
+                      key: ValueKey(_characterAsset),
+                      fit: BoxFit.contain,
+                      alignment: Alignment.bottomRight,
+                    ),
                   ),
                 ),
               ),
             ),
+
+            // The draggable control already uses LiquidGlassLens. Its toggle
+            // calls the Rust-backed C bridge above.
+            Draggable_Recorder_Button(onToggle: _onRecordingChanged),
 
             // ─────────────────────────────────────────────
             // SEARCH
@@ -444,6 +537,129 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
                 color: mutedBrown,
                 onTap: () => Navigator.of(context).maybePop(),
               ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _CharacterSettingsDrawer extends StatelessWidget {
+  final CharacterType selectedCharacter;
+  final CharacterMood selectedMood;
+  final bool isRecording;
+  final ValueChanged<CharacterType> onCharacterChanged;
+  final ValueChanged<CharacterMood> onMoodChanged;
+
+  const _CharacterSettingsDrawer({
+    required this.selectedCharacter,
+    required this.selectedMood,
+    required this.isRecording,
+    required this.onCharacterChanged,
+    required this.onMoodChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    const gold = Color(0xFF9A7A2C);
+    const paper = Color(0xFFFFFCF4);
+    const brown = Color(0xFF30271F);
+
+    return Drawer(
+      backgroundColor: paper,
+      child: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(20, 24, 20, 32),
+          children: [
+            const Text(
+              'SETTINGS',
+              style: TextStyle(
+                color: gold,
+                fontSize: 11,
+                letterSpacing: 2.4,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Your practice companion',
+              style: TextStyle(
+                color: brown,
+                fontSize: 22,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 20),
+            RadioListTile<CharacterType>(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Wave character'),
+              value: CharacterType.wave,
+              groupValue: selectedCharacter,
+              activeColor: gold,
+              onChanged: (value) {
+                if (value != null) onCharacterChanged(value);
+              },
+            ),
+            RadioListTile<CharacterType>(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Tsundere Music'),
+              value: CharacterType.tsundereMusic,
+              groupValue: selectedCharacter,
+              activeColor: gold,
+              onChanged: (value) {
+                if (value != null) onCharacterChanged(value);
+              },
+            ),
+            const Divider(height: 38),
+            const Text(
+              'TSUNDERE EXPRESSION',
+              style: TextStyle(
+                color: gold,
+                fontSize: 11,
+                letterSpacing: 1.6,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                ChoiceChip(
+                  label: const Text('Normal'),
+                  selected: selectedMood == CharacterMood.normal,
+                  selectedColor: gold.withValues(alpha: 0.22),
+                  onSelected: (_) => onMoodChanged(CharacterMood.normal),
+                ),
+                ChoiceChip(
+                  label: const Text('Mad'),
+                  selected: selectedMood == CharacterMood.mad,
+                  selectedColor: gold.withValues(alpha: 0.22),
+                  onSelected: (_) => onMoodChanged(CharacterMood.mad),
+                ),
+                ChoiceChip(
+                  label: const Text('Enjoying'),
+                  selected: selectedMood == CharacterMood.enjoying,
+                  selectedColor: gold.withValues(alpha: 0.22),
+                  onSelected: (_) => onMoodChanged(CharacterMood.enjoying),
+                ),
+              ],
+            ),
+            const SizedBox(height: 30),
+            Row(
+              children: [
+                Icon(
+                  isRecording ? Icons.mic_rounded : Icons.mic_none_rounded,
+                  size: 18,
+                  color: isRecording ? Colors.redAccent : gold,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  isRecording ? 'Recording is active' : 'Ready to record',
+                  style: const TextStyle(color: brown),
+                ),
+              ],
             ),
           ],
         ),
@@ -531,10 +747,7 @@ class _ElegantPenPanel extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(18, 16, 18, 14),
       decoration: BoxDecoration(
         color: paper,
-        border: Border.all(
-          color: lightGold,
-          width: 1,
-        ),
+        border: Border.all(color: lightGold, width: 1),
         boxShadow: [
           BoxShadow(
             color: brown.withValues(alpha: 0.12),
@@ -548,11 +761,7 @@ class _ElegantPenPanel extends StatelessWidget {
         children: [
           const Text(
             'PEN',
-            style: TextStyle(
-              color: gold,
-              fontSize: 10,
-              letterSpacing: 2.5,
-            ),
+            style: TextStyle(color: gold, fontSize: 10, letterSpacing: 2.5),
           ),
           const SizedBox(height: 12),
           Row(
@@ -578,24 +787,16 @@ class _ElegantPenPanel extends StatelessWidget {
             }).toList(),
           ),
           const SizedBox(height: 12),
-          Container(
-            height: 1,
-            color: lightGold.withValues(alpha: 0.5),
-          ),
+          Container(height: 1, color: lightGold.withValues(alpha: 0.5)),
           const SizedBox(height: 10),
           Row(
             children: [
-              const Icon(
-                Icons.line_weight,
-                size: 15,
-                color: gold,
-              ),
+              const Icon(Icons.line_weight, size: 15, color: gold),
               Expanded(
                 child: SliderTheme(
                   data: SliderTheme.of(context).copyWith(
                     activeTrackColor: gold,
-                    inactiveTrackColor:
-                        lightGold.withValues(alpha: 0.45),
+                    inactiveTrackColor: lightGold.withValues(alpha: 0.45),
                     thumbColor: gold,
                     overlayColor: gold.withValues(alpha: 0.10),
                     trackHeight: 1,
@@ -616,10 +817,7 @@ class _ElegantPenPanel extends StatelessWidget {
                 child: Text(
                   penSize.toStringAsFixed(1),
                   textAlign: TextAlign.right,
-                  style: const TextStyle(
-                    color: brown,
-                    fontSize: 11,
-                  ),
+                  style: const TextStyle(color: brown, fontSize: 11),
                 ),
               ),
             ],
@@ -654,16 +852,9 @@ class _MinimalBottomButton extends StatelessWidget {
           decoration: BoxDecoration(
             color: const Color(0xFFFFFCF4),
             shape: BoxShape.circle,
-            border: Border.all(
-              color: const Color(0xFFD8C58D),
-              width: 1,
-            ),
+            border: Border.all(color: const Color(0xFFD8C58D), width: 1),
           ),
-          child: Icon(
-            icon,
-            size: 20,
-            color: color,
-          ),
+          child: Icon(icon, size: 20, color: color),
         ),
       ),
     );

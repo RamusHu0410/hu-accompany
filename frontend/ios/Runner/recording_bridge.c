@@ -6,10 +6,15 @@
 //
 #include <stdio.h>
 
+// Exported by libnative_ffi_sim.a. Keeping this tiny C layer gives Dart
+// stable C names while the audio implementation remains in Rust.
+extern void listen_audio(void);
+extern void stop_audio(void);
+
 void start_recording(void) {
-    // your real recording logic goes here later
+    listen_audio();
 }
 
 void stop_recording(void) {
-    // your real stop logic goes here later
+    stop_audio();
 }

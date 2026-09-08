@@ -68,7 +68,13 @@ Future<RenderedPage> pdfPageRenderer(Uint8List pdfBytes, int pageNumber) async {
     }
     return RenderedPage(
       totalPages: doc.pagesCount,
-      widget: Image.memory(image.bytes, fit: BoxFit.contain),
+      // The scrolling parent constrains width. Fit-to-width preserves the
+      // whole page while giving it the largest readable phone size.
+      widget: Image.memory(
+        image.bytes,
+        width: double.infinity,
+        fit: BoxFit.fitWidth,
+      ),
     );
   } finally {
     await page.close();
