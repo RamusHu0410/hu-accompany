@@ -1,7 +1,5 @@
-import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'LiquidGlass.dart';
 import 'Search_Validator.dart';
 import 'Send_Strings_2Server.dart';
 import 'Pulling_Back_Data.dart';
@@ -36,10 +34,14 @@ const List<String> _bookFontFallback = [
   'Iowan Old Style',
   'serif',
 ];
-const Color _ink = Color(0xFF3B2E22);
+const Color _ink = Color(0xFF2C2113);
+const Color _gold = Color(0xFF8A6D2F);
+const Color _cream = Color(0xFFF6EFDD);
+const Color _creamCard = Color(0xFFFFFBF2);
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// PAGE — now presented as an open book instead of a plain search list.
+// PAGE — a clean, flat search page (no skeuomorphic book) in the same
+// warm-cream / classical-serif / gold-accent style used elsewhere.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 class Music_Library_Page extends StatefulWidget {
@@ -52,10 +54,6 @@ class Music_Library_Page extends StatefulWidget {
 class _Music_Library_PageState extends State<Music_Library_Page> {
   final TextEditingController _search = TextEditingController();
   final FocusNode _focus = FocusNode();
-  final PageController _bookPages = PageController();
-
-  // How many results fit neatly on one page of the book before it flips.
-  static const int _resultsPerLeaf = 9;
 
   List<WorkSummary> _results = [];
   bool _hasSearched = false;
@@ -63,15 +61,11 @@ class _Music_Library_PageState extends State<Music_Library_Page> {
   String? _errorMessage;
   final ApiService _api = ApiService();
 
-  List<List<WorkSummary>> get _leaves {
-    if (_results.isEmpty) return const [];
-    final leaves = <List<WorkSummary>>[];
-    for (var i = 0; i < _results.length; i += _resultsPerLeaf) {
-      leaves.add(
-        _results.sublist(i, min(i + _resultsPerLeaf, _results.length)),
-      );
-    }
-    return leaves;
+  @override
+  void initState() {
+    super.initState();
+    // Drives the search field's focus glow animation.
+    _focus.addListener(() => setState(() {}));
   }
 
   // This helper intercepts the text and manages local states
@@ -99,9 +93,6 @@ class _Music_Library_PageState extends State<Music_Library_Page> {
         _results = results;
         _hasSearched = true;
       });
-      if (_bookPages.hasClients) {
-        _bookPages.jumpToPage(0);
-      }
     } catch (e) {
       debugPrint('MusicSheetService.searchMusic failed: $e');
       setState(() {
@@ -146,7 +137,7 @@ class _Music_Library_PageState extends State<Music_Library_Page> {
       setState(() => _isLoading = false);
       final chosen = await showModalBottomSheet<MusicSheet>(
         context: context,
-        backgroundColor: const Color(0xFFF4EEDD),
+        backgroundColor: _cream,
         shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
         ),
@@ -178,7 +169,10 @@ class _Music_Library_PageState extends State<Music_Library_Page> {
       Navigator.pop(context, SelectedSheet(sheet: sheet, pdfBytes: pdfBytes));
     } catch (e) {
       setState(() {
-        _errorMessage = "Couldn't load that sheet. Please try again.";
+        // fetchScorePdf now surfaces the backend's actual reason (e.g.
+        // IMSLP's daily anonymous-download quota being hit) rather than a
+        // generic status code — show that directly instead of masking it.
+        _errorMessage = _friendlyError(e);
       });
     } finally {
       if (mounted) {
@@ -189,41 +183,52 @@ class _Music_Library_PageState extends State<Music_Library_Page> {
     }
   }
 
+  // Strips Dart's default "Exception: " prefix so backend-provided error
+  // text reads naturally in the UI.
+  String _friendlyError(Object e) {
+    final msg = e.toString();
+    return msg.startsWith('Exception: ') ? msg.substring(11) : msg;
+  }
+
   @override
   void dispose() {
     _search.dispose();
     _focus.dispose();
-    _bookPages.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: SystemUiOverlayStyle.light,
+      value: SystemUiOverlayStyle.dark,
       child: Scaffold(
-        // A dark "desk" behind the book, so the book itself reads as an
-        // object sitting on a surface rather than filling the screen.
-        backgroundColor: const Color(0xFF241A12),
+        backgroundColor: _cream,
         body: SafeArea(
           child: GestureDetector(
             onTap: () => FocusScope.of(context).unfocus(),
             behavior: HitTestBehavior.translucent,
-            child: Stack(
+            child: Column(
               children: [
-                const Positioned(top: 12, left: 12, child: _CloseButton()),
-                Center(
-                  child: LayoutBuilder(
-                    builder: (context, constraints) {
-                      final w = min(constraints.maxWidth - 24, 720.0);
-                      final h = min(constraints.maxHeight - 96, w * 0.66);
-                      return _OpenBook(
-                        width: w,
-                        height: h,
-                        leftPage: _searchLeaf(),
-                        rightPage: _resultsLeaf(),
-                      );
-                    },
+                _topBar(context),
+                Expanded(
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 640),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 24),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            const SizedBox(height: 12),
+                            _header(),
+                            const SizedBox(height: 28),
+                            _searchField(),
+                            const SizedBox(height: 20),
+                            Expanded(child: _resultsArea()),
+                          ],
+                        ),
+                      ),
+                    ),
                   ),
                 ),
               ],
@@ -234,92 +239,75 @@ class _Music_Library_PageState extends State<Music_Library_Page> {
     );
   }
 
-  // ── Left page: title plate + search slot + attribution ──────────────────
-  Widget _searchLeaf() {
+  // ── Top bar: small label left, close button right ───────────────────────
+  Widget _topBar(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            'MUSIC LIBRARY',
+            style: TextStyle(
+              fontFamily: _bookFont,
+              fontFamilyFallback: _bookFontFallback,
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 3,
+              color: _ink.withValues(alpha: 0.7),
+            ),
+          ),
+          const _CloseButton(),
+        ],
+      ),
+    );
+  }
+
+  // ── Header: title, thin gold flourish, tagline, attribution ─────────────
+  Widget _header() {
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Text(
           'The Index',
+          textAlign: TextAlign.center,
           style: TextStyle(
             fontFamily: _bookFont,
             fontFamilyFallback: _bookFontFallback,
-            fontSize: 22,
+            fontSize: 40,
             fontWeight: FontWeight.w700,
             color: _ink,
-            letterSpacing: 0.4,
           ),
         ),
-        const SizedBox(height: 2),
+        const SizedBox(height: 12),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(width: 32, height: 1, color: _gold.withValues(alpha: 0.45)),
+            const SizedBox(width: 8),
+            Icon(Icons.circle, size: 4, color: _gold.withValues(alpha: 0.7)),
+            const SizedBox(width: 8),
+            Container(width: 32, height: 1, color: _gold.withValues(alpha: 0.45)),
+          ],
+        ),
+        const SizedBox(height: 12),
         Text(
           'search the collection',
           style: TextStyle(
             fontFamily: _bookFont,
             fontFamilyFallback: _bookFontFallback,
             fontStyle: FontStyle.italic,
-            fontSize: 12,
-            color: _ink.withValues(alpha: 0.55),
+            fontSize: 15,
+            color: _gold,
           ),
         ),
-        const SizedBox(height: 16),
-        Container(
-          height: 34,
-          decoration: BoxDecoration(
-            border: Border(
-              bottom: BorderSide(color: _ink.withValues(alpha: 0.45), width: 1),
-            ),
-          ),
-          child: Row(
-            children: [
-              Icon(Icons.search, size: 16, color: _ink.withValues(alpha: 0.55)),
-              const SizedBox(width: 6),
-              Expanded(
-                child: TextField(
-                  controller: _search,
-                  focusNode: _focus,
-                  textInputAction: TextInputAction.search,
-                  onSubmitted: _onSearchSubmitted,
-                  style: const TextStyle(
-                    fontFamily: _bookFont,
-                    fontFamilyFallback: _bookFontFallback,
-                    fontSize: 15,
-                    color: _ink,
-                  ),
-                  decoration: InputDecoration(
-                    hintText: 'title, composer…',
-                    hintStyle: TextStyle(
-                      fontFamily: _bookFont,
-                      fontFamilyFallback: _bookFontFallback,
-                      fontStyle: FontStyle.italic,
-                      fontSize: 14,
-                      color: _ink.withValues(alpha: 0.35),
-                    ),
-                    border: InputBorder.none,
-                    isDense: true,
-                  ),
-                  cursorColor: _ink,
-                ),
-              ),
-              if (_search.text.isNotEmpty)
-                GestureDetector(
-                  onTap: () => setState(_search.clear),
-                  child: Icon(
-                    Icons.close,
-                    size: 14,
-                    color: _ink.withValues(alpha: 0.4),
-                  ),
-                ),
-            ],
-          ),
-        ),
-        const Spacer(),
+        const SizedBox(height: 6),
         Text(
           'All sheet music is sourced from IMSLP.org',
           style: TextStyle(
             fontFamily: _bookFont,
             fontFamilyFallback: _bookFontFallback,
             fontStyle: FontStyle.italic,
-            fontSize: 10,
+            fontSize: 11,
             color: _ink.withValues(alpha: 0.4),
           ),
         ),
@@ -327,15 +315,96 @@ class _Music_Library_PageState extends State<Music_Library_Page> {
     );
   }
 
-  // ── Right page: loading / error / empty / results, paginated ────────────
-  Widget _resultsLeaf() {
+  // ── Search field: pill shape, animated focus glow ────────────────────────
+  Widget _searchField() {
+    final focused = _focus.hasFocus;
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 200),
+      curve: Curves.easeOut,
+      height: 56,
+      decoration: BoxDecoration(
+        color: _creamCard,
+        borderRadius: BorderRadius.circular(28),
+        border: Border.all(
+          color: focused ? _gold : _ink.withValues(alpha: 0.14),
+          width: focused ? 1.4 : 1,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: focused
+                ? _gold.withValues(alpha: 0.18)
+                : Colors.black.withValues(alpha: 0.04),
+            blurRadius: focused ? 18 : 8,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          const SizedBox(width: 20),
+          Icon(Icons.search, size: 20, color: _ink.withValues(alpha: 0.5)),
+          const SizedBox(width: 12),
+          Expanded(
+            child: TextField(
+              controller: _search,
+              focusNode: _focus,
+              textInputAction: TextInputAction.search,
+              onSubmitted: _onSearchSubmitted,
+              onChanged: (_) => setState(() {}),
+              style: const TextStyle(
+                fontFamily: _bookFont,
+                fontFamilyFallback: _bookFontFallback,
+                fontSize: 16,
+                color: _ink,
+              ),
+              decoration: InputDecoration(
+                hintText: 'Search by title or composer…',
+                hintStyle: TextStyle(
+                  fontFamily: _bookFont,
+                  fontFamilyFallback: _bookFontFallback,
+                  fontStyle: FontStyle.italic,
+                  fontSize: 15,
+                  color: _ink.withValues(alpha: 0.35),
+                ),
+                border: InputBorder.none,
+                isDense: true,
+              ),
+              cursorColor: _gold,
+            ),
+          ),
+          if (_search.text.isNotEmpty)
+            GestureDetector(
+              onTap: () => setState(_search.clear),
+              child: Padding(
+                padding: const EdgeInsets.only(right: 16),
+                child: Icon(
+                  Icons.close,
+                  size: 18,
+                  color: _ink.withValues(alpha: 0.4),
+                ),
+              ),
+            )
+          else
+            const SizedBox(width: 20),
+        ],
+      ),
+    );
+  }
+
+  // ── Results area: loading / error / prompt / empty / list, all
+  // cross-faded smoothly rather than snapping between states ──────────────
+  Widget _resultsArea() {
+    Widget child;
+    Key key;
+
     if (_isLoading) {
-      return const Center(
-        child: CircularProgressIndicator(strokeWidth: 2, color: _ink),
+      key = const ValueKey('loading');
+      child = const Center(
+        child: CircularProgressIndicator(strokeWidth: 2, color: _gold),
       );
-    }
-    if (_errorMessage != null) {
-      return Center(
+    } else if (_errorMessage != null) {
+      key = ValueKey('error_${_errorMessage.hashCode}');
+      child = Center(
         child: Text(
           _errorMessage!,
           textAlign: TextAlign.center,
@@ -348,23 +417,23 @@ class _Music_Library_PageState extends State<Music_Library_Page> {
           ),
         ),
       );
-    }
-    if (!_hasSearched) {
-      return Center(
+    } else if (!_hasSearched) {
+      key = const ValueKey('prompt');
+      child = Center(
         child: Text(
-          'Search to fill this page…',
+          'Start typing to search the library…',
           style: TextStyle(
             fontFamily: _bookFont,
             fontFamilyFallback: _bookFontFallback,
             fontStyle: FontStyle.italic,
-            fontSize: 13,
+            fontSize: 14,
             color: _ink.withValues(alpha: 0.35),
           ),
         ),
       );
-    }
-    if (_results.isEmpty) {
-      return Center(
+    } else if (_results.isEmpty) {
+      key = const ValueKey('no_results');
+      child = Center(
         child: Text(
           'No sheet music found.\nTry another search.',
           textAlign: TextAlign.center,
@@ -372,247 +441,114 @@ class _Music_Library_PageState extends State<Music_Library_Page> {
             fontFamily: _bookFont,
             fontFamilyFallback: _bookFontFallback,
             fontStyle: FontStyle.italic,
-            fontSize: 13,
+            fontSize: 14,
             color: _ink.withValues(alpha: 0.5),
           ),
         ),
       );
+    } else {
+      key = ValueKey('results_${_results.length}_${_results.first.title}');
+      child = ListView.separated(
+        key: key,
+        padding: const EdgeInsets.only(bottom: 24),
+        itemCount: _results.length,
+        separatorBuilder: (_, _) => const SizedBox(height: 10),
+        itemBuilder: (context, i) {
+          final work = _results[i];
+          return _ResultCard(work: work, onTap: () => _onWorkTapped(work));
+        },
+      );
     }
 
-    final leaves = _leaves;
-    return Column(
-      children: [
-        Expanded(
-          child: PageView.builder(
-            controller: _bookPages,
-            itemCount: leaves.length,
-            itemBuilder: (context, index) {
-              return AnimatedBuilder(
-                animation: _bookPages,
-                builder: (context, child) {
-                  double t = 0;
-                  if (_bookPages.hasClients &&
-                      _bookPages.position.haveDimensions) {
-                    t = (_bookPages.page ?? index.toDouble()) - index;
-                  }
-                  final clamped = t.clamp(-1.0, 1.0);
-                  final angle = clamped * (pi / 2) * 0.55;
-                  return Transform(
-                    alignment: Alignment.centerLeft,
-                    transform: Matrix4.identity()
-                      ..setEntry(3, 2, 0.0016)
-                      ..rotateY(angle),
-                    child: Opacity(
-                      opacity: (1 - clamped.abs() * 0.5).clamp(0.4, 1.0),
-                      child: child,
-                    ),
-                  );
-                },
-                child: _ResultLeaf(works: leaves[index], onTap: _onWorkTapped),
-              );
-            },
-          ),
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 280),
+      switchInCurve: Curves.easeOut,
+      switchOutCurve: Curves.easeIn,
+      transitionBuilder: (child, animation) => FadeTransition(
+        opacity: animation,
+        child: SlideTransition(
+          position: Tween<Offset>(
+            begin: const Offset(0, 0.03),
+            end: Offset.zero,
+          ).animate(animation),
+          child: child,
         ),
-        if (leaves.length > 1) ...[
-          const SizedBox(height: 6),
-          AnimatedBuilder(
-            animation: _bookPages,
-            builder: (context, _) {
-              final page = _bookPages.hasClients
-                  ? (_bookPages.page ?? 0).round()
-                  : 0;
-              return Text(
-                '— page ${page + 1} of ${leaves.length} —',
-                style: TextStyle(
-                  fontFamily: _bookFont,
-                  fontFamilyFallback: _bookFontFallback,
-                  fontSize: 10,
-                  fontStyle: FontStyle.italic,
-                  color: _ink.withValues(alpha: 0.4),
-                ),
-              );
-            },
-          ),
-        ],
-      ],
-    );
-  }
-}
-
-class _ResultLeaf extends StatelessWidget {
-  final List<WorkSummary> works;
-  final ValueChanged<WorkSummary> onTap;
-  const _ResultLeaf({required this.works, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return ListView.separated(
-      physics: const NeverScrollableScrollPhysics(),
-      padding: EdgeInsets.zero,
-      itemCount: works.length,
-      separatorBuilder: (_, _) => Divider(
-        height: 10,
-        thickness: 0.6,
-        color: _ink.withValues(alpha: 0.15),
       ),
-      itemBuilder: (context, i) {
-        final work = works[i];
-        return InkWell(
-          onTap: () => onTap(work),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 4),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    work.title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontFamily: _bookFont,
-                      fontFamilyFallback: _bookFontFallback,
-                      fontSize: 13,
-                      color: _ink,
-                    ),
-                  ),
-                ),
-                Icon(
-                  Icons.chevron_right,
-                  size: 14,
-                  color: _ink.withValues(alpha: 0.4),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
+      child: KeyedSubtree(key: key, child: child),
     );
   }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// THE BOOK — cover, page-stack thickness, spine gutter shadow.
+// RESULT CARD — a clean pill-shaped row, tap to open.
 // ═══════════════════════════════════════════════════════════════════════════════
 
-class _OpenBook extends StatelessWidget {
-  final double width;
-  final double height;
-  final Widget leftPage;
-  final Widget rightPage;
-  const _OpenBook({
-    required this.width,
-    required this.height,
-    required this.leftPage,
-    required this.rightPage,
-  });
+class _ResultCard extends StatelessWidget {
+  final WorkSummary work;
+  final VoidCallback onTap;
+  const _ResultCard({required this.work, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: width,
-      height: height,
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          // Page-stack thickness peeking out from under the top spread —
-          // a few stacked, slightly offset rects behind the main pages.
-          for (int i = 3; i >= 1; i--)
-            Positioned(
-              left: i * 1.4,
-              right: i * 1.4,
-              top: i * 1.4,
-              bottom: -i * 1.4,
-              child: DecoratedBox(
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(20),
+        splashColor: _gold.withValues(alpha: 0.08),
+        highlightColor: _gold.withValues(alpha: 0.05),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          decoration: BoxDecoration(
+            color: _creamCard,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: _ink.withValues(alpha: 0.10)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.04),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 36,
+                height: 36,
                 decoration: BoxDecoration(
-                  color: const Color(
-                    0xFFE9E0CB,
-                  ).withValues(alpha: 0.9 - i * 0.12),
-                  borderRadius: BorderRadius.circular(4),
+                  color: _gold.withValues(alpha: 0.14),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(Icons.music_note, size: 18, color: _gold),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Text(
+                  work.title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontFamily: _bookFont,
+                    fontFamilyFallback: _bookFontFallback,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: _ink,
+                  ),
                 ),
               ),
-            ),
-          // Cast shadow onto the desk beneath the book
-          Positioned(
-            left: 12,
-            right: 12,
-            top: 10,
-            bottom: -6,
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(6),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.35),
-                    blurRadius: 30,
-                    offset: const Offset(0, 14),
-                  ),
-                ],
-              ),
-            ),
+              const SizedBox(width: 8),
+              Icon(Icons.chevron_right, size: 18, color: _gold),
+            ],
           ),
-          // The open spread itself
-          Positioned.fill(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                color: const Color(0xFFF4EEDD),
-                borderRadius: BorderRadius.circular(4),
-                border: Border.all(color: const Color(0xFF6B4A2B), width: 3),
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: _PagePaper(spineOnRight: true, child: leftPage),
-                  ),
-                  Container(
-                    width: 14,
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [
-                          Colors.black.withValues(alpha: 0.0),
-                          Colors.black.withValues(alpha: 0.28),
-                          Colors.black.withValues(alpha: 0.0),
-                        ],
-                      ),
-                    ),
-                  ),
-                  Expanded(
-                    child: _PagePaper(spineOnRight: false, child: rightPage),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _PagePaper extends StatelessWidget {
-  // true = the spine (gutter shadow) falls along this page's right edge.
-  final bool spineOnRight;
-  final Widget child;
-  const _PagePaper({required this.spineOnRight, required this.child});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: spineOnRight ? Alignment.centerRight : Alignment.centerLeft,
-          end: spineOnRight ? Alignment.centerLeft : Alignment.centerRight,
-          colors: [Colors.black.withValues(alpha: 0.10), Colors.transparent],
-          stops: const [0.0, 0.15],
         ),
       ),
-      padding: const EdgeInsets.all(18),
-      child: child,
     );
   }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Close page button — top-left corner
+// Close button — top-right corner
 // ═══════════════════════════════════════════════════════════════════════════════
 class _CloseButton extends StatelessWidget {
   const _CloseButton();
@@ -620,20 +556,18 @@ class _CloseButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: () => Navigator.pop(context),
-      child: LiquidGlass(
-        borderRadius: BorderRadius.circular(16),
-        blur: 12,
-        tintOpacity: 0.22,
-        child: const SizedBox(
-          width: 32,
-          height: 32,
-          child: Center(
-            child: Icon(
-              Icons.close_rounded,
-              size: 18,
-              color: Color.fromARGB(255, 230, 225, 210),
-            ),
-          ),
+      child: Container(
+        width: 32,
+        height: 32,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: _creamCard,
+          border: Border.all(color: _ink.withValues(alpha: 0.16)),
+        ),
+        child: Icon(
+          Icons.close_rounded,
+          size: 16,
+          color: _ink.withValues(alpha: 0.6),
         ),
       ),
     );

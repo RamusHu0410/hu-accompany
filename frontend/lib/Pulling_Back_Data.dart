@@ -70,7 +70,23 @@ class ApiService {
       print(
         'Server rejected request: ${response.statusCode} — ${response.body}',
       );
-      throw Exception('Server error code: ${response.statusCode}');
+      // The backend includes a human-readable reason in the JSON body for
+      // failures (e.g. IMSLP's own anonymous daily download quota being
+      // exhausted) — surface that instead of just the raw status code
+      // whenever it's present, since it's far more actionable than
+      // "Server error code: 503".
+      String detail = 'Server error code: ${response.statusCode}';
+      try {
+        final errorMeta = jsonDecode(response.body) as Map<String, dynamic>;
+        final backendError = errorMeta['error'] as String?;
+        if (backendError != null && backendError.isNotEmpty) {
+          detail = backendError;
+        }
+      } catch (_) {
+        // Body wasn't JSON, or had no 'error' key — fall back to the
+        // generic status-code message above.
+      }
+      throw Exception(detail);
     }
 
     // Step 1's response is JSON metadata, not the file. Pull file_path out

@@ -28,9 +28,6 @@ class _Draggable_Recorder_ButtonState extends State<Draggable_Recorder_Button>
   late final AnimationController _pulseCtrl;
   late final Animation<double> _pulseAnim;
 
-  static const _idleColor = Color(0xFF6C5CE7);
-  static const _activeColor = Color(0xFFFF4757);
-
   @override
   void initState() {
     super.initState();
@@ -76,19 +73,8 @@ class _Draggable_Recorder_ButtonState extends State<Draggable_Recorder_Button>
     return '$m:$s';
   }
 
-  Widget _ring(Color color, double opacity) => Container(
-    width: 80,
-    height: 80,
-    decoration: BoxDecoration(
-      shape: BoxShape.circle,
-      color: color.withValues(alpha: opacity),
-    ),
-  );
-
   @override
   Widget build(BuildContext context) {
-    final color = _isRecording ? _activeColor : _idleColor;
-
     return Positioned(
       left: _position.dx,
       top: _position.dy,
@@ -116,8 +102,8 @@ class _Draggable_Recorder_ButtonState extends State<Draggable_Recorder_Button>
                 key: ValueKey(_isRecording),
                 style: TextStyle(
                   color: _isRecording
-                      ? const Color.fromARGB(255, 95, 95, 95)
-                      : const Color.fromARGB(137, 109, 109, 109),
+                      ? const Color(0xFF4D4A45)
+                      : const Color(0xFF77736B),
                   fontSize: 14,
                   fontWeight: FontWeight.w600,
                   letterSpacing: 1.2,
@@ -134,16 +120,6 @@ class _Draggable_Recorder_ButtonState extends State<Draggable_Recorder_Button>
                 child: Stack(
                   alignment: Alignment.center,
                   children: [
-                    if (_isRecording) ...[
-                      Transform.scale(
-                        scale: _pulseAnim.value,
-                        child: _ring(_activeColor, 0.10),
-                      ),
-                      Transform.scale(
-                        scale: (_pulseAnim.value + 1) / 2,
-                        child: _ring(_activeColor, 0.18),
-                      ),
-                    ],
                     AnimatedContainer(
                       duration: const Duration(milliseconds: 300),
                       curve: Curves.easeInOut,
@@ -158,9 +134,9 @@ class _Draggable_Recorder_ButtonState extends State<Draggable_Recorder_Button>
                             offset: const Offset(0, 6),
                           ),
                           BoxShadow(
-                            color: color.withValues(alpha: 0.45),
-                            blurRadius: 20,
-                            spreadRadius: 2,
+                            color: Colors.white.withValues(alpha: 0.55),
+                            blurRadius: 10,
+                            spreadRadius: 1,
                           ),
                         ],
                       ),
@@ -171,7 +147,9 @@ class _Draggable_Recorder_ButtonState extends State<Draggable_Recorder_Button>
                                 cornerRadius: 32,
                               ),
                           appearance: LiquidGlassAppearance(
-                            color: color.withValues(alpha: 0.55),
+                            // A neutral transparent lens: no purple idle
+                            // tint or red recording tint.
+                            color: Colors.white.withValues(alpha: 0.10),
                           ),
                           refraction: const LiquidGlassRefraction(
                             distortion: 0.12,
@@ -187,7 +165,7 @@ class _Draggable_Recorder_ButtonState extends State<Draggable_Recorder_Button>
                                   ? Icons.stop_rounded
                                   : Icons.mic_rounded,
                               key: ValueKey(_isRecording),
-                              color: const Color.fromARGB(255, 110, 110, 110),
+                              color: const Color(0xFF5F5A52),
                               size: 30,
                             ),
                           ),
