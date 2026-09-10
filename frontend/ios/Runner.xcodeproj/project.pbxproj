@@ -12,6 +12,8 @@
 		2D285BFB3043216C00A7ADBE /* libnative_ffi_sim.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 2D285BFA3043216C00A7ADBE /* libnative_ffi_sim.a */; };
 		2D285BFC3043218E00A7ADBE /* libnative_ffi_sim.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 2D285BFA3043216C00A7ADBE /* libnative_ffi_sim.a */; };
 		2D52E1B72FF01479004C5BAD /* recording_bridge.c in Sources */ = {isa = PBXBuildFile; fileRef = 2D52E1B62FF01479004C5BAD /* recording_bridge.c */; };
+		2DF755B5305203CE0083F04D /* AudioToolbox.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 2DF755B4305203CE0083F04D /* AudioToolbox.framework */; };
+		2DF755B7305204030083F04D /* AVFoundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 2DF755B6305204030083F04D /* AVFoundation.framework */; };
 		331C808B294A63AB00263BE5 /* RunnerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 331C807B294A618700263BE5 /* RunnerTests.swift */; };
 		3B3967161E833CAA004F5970 /* AppFrameworkInfo.plist in Resources */ = {isa = PBXBuildFile; fileRef = 3B3967151E833CAA004F5970 /* AppFrameworkInfo.plist */; };
 		74858FAF1ED2DC5600515810 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74858FAE1ED2DC5600515810 /* AppDelegate.swift */; };
@@ -54,6 +56,8 @@
 		2D285BFA3043216C00A7ADBE /* libnative_ffi_sim.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; path = libnative_ffi_sim.a; sourceTree = "<group>"; };
 		2D52E1B62FF01479004C5BAD /* recording_bridge.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = recording_bridge.c; sourceTree = "<group>"; };
 		2D52E1B82FF016AB004C5BAD /* libnative_ffi.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; path = libnative_ffi.a; sourceTree = "<group>"; };
+		2DF755B4305203CE0083F04D /* AudioToolbox.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AudioToolbox.framework; path = System/Library/Frameworks/AudioToolbox.framework; sourceTree = SDKROOT; };
+		2DF755B6305204030083F04D /* AVFoundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AVFoundation.framework; path = System/Library/Frameworks/AVFoundation.framework; sourceTree = SDKROOT; };
 		331C807B294A618700263BE5 /* RunnerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunnerTests.swift; sourceTree = "<group>"; };
 		331C8081294A63A400263BE5 /* RunnerTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RunnerTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		3B3967151E833CAA004F5970 /* AppFrameworkInfo.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = AppFrameworkInfo.plist; path = Flutter/AppFrameworkInfo.plist; sourceTree = "<group>"; };
@@ -91,6 +95,8 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				2DF755B7305204030083F04D /* AVFoundation.framework in Frameworks */,
+				2DF755B5305203CE0083F04D /* AudioToolbox.framework in Frameworks */,
 				2D285BFC3043218E00A7ADBE /* libnative_ffi_sim.a in Frameworks */,
 				78A318202AECB46A00862997 /* FlutterGeneratedPluginSwiftPackage in Frameworks */,
 				1D70D9540286C1A39A6E8701 /* Pods_Runner.framework in Frameworks */,
@@ -103,6 +109,8 @@
 		0038EC6910725DCD84FE66C9 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
+				2DF755B6305204030083F04D /* AVFoundation.framework */,
+				2DF755B4305203CE0083F04D /* AudioToolbox.framework */,
 				2D285BFA3043216C00A7ADBE /* libnative_ffi_sim.a */,
 				2D52E1B82FF016AB004C5BAD /* libnative_ffi.a */,
 				09E39CEFD5663CB4CD459B13 /* Pods_Runner.framework */,

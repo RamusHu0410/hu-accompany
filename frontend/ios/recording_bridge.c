@@ -6,10 +6,19 @@
 //
 #include <stdio.h>
 
+#include <stdio.h>
+
+extern void listen_audio(void);
+extern void stop_audio(void);
+
 void start_recording(void) {
-    // your real recording logic goes here later
+    fprintf(stderr, "[AudioBridge] start_recording called\n");
+    listen_audio();
+    fprintf(stderr, "[AudioBridge] listen_audio returned\n");
 }
 
 void stop_recording(void) {
-    // your real stop logic goes here later
+    fprintf(stderr, "[AudioBridge] stop_recording called\n");
+    stop_audio();
+    fprintf(stderr, "[AudioBridge] stop_audio returned\n");
 }

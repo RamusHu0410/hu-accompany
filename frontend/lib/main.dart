@@ -9,6 +9,7 @@ import 'dart:typed_data';
 import 'Vinyl_Loading_Screen.dart';
 import 'Record_Navigator_Page.dart';
 import 'package:hu_accomponist/src/rust/frb_generated.dart';
+import 'Audio_Native.dart';
 
 typedef StartRecordingFunc = ffi.Void Function();
 typedef StartRecordingFuncDart = void Function();
@@ -76,6 +77,7 @@ class NativeBridge {
 
 // Single shared instance — safe because constructor never throws now
 final NativeBridge _nativeBridge = NativeBridge();
+final AudioNative _audioNative = AudioNative();
 
 Future<void> main() async {
   // Attempt to load the native Rust library, but never let a failure here
@@ -170,18 +172,26 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
   }
 
   void _onRecordingChanged(bool isRecording) {
+  try {
     if (isRecording) {
-      _nativeBridge.startRecording();
+      _audioNative.begin();
     } else {
-      _nativeBridge.stopRecording();
-      // The next Rust analysis result will replace this idle expression.
+      _audioNative.end();
       setCharacterMood(CharacterMood.normal);
     }
 
     if (mounted) {
       setState(() => _isRecording = isRecording);
     }
+  } catch (error, stackTrace) {
+    debugPrint('[AudioNative] Recording error: $error');
+    debugPrintStack(stackTrace: stackTrace);
+
+    if (mounted) {
+      setState(() => _isRecording = false);
+    }
   }
+}
 
   // Null until a sheet has been picked from the library.
   Uint8List? _pdfBytes;
@@ -194,8 +204,18 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
 
   // Swaps in a new score, or clears it if [pdfBytes] is null.
   void _setScore(Uint8List? pdfBytes) {
+    final previousController = _pageController;
     _pdfBytes = pdfBytes;
     _pageController = pdfBytes != null ? ScorePageController(pdfBytes) : null;
+    // Close only after the controller's queued renders finish. This prevents
+    // a newly selected score from closing a document still used by old pages.
+    previousController?.dispose();
+  }
+
+  @override
+  void dispose() {
+    _pageController?.dispose();
+    super.dispose();
   }
 
   @override
