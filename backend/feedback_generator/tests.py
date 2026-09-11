@@ -270,10 +270,12 @@ class JudgePhraseTests(TestCase):
 
         finding = result["feedback"][0]
         self.assertEqual(
-            sorted(finding), sorted(["bars", "category", "severity", "confidence", "message", "details"])
+            sorted(finding),
+            sorted(["bars", "box", "category", "severity", "confidence", "message", "details"]),
         )
         self.assertEqual(finding["category"], "pitch")
         self.assertEqual(finding["bars"], 1)
+        self.assertIsNone(finding["box"])
 
     def test_phase1_carries_no_summary(self):
         result = self._wrong_note_phrase()
@@ -312,14 +314,55 @@ class JudgePhraseTests(TestCase):
         self.assertEqual(result["scores"]["pitch"], 0)
 
 
+class BarBoxTests(TestCase):
+    """judge_phrase turning bar numbers into the pixel rectangle the
+    frontend marks on the score."""
+
+    BOXES = [
+        {"bar": 1, "page": 1, "x": 100, "y": 200, "w": 300, "h": 400, "page_size": [2000, 3000]},
+        {"bar": 2, "page": 1, "x": 400, "y": 200, "w": 300, "h": 400, "page_size": [2000, 3000]},
+    ]
+
+    def judge(self, bar_boxes, bars=1):
+        # One wrong note, placed in `bars` by starting it that many bars in.
+        start = (bars - 1) * 4 * (60000.0 / 120.0)
+        return judge_phrase(
+            phrase=1, bpm=120.0, time_signature="4/4", bar_boxes=bar_boxes,
+            expected_notes=[{"note_id": 1, "pitch_hz": 440.0, "start_time_ms": start,
+                             "end_time_ms": start + 500.0, "duration_ms": 500.0}],
+            user_notes=[{"note_id": 1, "pitch_hz": 369.99, "start_time_ms": start,
+                         "end_time_ms": start + 500.0, "duration_ms": 500.0}],
+        )
+
+    def test_finding_carries_its_bar_box(self):
+        finding = self.judge(self.BOXES, bars=2)["feedback"][0]
+        self.assertEqual(finding["bars"], 2)
+        self.assertEqual(finding["box"], {"page": 1, "x": 400, "y": 200, "w": 300,
+                                          "h": 400, "page_size": [2000, 3000]})
+
+    def test_box_is_null_for_a_bar_with_no_box(self):
+        self.assertIsNone(self.judge(self.BOXES, bars=3)["feedback"][0]["box"])
+
+    def test_box_is_null_without_bar_boxes(self):
+        self.assertIsNone(self.judge(None)["feedback"][0]["box"])
+
+    def test_unusable_entries_are_skipped_not_raised(self):
+        boxes = [
+            {"bar": "one", "x": 1, "y": 1, "w": 1, "h": 1},   # bar isn't a number
+            {"bar": 1, "x": None, "y": 1, "w": 1, "h": 1},    # no position
+            "not a box",
+        ]
+        self.assertIsNone(self.judge(boxes)["feedback"][0]["box"])
+
+
 class SummarizerTests(TestCase):
     def phrase_file(self, phrase, scores, feedback):
         return {"phrase": phrase, "scores": scores, "feedback": feedback}
 
-    def finding(self, category="pitch", severity="major", issue=None, bars=1):
+    def finding(self, category="pitch", severity="major", issue=None, bars=1, box=None):
         details = {"issue": issue} if issue else {}
-        return {"bars": bars, "category": category, "severity": severity, "confidence": 1.0,
-                "message": "x", "details": details}
+        return {"bars": bars, "box": box, "category": category, "severity": severity,
+                "confidence": 1.0, "message": "x", "details": details}
 
     def test_scores_average_across_phrases_and_skip_nulls(self):
         phrases = [
@@ -343,6 +386,17 @@ class SummarizerTests(TestCase):
     def test_main_feedback_records_the_bar_span_it_covers(self):
         feedback = [self.finding(bars=2), self.finding(bars=7)]
         self.assertEqual(summarizer.build_main_feedback(feedback)[0].details["bars"], [2, 7])
+
+    def test_main_feedback_collects_one_box_per_bar_it_covers(self):
+        box2 = {"page": 1, "x": 400, "y": 200, "w": 300, "h": 400}
+        box7 = {"page": 2, "x": 100, "y": 900, "w": 300, "h": 400}
+        feedback = [self.finding(bars=2, box=box2), self.finding(bars=7, box=box7),
+                    self.finding(bars=7, box=box7)]
+        self.assertEqual(summarizer.build_main_feedback(feedback)[0].details["boxes"], [box2, box7])
+
+    def test_main_feedback_boxes_are_empty_when_findings_have_none(self):
+        feedback = [self.finding(bars=2), self.finding(bars=7)]
+        self.assertEqual(summarizer.build_main_feedback(feedback)[0].details["boxes"], [])
 
     def test_empty_when_no_findings(self):
         self.assertEqual(summarizer.build_main_feedback([]), [])

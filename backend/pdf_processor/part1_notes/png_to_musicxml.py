@@ -66,6 +66,8 @@ from oemer import layers
 from oemer.ete import extract, clear_data
 import oemer.draw_teaser as _draw_teaser
 
+from . import bar_boxes
+
 ACCIDENTAL_COLOR = (255, 0, 255)  # magenta
 DOT_COLOR = (0, 255, 255)  # cyan
 
@@ -160,10 +162,23 @@ def convert(png_path: str) -> dict:
     working_path = str(Path(mxl_path).with_name(Path(mxl_path).stem + "_working.png"))
     Image.fromarray(layers.get_layer('original_image').astype(np.uint8)).save(working_path)
 
+    # Per-bar pixel boxes, in the page PNG's own coordinate space rather
+    # than oemer's working resolution, so the frontend can scale them
+    # against the page it renders (see bar_boxes.py).
+    page_size = Image.open(png_path).size
+    boxes = bar_boxes.build(
+        barlines=barlines,
+        staffs=layers.get_layer('staffs'),
+        oemer_image_size=image_size,
+        page_size=page_size,
+    )
+
     return {
         "musicxml": mxl_path,
         "debug_png": debug_path,
         "barlines": barlines,
         "image_size": image_size,
         "working_png": working_path,
+        "bar_boxes": boxes,
+        "page_size": list(page_size),
     }

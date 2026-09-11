@@ -67,13 +67,24 @@ Phase-1 file:
  "time_signature": "4/4", "bars": [1, 4],
  "scores": {"overall": 85, "pitch": 79, "rhythm": 92, "tempo": null,
             "dynamics": null, "articulation": null},
- "feedback": [{"bars": 1, "category": "pitch", "severity": "major",
+ "feedback": [{"bars": 1,
+               "box": {"page": 1, "x": 412, "y": 903, "w": 305, "h": 330,
+                       "page_size": [2262, 3200]},
+               "category": "pitch", "severity": "major",
                "confidence": 1.0, "message": "...", "details": {...}}]}
 ```
 
 - `feedback` is the unit everywhere -- phase 2 uses the same shape.
 - `bars` on a finding = the bar it happened in, numbered from the piece
   start using `bpm` + `time_signature`; `bars` on the file = the span.
+- `box` is that same bar as a pixel rectangle on the score, so the app can
+  mark the spot instead of making the player count bars. It comes from
+  `pdf_processor`'s `<Piece>_bars.json`, passed in as `judge_phrase`'s
+  `bar_boxes` (`/api/feedback/phrase`'s `bar_boxes`); without it every
+  `box` is `null`. Pixels are measured on the page PNG whose dimensions
+  `page_size` gives, so a client rendering the PDF at another resolution
+  scales by its own width/height. Phase 2's summary findings carry
+  `details.boxes` -- every bar box behind that recurring problem.
 - `severity` is `minor`/`major`; `confidence` is 0.5 at the "this is an
   error" threshold, rising to 1.0 for an unmistakable one.
 - `details` carries the numbers behind the call (cents, ms, ratio) plus a

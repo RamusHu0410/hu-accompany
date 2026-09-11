@@ -63,7 +63,10 @@ def process_score_view(request):
     composer markings -- dynamics/tempo/expression/technique/time signature
     -- into a markings JSON per page (part2_markings). All per-page output
     files are written next to the source PDF in storage, plus one combined
-    piece_json/piece_data for the whole piece.
+    piece_json/piece_data for the whole piece and a bars_json/bar_boxes
+    listing where each bar sits on the page in pixels (what
+    /api/feedback/phrase's `bar_boxes` takes, so feedback can be drawn onto
+    the score).
 
     Body: {"file_path": "storage/scores/<Composer>/<Work>/<file>.pdf"}
     `file_path` matches the format returned by /api/imslp/download's file_path.
@@ -107,6 +110,8 @@ def process_score_view(request):
         "markings_debug_png": to_db_paths(result["markings_debug_png"]),
         "piece_json": to_db_path(result["piece_json"]),
         "piece_data": result["piece_data"],
+        "bars_json": to_db_path(result["bars_json"]),
+        "bar_boxes": result["bar_boxes"],
         "bpm": result["bpm"],
         "time_signature": result["time_signature"],
         "note_count": len(result["notes"]),
@@ -149,6 +154,11 @@ def phrase_feedback_view(request):
              has_accent, markings}, ... ],
            "user_notes": [ {note_id, pitch_hz, start_time_ms, end_time_ms,
              duration_ms, has_accent}, ... ],
+           "bar_boxes": [ {bar, page, x, y, w, h, page_size}, ... ]
+             (optional -- the piece's <Piece>_bars.json, written by
+             pdf_processor; each finding then also carries `box`, the pixel
+             rectangle of its bar on the rendered score, for the frontend to
+             highlight. Omit it and every `box` is null),
            "session_id": str (optional),
            "piece": {...} (optional, stored as-is -- e.g. title, composer,
              composed_date, which phase 2's era judge reads back)}
@@ -169,6 +179,7 @@ def phrase_feedback_view(request):
     time_signature = timing.get("time_signature")
     expected_notes = body.get("expected_notes")
     user_notes = body.get("user_notes")
+    bar_boxes = body.get("bar_boxes")
     session_id = body.get("session_id")
     piece = body.get("piece")
 
@@ -182,6 +193,8 @@ def phrase_feedback_view(request):
         return JsonResponse({"error": "user_notes (list) is required"}, status=400)
     if piece is not None and not isinstance(piece, dict):
         return JsonResponse({"error": "piece must be an object"}, status=400)
+    if bar_boxes is not None and not isinstance(bar_boxes, list):
+        return JsonResponse({"error": "bar_boxes must be a list"}, status=400)
     if session_id is not None:
         try:
             feedback_store.validate_session_id(session_id)
@@ -195,6 +208,7 @@ def phrase_feedback_view(request):
             expected_notes=expected_notes,
             user_notes=user_notes,
             time_signature=time_signature,
+            bar_boxes=bar_boxes,
         )
     except InvalidNoteData as e:
         return JsonResponse({"error": str(e)}, status=400)

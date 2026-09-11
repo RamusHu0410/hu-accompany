@@ -136,6 +136,18 @@ def build_piece_context(piece: Optional[dict], phrases: List[dict]) -> PieceCont
 
 # --- Main feedback / positives / summary line ---------------------------------
 
+def _group_boxes(group: List[dict]) -> List[dict]:
+    """Every distinct bar box behind one group of findings, in bar order --
+    a recurring problem spans several bars, so the summary marks all of
+    them rather than only the first. Empty when the phase-1 findings carry
+    no boxes (a score processed before bar boxes existed, or judged without
+    them -- see orchestrator.judge_phrase)."""
+    by_bar = {
+        f.get("bars") or 0: f["box"] for f in group if isinstance(f.get("box"), dict)
+    }
+    return [by_bar[bar] for bar in sorted(by_bar)]
+
+
 def build_main_feedback(findings: List[dict]) -> List[Finding]:
     """The piece's top recurring problems, most important first."""
     groups: Dict[str, List[dict]] = {}
@@ -150,6 +162,7 @@ def build_main_feedback(findings: List[dict]) -> List[Finding]:
         description, practice_action = _group_message(key, len(group))
         bars = bar_span(f.get("bars", 0) for f in group)
         confidences = [f.get("confidence", 1.0) for f in group]
+        boxes = _group_boxes(group)
         weighted.append(
             (
                 weight,
@@ -163,6 +176,7 @@ def build_main_feedback(findings: List[dict]) -> List[Finding]:
                         "issue": key,
                         "count": len(group),
                         "bars": bars,
+                        "boxes": boxes,
                         "suggestion": practice_action,
                     },
                 ),

@@ -37,6 +37,22 @@ def _nearest_marking_text(note_start_ql: float, markings: list) -> "str | None":
     return best_text
 
 
+def _collect_bar_boxes(omr_results: list) -> list:
+    """Every page's per-bar pixel boxes (part1_notes/bar_boxes.py) on one
+    piece-wide numbering: page 2's first bar carries on from where page 1
+    left off, matching how the rest of this pipeline concatenates pages onto
+    a single timeline. `page` is 1-based, and `page_size` is the size of the
+    page PNG the box's pixels are measured in, so a consumer rendering the
+    PDF at some other resolution can scale by its own width/height."""
+    boxes = []
+    for page_number, result in enumerate(omr_results, start=1):
+        page_size = result["page_size"]
+        for box in result["bar_boxes"]:
+            boxes.append({**box, "bar": len(boxes) + 1,
+                          "page": page_number, "page_size": page_size})
+    return boxes
+
+
 def _build_piece_data(pdf_path: str, bpm: float, time_signature: str,
                        all_notes: list, all_markings: list) -> dict:
     """
@@ -108,6 +124,13 @@ def process(pdf_path: str) -> dict:
                         written to disk) -- same content as "piece_data"
                         below, matching the downstream Rust consumer's
                         PieceData/Notes struct shape,
+          "bars_json":  path to the bar-box JSON (also written to disk) --
+                        same content as "bar_boxes" below,
+          "bar_boxes":  [{"bar", "page", "x", "y", "w", "h", "page_size"}, ...]
+                        -- where every bar sits on the page in pixels, so
+                        feedback tagged with a bar number can be drawn onto
+                        the score (see part1_notes/bar_boxes.py); numbered
+                        1..n across the whole piece, in reading order,
           "bpm":            float,
           "time_signature": str,
           "notes":      [{"id", "hz", "start", "duration"}, ...]  -- combined
@@ -149,6 +172,8 @@ def process(pdf_path: str) -> dict:
     xml_paths = [r["musicxml"] for r in omr_results]
     debug_paths = [r["debug_png"] for r in omr_results]
     omr_time = time.time() - t0
+
+    bar_boxes = _collect_bar_boxes(omr_results)
 
     t0 = time.time()
     notes_json_paths = []
@@ -216,9 +241,17 @@ def process(pdf_path: str) -> dict:
     all_markings.sort(key=lambda mk: mk["offset_ql"])
 
     piece_data = _build_piece_data(pdf_path, bpm, time_signature, all_notes, all_markings)
-    piece_json_path = str(Path(pdf_path).resolve().parent / f"{Path(pdf_path).resolve().parent.name}.json")
+    piece_dir = Path(pdf_path).resolve().parent
+    piece_json_path = str(piece_dir / f"{piece_dir.name}.json")
     with open(piece_json_path, "w") as f:
         json.dump(piece_data, f, indent=2)
+
+    # Kept beside piece_data rather than inside it: piece_data mirrors the
+    # Rust-side PieceData struct, and where a bar sits on the page is the
+    # frontend's business, not the note-detection engine's.
+    bars_json_path = str(piece_dir / f"{piece_dir.name}_bars.json")
+    with open(bars_json_path, "w") as f:
+        json.dump(bar_boxes, f, indent=2)
 
     return {
         "enhanced_pdf": enhanced_pdf_path,
@@ -229,6 +262,8 @@ def process(pdf_path: str) -> dict:
         "markings_json": markings_json_paths,
         "markings_debug_png": markings_debug_paths,
         "piece_json": piece_json_path,
+        "bars_json": bars_json_path,
+        "bar_boxes": bar_boxes,
         "bpm": bpm,
         "time_signature": time_signature,
         "notes": all_notes,
@@ -266,3 +301,4 @@ if __name__ == "__main__":
     print(f"[5/5] Marking detection ({len(result['markings'])} marking(s)): {t['markings']}s")
     print(f"Total: {t['total']}s")
     print(f"Piece JSON: {result['piece_json']}")
+    print(f"Bar boxes ({len(result['bar_boxes'])} bar(s)): {result['bars_json']}")

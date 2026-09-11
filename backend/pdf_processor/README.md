@@ -66,6 +66,15 @@ Returns a dict:
                           # written to disk next to the source PDF, named
                           # after the piece's own storage folder) -- same
                           # content as "piece_data" below
+  "bars_json": ...,      # path to "bar_boxes" below, written to disk next
+                          # to piece_json as "<Piece>_bars.json"
+  "bar_boxes": [{"bar": 1, "page": 1, "x": ..., "y": ..., "w": ..., "h": ...,
+                 "page_size": [w, h]}, ...],
+            # where each bar sits on the page, in the page PNG's pixels, so
+            # feedback tagged with a bar number can be highlighted on the
+            # score (feedback_generator takes this as `bar_boxes`). Numbered
+            # 1..n across the whole piece in reading order -- see
+            # part1_notes/bar_boxes.py for the approximations involved
   "bpm": 120, "time_signature": "4/4",
   "notes": [{"id": ..., "hz": ..., "start": ..., "duration": ...}, ...],
             # combined across all pages onto one continuous timeline --

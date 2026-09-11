@@ -145,6 +145,38 @@ def align_notes(
     return matched, missing, unmatched_user
 
 
+# --- Bar boxes ----------------------------------------------------------------
+
+BOX_FIELDS = ("page", "x", "y", "w", "h", "page_size")
+
+
+def _box_index(bar_boxes: Optional[List[dict]]) -> Dict[int, dict]:
+    """bar number -> the box to draw for it, from pdf_processor's bar-box
+    JSON (`<Piece>_bars.json`, see part1_notes/bar_boxes.py). Entries
+    without a usable bar number or position are skipped rather than raising:
+    a page oemer read badly should cost the player the highlight, not the
+    feedback."""
+    index: Dict[int, dict] = {}
+    for entry in bar_boxes or []:
+        if not isinstance(entry, dict):
+            continue
+        bar = entry.get("bar")
+        if not isinstance(bar, int) or isinstance(bar, bool) or bar < 1:
+            continue
+        if any(entry.get(field) is None for field in ("x", "y", "w", "h")):
+            continue
+        index[bar] = {field: entry[field] for field in BOX_FIELDS if field in entry}
+    return index
+
+
+def _attach_boxes(findings: List[dict], boxes: Dict[int, dict]) -> None:
+    """Give every finding a `box` alongside its `bars`: where on the page
+    the frontend should mark it. None when this bar has no box -- an
+    unprocessed score, or a bar oemer didn't find."""
+    for finding in findings:
+        finding["box"] = boxes.get(finding.get("bars"))
+
+
 # --- Phase 1: one phrase ------------------------------------------------------
 
 def judge_phrase(
@@ -153,15 +185,23 @@ def judge_phrase(
     expected_notes: List[dict],
     user_notes: List[dict],
     time_signature: Optional[str] = None,
+    bar_boxes: Optional[List[dict]] = None,
 ) -> dict:
     """Compare one recorded phrase against its expected notes.
 
     Returns the phase-1 file body:
         {"phrase", "bpm", "time_signature", "bars": [first, last],
          "scores": {overall, pitch, rhythm, tempo, dynamics, articulation},
-         "feedback": [{bars, category, severity, confidence, message,
+         "feedback": [{bars, box, category, severity, confidence, message,
                        details}, ...]}
     `feedback` is ordered by bar, then by the order judges run in.
+
+    `bar_boxes` is pdf_processor's bar-box list for this piece
+    (`<Piece>_bars.json`). Pass it and every finding also carries `box` --
+    {"page", "x", "y", "w", "h", "page_size"}, the bar's pixel rectangle on
+    the rendered score -- so the frontend can highlight the spot instead of
+    only naming the bar. Findings whose bar has no box, and every finding
+    when `bar_boxes` is omitted, get `"box": null`.
     """
     parsed_expected = [_parse_expected_note(note) for note in expected_notes]
     parsed_user = [_parse_user_note(note) for note in user_notes]
@@ -182,13 +222,16 @@ def judge_phrase(
     findings.sort(key=lambda entry: (entry[0], entry[1]))
     bars = bar_span(bar_of(note.start_time_ms, bpm, per_bar) for note in parsed_expected)
 
+    feedback = [dataclasses.asdict(finding) for _, _, finding in findings]
+    _attach_boxes(feedback, _box_index(bar_boxes))
+
     return {
         "phrase": phrase,
         "bpm": bpm,
         "time_signature": time_signature or None,
         "bars": bars,
         "scores": {"overall": overall_score(scores), **scores},
-        "feedback": [dataclasses.asdict(finding) for _, _, finding in findings],
+        "feedback": feedback,
     }
 
 
