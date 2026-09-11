@@ -11,15 +11,23 @@ import 'Score_Page_Renderer.dart';
 /// PDF bytes instead and defaults to [pdfPageRenderer].
 class ScorePageController {
   final Uint8List pdfBytes;
-  final PageRenderer render;
+  late final PageRenderer render;
+  final PdfScoreDocument? _document;
 
-  ScorePageController(this.pdfBytes, {this.render = pdfPageRenderer});
+  ScorePageController(this.pdfBytes, {PageRenderer? renderer})
+    : _document = renderer == null ? PdfScoreDocument(pdfBytes) : null {
+    render = renderer ?? _document!.renderPage;
+  }
 
   final Map<int, Future<RenderedPage>> _pages = {};
 
   // Null until page 1 has been rendered — that's what tells us how many
   // pages the piece actually needs.
   int? totalPages;
+
+  Future<void> dispose() async {
+    await _document?.dispose();
+  }
 
   Future<RenderedPage> getPage(int pageNumber) {
     return _pages.putIfAbsent(pageNumber, () async {

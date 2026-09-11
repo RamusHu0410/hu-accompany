@@ -6,10 +6,8 @@ pub mod models;
 pub mod run_onnx;
 
 // Crates
+use flutter_rust_bridge::frb;
 use once_cell::sync::Lazy;
-use serde_json;
-use std::ffi::{CStr, CString};
-use std::os::raw::c_char;
 use std::sync::{LazyLock, Mutex};
 
 // Custom Defined types
@@ -20,6 +18,7 @@ pub static ACTIVE_PIECE: LazyLock<Mutex<Option<PieceData>>> = LazyLock::new(|| M
 
 pub static USER_DATA: LazyLock<Mutex<Option<Vec<Notes>>>> = LazyLock::new(|| Mutex::new(None));
 
+#[frb(ignore)]
 #[unsafe(no_mangle)]
 pub extern "C" fn listen_audio() {
     let mut stream_guard = ACTIVE_STREAM.lock().unwrap();
@@ -36,6 +35,7 @@ pub extern "C" fn listen_audio() {
     }
 }
 
+#[frb(ignore)]
 #[unsafe(no_mangle)]
 pub extern "C" fn stop_audio() {
     let mut stream_guard = ACTIVE_STREAM.lock().unwrap();
@@ -44,23 +44,18 @@ pub extern "C" fn stop_audio() {
         std::mem::drop(stream);
     }
 }
+mod api {
+    use super::*;
+    pub fn init_session(json_data: String) {
+        let piece_data: PieceData = serde_json::from_str(&json_data).unwrap();
 
-#[unsafe(no_mangle)]
-pub extern "C" fn init_session(json_data: *const c_char) {
-    let c_str = unsafe { CStr::from_ptr(json_data) };
-    let json = c_str.to_str().expect("Invalid String from Flutter!");
-    let piece_data: PieceData = serde_json::from_str(json).unwrap();
+        let mut active_slot = ACTIVE_PIECE.lock().unwrap();
+        *active_slot = Some(piece_data);
+    }
 
-    let mut active_slot = ACTIVE_PIECE.lock().unwrap();
-    *active_slot = Some(piece_data);
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn get_user_data() -> *mut c_char {
-    let mut user_data = USER_DATA.lock().unwrap();
-    let json_str = serde_json::to_string(&*user_data)
-        .unwrap_or_else(|_| "{}".to_string());
-    let cstring = CString::new(json_str)
-        .unwrap_or_else(|_| CString::new("{}").unwrap());
-    cstring.into_raw()
+    // FRB handles returning standard Strings and frees the memory safely.
+    pub fn get_user_data() -> String {
+        let user_data = USER_DATA.lock().unwrap();
+        serde_json::to_string(&*user_data).unwrap_or_else(|_| "{}".to_string())
+    }
 }

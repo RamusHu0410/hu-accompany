@@ -39,12 +39,12 @@ pub fn get_current_targets(curr_ms: f32, piece_data: &PieceData) -> Vec<Notes> {
         .collect()
 }
 
-pub fn run_fft(input_data: &mut Vec<f32>, output_spectrum: &mut Vec<Complex<f32>>) {
+pub fn run_fft(input_data: &mut [f32], output_spectrum: &mut [Complex<f32>]) {
     FFT.process(input_data, output_spectrum).unwrap();
 }
 
 pub fn process_dsp(
-    output_spectrum: &Vec<Complex<f32>>,
+    output_spectrum: &[Complex<f32>],
     target_notes: &Vec<Notes>,
     curr_ms: f32,
     note_start_ms: &mut Option<f32>,
@@ -56,7 +56,8 @@ pub fn process_dsp(
     let notes_vec = user_data.get_or_insert_with(Vec::new);
 
     for note in target_notes {
-        let target_bin = ((note.pitch_hz * (FFT_WINDOWSIZE as f64)) / (SAMPLE_RATE as f64)).round() as usize;
+        let target_bin =
+            ((note.pitch_hz * (FFT_WINDOWSIZE as f64)) / (SAMPLE_RATE as f64)).round() as usize;
 
         if target_bin > 0 && target_bin < output_spectrum.len() - 1 {
             let alpha = output_spectrum[target_bin - 1].norm(); // mag_left
@@ -83,7 +84,8 @@ pub fn process_dsp(
                 };
 
                 let exact_bin = (target_bin as f64) + (bin_offset as f64);
-                let detected_hz = ((exact_bin * (SAMPLE_RATE as f64)) / (FFT_WINDOWSIZE as f64) as f64);
+                let detected_hz =
+                    ((exact_bin * (SAMPLE_RATE as f64)) / (FFT_WINDOWSIZE as f64) as f64);
 
                 // Push the active note with start_ms and current duration
                 notes_vec.push(Notes {
