@@ -1,6 +1,6 @@
-use crate::models::Notes;
-use crate::models::PieceData;
-use crate::{ACTIVE_PIECE, USER_DATA};
+use crate::frb_generated::SseEncode;
+use crate::models::{Notes, PieceData};
+use crate::{NOTES_SINK, USER_DATA};
 use num_complex::Complex;
 use realfft::{RealFftPlanner, RealToComplex};
 use std::sync::{Arc, LazyLock, Mutex};
@@ -84,13 +84,13 @@ pub fn process_dsp(
                 };
 
                 let exact_bin = (target_bin as f64) + (bin_offset as f64);
-                let detected_hz =
-                    ((exact_bin * (SAMPLE_RATE as f64)) / (FFT_WINDOWSIZE as f64) as f64);
+                let detected_hz = (exact_bin * (SAMPLE_RATE as f64)) / FFT_WINDOWSIZE as f64;
 
                 // Push the active note with start_ms and current duration
                 notes_vec.push(Notes {
                     note_id: note.note_id,
                     pitch_hz: detected_hz,
+                    is_end: note.is_end,
                     vibrato_depth: None,
                     pedal_action: None,
                     has_accent: None,
@@ -109,6 +109,7 @@ pub fn process_dsp(
                     notes_vec.push(Notes {
                         note_id: note.note_id,
                         pitch_hz: note.pitch_hz,
+                        is_end: note.is_end,
                         vibrato_depth: None,
                         pedal_action: None,
                         has_accent: None,
@@ -117,6 +118,13 @@ pub fn process_dsp(
                         end_time_ms: Some(end),
                         duration_ms: Some(final_duration),
                     });
+                    let notes_to_send = USER_DATA.lock().unwrap().take();
+
+                    if let Some(notes) = notes_to_send {
+                        if let Some(sink) = NOTES_SINK.read().unwrap().as_ref() {
+                            sink.add(notes);
+                        }
+                    }
                 }
             }
         }
@@ -152,6 +160,7 @@ mod tests {
         let target_notes = vec![Notes {
             note_id: 1,
             pitch_hz: 261.63,
+            is_end: false,
             vibrato_depth: None,
             pedal_action: None,
             has_accent: None,

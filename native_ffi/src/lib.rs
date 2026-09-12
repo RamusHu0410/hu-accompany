@@ -6,16 +6,18 @@ pub mod models;
 pub mod run_onnx;
 
 // Crates
+use crate::frb_generated::StreamSink;
 use flutter_rust_bridge::frb;
 use once_cell::sync::Lazy;
+use std::sync::RwLock;
 use std::sync::{LazyLock, Mutex};
 
 // Custom Defined types
 use models::{Notes, PieceData, SendStream};
 
+static NOTES_SINK: RwLock<Option<StreamSink<Vec<Notes>>>> = RwLock::new(None);
 static ACTIVE_STREAM: Lazy<Mutex<Option<SendStream>>> = Lazy::new(|| Mutex::new(None));
 pub static ACTIVE_PIECE: LazyLock<Mutex<Option<PieceData>>> = LazyLock::new(|| Mutex::new(None));
-
 pub static USER_DATA: LazyLock<Mutex<Option<Vec<Notes>>>> = LazyLock::new(|| Mutex::new(None));
 
 #[frb(ignore)]
@@ -44,8 +46,10 @@ pub extern "C" fn stop_audio() {
         std::mem::drop(stream);
     }
 }
+
 mod api {
     use super::*;
+    use crate::models::Notes;
     pub fn init_session(json_data: String) {
         let piece_data: PieceData = serde_json::from_str(&json_data).unwrap();
 
@@ -57,5 +61,8 @@ mod api {
     pub fn get_user_data() -> String {
         let user_data = USER_DATA.lock().unwrap();
         serde_json::to_string(&*user_data).unwrap_or_else(|_| "{}".to_string())
+    }
+    pub fn notes_stream(s: StreamSink<Vec<Notes>>) {
+        *NOTES_SINK.write().unwrap() = Some(s);
     }
 }
