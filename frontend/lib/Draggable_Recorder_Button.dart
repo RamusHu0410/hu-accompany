@@ -1,6 +1,20 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:liquid_glass_easy/liquid_glass_easy.dart';
+import 'package:hu_accomponist/src/rust/frb_generated.dart';
+import 'package:hu_accomponist/src/rust/models.dart';
+import 'package:hu_accomponist/src/rust/api.dart';
+
+
+Future<void> startListening() async {
+    await RustLib.init(); // load native lib (v2)
+
+    // Subscribe to stream
+    final stream = notesStream();
+    stream.listen((List<Notes> phrase) {
+
+    });
+}
 
 class Draggable_Recorder_Button extends StatefulWidget {
   final void Function(bool isRecording) onToggle;
