@@ -9,7 +9,9 @@ import 'dart:typed_data';
 import 'Vinyl_Loading_Screen.dart';
 import 'Record_Navigator_Page.dart';
 import 'package:hu_accomponist/src/rust/frb_generated.dart';
-import 'Audio_Native.dart';
+import 'package:hu_accomponist/src/rust/models.dart';
+import 'Phrase_Send2_Server.dart';
+import 'Pull_back_Phrase.dart';
 
 
 
@@ -79,7 +81,11 @@ class NativeBridge {
 
 // Single shared instance — safe because constructor never throws now
 final NativeBridge _nativeBridge = NativeBridge();
-final AudioNative _audioNative = AudioNative();
+// NOTE: AudioNative (raw dart:ffi start_recording/stop_recording) is no
+// longer wired in here — recording now goes through Draggable_Recorder_Button,
+// which owns the Rust-bridge notesStream() pipeline directly. AudioNative
+// and NativeBridge above are both now unused by this flow; left in place
+// in case you still want them, but worth deleting if not.
 
 Future<void> main() async {
   // Attempt to load the native Rust library, but never let a failure here
@@ -174,26 +180,43 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
   }
 
   void _onRecordingChanged(bool isRecording) {
-  try {
-    if (isRecording) {
-      _audioNative.begin();
-    } else {
-      _audioNative.end();
-      setCharacterMood(CharacterMood.normal);
-    }
-
     if (mounted) {
       setState(() => _isRecording = isRecording);
     }
-  } catch (error, stackTrace) {
-    debugPrint('[AudioNative] Recording error: $error');
-    debugPrintStack(stackTrace: stackTrace);
-
-    if (mounted) {
-      setState(() => _isRecording = false);
+    if (!isRecording) {
+      setCharacterMood(CharacterMood.normal);
     }
   }
-}
+
+  /// Fired by Draggable_Recorder_Button once per phrase, as soon as Rust
+  /// finishes analyzing it. Uploads the raw notes, then polls the backend
+  /// for the scored feedback and reflects it in the companion's mood.
+  ///
+  /// TODO: once the real feedback endpoint exists, this is also the place
+  /// to surface PhraseReport.feedback in the UI (e.g. highlighting the
+  /// wrong note on the score) rather than only driving mood.
+  Future<void> _onPhraseReceived(
+    String sessionId,
+    int phraseNumber,
+    List<Notes> notes,
+  ) async {
+    await PhraseUploadService.sendPhrase(
+      sessionId: sessionId,
+      phraseNumber: phraseNumber,
+      notes: notes,
+    );
+
+    final report = await PhraseFeedbackService.fetchPhraseFeedback(
+      sessionId: sessionId,
+      phraseNumber: phraseNumber,
+    );
+
+    if (report == null || !mounted) return;
+
+    // ASSUMPTION: overall >= 80 reads as "enjoying", otherwise "mad" —
+    // adjust once you have a feel for real score distributions.
+    applyPerformanceResult(playedCorrectly: report.scores.overall >= 80);
+  }
 
   // Null until a sheet has been picked from the library.
   Uint8List? _pdfBytes;
@@ -531,9 +554,13 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
               ),
             ),
 
-            // The draggable control already uses LiquidGlassLens. Its toggle
-            // calls the Rust-backed C bridge above.
-            Draggable_Recorder_Button(onToggle: _onRecordingChanged),
+            // The draggable control owns its own Rust-bridge notesStream()
+            // recording pipeline; it reports UI toggle state here and, per
+            // phrase, hands the notes off for upload + feedback polling.
+            Draggable_Recorder_Button(
+              onToggle: _onRecordingChanged,
+              onPhrase: _onPhraseReceived,
+            ),
 
             // ─────────────────────────────────────────────
             // SEARCH

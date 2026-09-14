@@ -1,7 +1,10 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/physics.dart';
+import 'package:flutter/services.dart';
 import 'Vinyl_Disk_Painter.dart';
+import 'Note_Burst_Controller.dart';
+import 'Note_Burst_Layer.dart';
 
 /// Wraps a [VinylDisk] with real touch-and-spin physics: drag it in a
 /// circle and it picks up angular momentum; let go and it keeps spinning
@@ -49,6 +52,9 @@ class SpinnableDiskState extends State<SpinnableDisk>
   bool _activatedThisSpin = false;
   double _traveledSinceRelease = 0;
 
+  final NoteBurstController _noteBurst = NoteBurstController();
+  DateTime? _lastHapticTime;
+
   @override
   void initState() {
     super.initState();
@@ -59,7 +65,30 @@ class SpinnableDiskState extends State<SpinnableDisk>
   @override
   void dispose() {
     _spinController.dispose();
+    _noteBurst.dispose();
     super.dispose();
+  }
+
+  // While actively dragging, _spinController isn't running so it has no
+  // velocity of its own — use the drag-computed value instead. Once
+  // released, the controller's own velocity (driven by FrictionSimulation)
+  // takes over for the coast-down.
+  double _currentAngularVelocity() {
+    return _dragging ? _angularVelocity : _spinController.velocity;
+  }
+
+  // Every note spawn ticks the device lightly — a short, repeated pulse
+  // reads as a continuous buzz while notes are actively spitting out,
+  // matching the Instagram-story "zzzz" feel. Throttled so a fast flick
+  // (many notes per frame) doesn't spam the haptics engine.
+  void _onNoteSpawned() {
+    final now = DateTime.now();
+    if (_lastHapticTime != null &&
+        now.difference(_lastHapticTime!) < const Duration(milliseconds: 60)) {
+      return;
+    }
+    _lastHapticTime = now;
+    HapticFeedback.selectionClick();
   }
 
   double _angleAt(Offset localPosition) {
@@ -155,13 +184,34 @@ class SpinnableDiskState extends State<SpinnableDisk>
       onPanStart: _onPanStart,
       onPanUpdate: _onPanUpdate,
       onPanEnd: _onPanEnd,
-      child: VinylDisk(
-        size: widget.size,
-        rotation: _rotation,
-        label: widget.label,
-        sublabel: widget.sublabel,
-        labelColor: widget.labelColor,
-        diskColor: widget.diskColor,
+      // SizedBox pins the GestureDetector's hit-test area to just the
+      // disk itself — Clip.none lets the (IgnorePointer'd) note layer
+      // overflow that box to fly outward without expanding it.
+      child: SizedBox(
+        width: widget.size,
+        height: widget.size,
+        child: Stack(
+          clipBehavior: Clip.none,
+          alignment: Alignment.center,
+          children: [
+            VinylDisk(
+              size: widget.size,
+              rotation: _rotation,
+              label: widget.label,
+              sublabel: widget.sublabel,
+              labelColor: widget.labelColor,
+              diskColor: widget.diskColor,
+            ),
+            IgnorePointer(
+              child: NoteBurstLayer(
+                controller: _noteBurst,
+                diskSize: widget.size,
+                getAngularVelocity: _currentAngularVelocity,
+                onNoteSpawned: _onNoteSpawned,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
