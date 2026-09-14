@@ -12,6 +12,7 @@ feedback_generator/
   summarizer.py     phase 2 -- aggregates every phrase into one summary
   store.py          reads/writes storage/feedback/
   errors.py
+  bar_boxes/        pixel box per bar for the score highlight (own README)
   judges/           all feedback text and all 0-100 ratings live here
     __init__.py     shared notes/context/Finding types, pitch + bar math,
                     thresholds, judge registry

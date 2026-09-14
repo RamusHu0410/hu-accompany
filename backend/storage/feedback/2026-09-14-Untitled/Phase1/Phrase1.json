@@ -1,0 +1,50 @@
+{
+  "piece": null,
+  "recorded_at": "2026-09-14T14:06:06.799348+00:00",
+  "phrase": 1,
+  "bpm": 96,
+  "time_signature": "4/4",
+  "bars": [
+    1,
+    1
+  ],
+  "scores": {
+    "overall": 77,
+    "pitch": 57,
+    "rhythm": 100,
+    "tempo": null,
+    "dynamics": null,
+    "articulation": null,
+    "notes": null,
+    "pedaling": null
+  },
+  "feedback": [
+    {
+      "bars": 1,
+      "category": "pitch",
+      "severity": "major",
+      "confidence": 1.0,
+      "message": "Wrong note \u2014 you played C#4 instead of D4.",
+      "details": {
+        "note_id": 1,
+        "cents": -100.0,
+        "expected_hz": 293.66,
+        "user_hz": 277.18,
+        "expected_note": "D4",
+        "user_note": "C#4",
+        "suggestion": "Practice this transition slowly and focus on the correct note."
+      },
+      "box": {
+        "page": 1,
+        "x": 412,
+        "y": 903,
+        "w": 305,
+        "h": 330,
+        "page_size": [
+          2262,
+          3200
+        ]
+      }
+    }
+  ]
+}

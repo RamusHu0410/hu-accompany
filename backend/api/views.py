@@ -166,7 +166,10 @@ def phrase_feedback_view(request):
     -> every expected note comes back as a missing-note finding).
 
     Response: judge_phrase()'s dict plus "session_id" and "stored_at"
-    (a storage/... path), or "storage_error" if it couldn't be saved.
+    (a storage/... path), or "storage_error" if it couldn't be saved, plus
+    "bar_boxes" -- the piece's full bar-box list echoed back (the same
+    `bar_boxes` that came in, or [] if none), so the caller has every bar's
+    pixel rectangle and not only the ones a finding landed in.
     """
     try:
         body = json.loads(request.body)
@@ -221,6 +224,8 @@ def phrase_feedback_view(request):
 
     # Persisting is best-effort: a full disk shouldn't cost the user their
     # feedback, so a failed write is reported alongside the result.
+    # Done before merging bar_boxes below, so the stored phase-1 file keeps
+    # only the per-finding `box` and isn't bloated with the whole page list.
     try:
         session_id, stored_path = feedback_store.save_phrase(
             settings.STORAGE_ROOT, result, session_id=session_id, piece=piece
@@ -231,6 +236,12 @@ def phrase_feedback_view(request):
         result["session_id"] = session_id
         result["stored_at"] = None
         result["storage_error"] = str(e)
+
+    # Echo the piece's bar boxes back at the top level so a caller that just
+    # sent them (or a frontend rendering the whole page) has every bar's
+    # pixel rectangle in hand, not only the bars a finding landed in. `[]`
+    # when none were sent.
+    result["bar_boxes"] = bar_boxes or []
 
     return JsonResponse(result)
 
