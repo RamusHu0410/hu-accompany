@@ -4,7 +4,7 @@ import 'package:flutter/physics.dart';
 import 'package:flutter/services.dart';
 import 'Vinyl_Disk_Painter.dart';
 import 'Note_Burst_Controller.dart';
-import 'Note_Burst_Layer.dart';
+import 'Music_Note_Burst_Layer.dart';
 
 /// Wraps a [VinylDisk] with real touch-and-spin physics: drag it in a
 /// circle and it picks up angular momentum; let go and it keeps spinning
