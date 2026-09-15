@@ -5,21 +5,22 @@ import 'package:hu_accomponist/src/rust/frb_generated.dart';
 import 'package:hu_accomponist/src/rust/models.dart';
 import 'package:hu_accomponist/src/rust/api.dart';
 
-
-Future<void> startListening() async {
-    await RustLib.init(); // load native lib (v2)
-
-    // Subscribe to stream
-    final stream = notesStream();
-    stream.listen((List<Notes> phrase) {
-
-    });
-}
-
 class Draggable_Recorder_Button extends StatefulWidget {
   final void Function(bool isRecording) onToggle;
 
-  const Draggable_Recorder_Button({super.key, required this.onToggle});
+  /// Fired once per phrase, the moment Rust finishes analyzing it.
+  /// [sessionId] ties every phrase in one recording together for the
+  /// backend; [phraseNumber] is 1-indexed within that session. Left
+  /// optional so this widget still works if a caller only cares about
+  /// onToggle.
+  final void Function(String sessionId, int phraseNumber, List<Notes> notes)?
+  onPhrase;
+
+  const Draggable_Recorder_Button({
+    super.key,
+    required this.onToggle,
+    this.onPhrase,
+  });
 
   @override
   State<Draggable_Recorder_Button> createState() =>
@@ -32,6 +33,12 @@ class _Draggable_Recorder_ButtonState extends State<Draggable_Recorder_Button>
   Duration _elapsed = Duration.zero;
   Timer? _timer;
   Offset _position = const Offset(20, 400);
+
+  // Owns the live notesStream() subscription for the current recording.
+  // Null whenever we're not recording.
+  StreamSubscription<List<Notes>>? _phraseSubscription;
+  String _sessionId = '';
+  int _phraseNumber = 0;
 
   // Approximate footprint of the whole draggable widget (label row +
   // spacing + the 100x100 icon stack) — used to keep it fully on-screen
@@ -58,8 +65,55 @@ class _Draggable_Recorder_ButtonState extends State<Draggable_Recorder_Button>
   @override
   void dispose() {
     _timer?.cancel();
+    _phraseSubscription?.cancel();
     _pulseCtrl.dispose();
     super.dispose();
+  }
+
+  Future<void> _startRecording() async {
+    // Cheap, no-dependency session id — good enough to group phrases
+    // client-side. Swap for a UUID package if the backend wants one.
+    _sessionId = DateTime.now().microsecondsSinceEpoch.toString();
+    _phraseNumber = 0;
+
+    try {
+      await RustLib.init(); // flutter_rust_bridge no-ops if already initialized
+
+      // ASSUMPTION: api.dart exposes a startRecording()/stopRecording()
+      // pair alongside notesStream() — mirroring what the old
+      // start_recording/stop_recording native symbols did, but through
+      // the Rust bridge instead of raw FFI. Uncomment once the real
+      // function names in api.dart are confirmed; without this,
+      // notesStream() is subscribed but Rust is never actually told to
+      // start capturing audio.
+      // await startRecording();
+
+      _phraseSubscription = notesStream().listen(
+        (List<Notes> phrase) {
+          _phraseNumber += 1;
+          widget.onPhrase?.call(_sessionId, _phraseNumber, phrase);
+        },
+        onError: (Object error, StackTrace stackTrace) {
+          debugPrint(
+            '[Draggable_Recorder_Button] notesStream error: $error',
+          );
+        },
+      );
+    } catch (error, stackTrace) {
+      debugPrint(
+        '[Draggable_Recorder_Button] Failed to start recording: $error',
+      );
+      debugPrintStack(stackTrace: stackTrace);
+    }
+  }
+
+  Future<void> _stopRecording() async {
+    await _phraseSubscription?.cancel();
+    _phraseSubscription = null;
+
+    // ASSUMPTION: pairs with the commented-out startRecording() call
+    // above — see that comment for context.
+    // await stopRecording();
   }
 
   void _toggle() {
@@ -68,6 +122,7 @@ class _Draggable_Recorder_ButtonState extends State<Draggable_Recorder_Button>
       _pulseCtrl.stop();
       _pulseCtrl.reset();
       setState(() => _isRecording = false);
+      _stopRecording();
     } else {
       setState(() {
         _isRecording = true;
@@ -77,6 +132,7 @@ class _Draggable_Recorder_ButtonState extends State<Draggable_Recorder_Button>
       _timer = Timer.periodic(const Duration(seconds: 1), (_) {
         setState(() => _elapsed += const Duration(seconds: 1));
       });
+      _startRecording();
     }
     widget.onToggle(_isRecording);
   }
