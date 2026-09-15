@@ -31,10 +31,22 @@ ROOT_URLCONF = "server.urls"
 
 WSGI_APPLICATION = "server.wsgi.application"
 
+# PostgreSQL is the single source of truth for all catalog + pipeline data.
+# Only the PDFs (and rendered page/debug PNGs) live on disk under
+# STORAGE_ROOT; everything else -- IMSLP works/versions, download records,
+# and the OMR pipeline's structured output (notes, markings, piece_data,
+# bar_boxes, MusicXML) -- is stored here.
+#
+# Defaults match backend/docker-compose.yml's postgres service; override any
+# of them via the environment (e.g. in .env).
 DATABASES = {
     "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
+        "ENGINE": "django.db.backends.postgresql",
+        "NAME": os.environ.get("POSTGRES_DB", "music_catalog"),
+        "USER": os.environ.get("POSTGRES_USER", "app"),
+        "PASSWORD": os.environ.get("POSTGRES_PASSWORD", "local_dev_password"),
+        "HOST": os.environ.get("POSTGRES_HOST", "localhost"),
+        "PORT": os.environ.get("POSTGRES_PORT", "5432"),
     }
 }
 

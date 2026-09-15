@@ -1,6 +1,11 @@
 # Web framework
 django
 
+# PostgreSQL driver for Django's postgresql backend (server/settings.py).
+# psycopg 3; the [binary] extra ships prebuilt libpq wheels so no system
+# libpq/pg_config is needed to install.
+psycopg[binary]
+
 # Config / environment
 python-dotenv
 

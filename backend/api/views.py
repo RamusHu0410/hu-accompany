@@ -2,9 +2,11 @@ import json
 from pathlib import Path
 
 from django.conf import settings
+from django.db import transaction
 from django.http import JsonResponse, HttpRequest
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
+from api.models import ProcessedScore, ProcessedPage
 from imslp_downloader import storage as score_storage
 from imslp_search.main import search_imslp
 from imslp_search.errors import IMSLPNetworkError, WorkNotFoundError
@@ -61,12 +63,17 @@ def process_score_view(request: HttpRequest):
     notehead/clef/barline/accidental/marking/etc. boxed and labeled), then
     parse timed note events into a notes JSON per page (part1_notes) and OCR
     composer markings -- dynamics/tempo/expression/technique/time signature
-    -- into a markings JSON per page (part2_markings). All per-page output
-    files are written next to the source PDF in storage, plus one combined
-    piece_json/piece_data for the whole piece and a bars_json/bar_boxes
-    listing where each bar sits on the page in pixels (what
-    /api/feedback/phrase's `bar_boxes` takes, so feedback can be drawn onto
-    the score).
+    -- into a markings JSON per page (part2_markings).
+
+    All of the structured output is persisted to Postgres: a ProcessedScore
+    row holds the whole-piece piece_data, bar_boxes (where each bar sits on
+    the page in pixels -- what /api/feedback/phrase's `bar_boxes` takes, so
+    feedback can be drawn onto the score), bpm and time signature; a
+    ProcessedPage row per page holds that page's MusicXML, notes JSON and
+    markings JSON. Only the binary artifacts stay on disk under
+    STORAGE_ROOT -- the source and enhanced PDFs and the rendered page /
+    debug / markings-debug PNGs -- and the DB keeps just their
+    "storage/..." paths. Re-processing the same PDF replaces its rows.
 
     Body: {"file_path": "storage/scores/<Composer>/<Work>/<file>.pdf"}
     `file_path` matches the format returned by /api/imslp/download's file_path.
@@ -97,23 +104,60 @@ def process_score_view(request: HttpRequest):
         ]
 
     def to_db_path(path):
+        if not path:
+            return ""
         return score_storage.to_db_path(Path(path).relative_to(settings.STORAGE_ROOT))
+
+    # Persist the pipeline's structured output to Postgres. The PDFs and
+    # rendered PNGs stay on disk; only their storage-relative paths are
+    # stored. Re-processing the same PDF replaces the previous row (and its
+    # pages, via cascade) rather than accumulating duplicates.
+    page_pngs = to_db_paths(result["pages"])
+    debug_pngs = to_db_paths(result["debug_png"])
+    markings_debug_pngs = to_db_paths(result["markings_debug_png"])
+
+    with transaction.atomic():
+        ProcessedScore.objects.filter(source_pdf_path=file_path).delete()
+        score = ProcessedScore.objects.create(
+            source_pdf_path=file_path,
+            enhanced_pdf_path=to_db_path(result["enhanced_pdf"]),
+            bpm=result["bpm"],
+            time_signature=result["time_signature"] or "",
+            piece_data=result["piece_data"],
+            bar_boxes=result["bar_boxes"],
+            timing=result["timing"],
+        )
+        pages = [
+            ProcessedPage(
+                score=score,
+                page_number=i + 1,
+                page_png_path=page_pngs[i] if i < len(page_pngs) else "",
+                debug_png_path=debug_pngs[i] if i < len(debug_pngs) else "",
+                markings_debug_png_path=(
+                    markings_debug_pngs[i] if i < len(markings_debug_pngs) else ""
+                ),
+                musicxml=result["musicxml"][i] if i < len(result["musicxml"]) else "",
+                notes_json=result["notes_json"][i] if i < len(result["notes_json"]) else {},
+                markings_json=(
+                    result["markings_json"][i] if i < len(result["markings_json"]) else []
+                ),
+            )
+            for i in range(len(result["pages"]))
+        ]
+        ProcessedPage.objects.bulk_create(pages)
 
     return JsonResponse({
         "file_path": file_path,
-        "enhanced_pdf": to_db_path(result["enhanced_pdf"]),
-        "pages": to_db_paths(result["pages"]),
-        "musicxml": to_db_paths(result["musicxml"]),
-        "debug_png": to_db_paths(result["debug_png"]),
-        "notes_json": to_db_paths(result["notes_json"]),
-        "markings_json": to_db_paths(result["markings_json"]),
-        "markings_debug_png": to_db_paths(result["markings_debug_png"]),
-        "piece_json": to_db_path(result["piece_json"]),
+        "score_id": score.id,
+        "enhanced_pdf": score.enhanced_pdf_path,
+        "pages": page_pngs,
+        "debug_png": debug_pngs,
+        "markings_debug_png": markings_debug_pngs,
         "piece_data": result["piece_data"],
-        "bars_json": to_db_path(result["bars_json"]),
         "bar_boxes": result["bar_boxes"],
         "bpm": result["bpm"],
         "time_signature": result["time_signature"],
+        "page_count": len(result["pages"]),
         "note_count": len(result["notes"]),
         "marking_count": len(result["markings"]),
         "timing": result["timing"],

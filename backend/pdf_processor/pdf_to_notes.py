@@ -7,7 +7,6 @@ Usage:
 
 import os
 import sys
-import json
 import time
 import multiprocessing
 from pathlib import Path
@@ -110,22 +109,20 @@ def process(pdf_path: str) -> dict:
                         up scan noise around accidentals before oemer ever
                         sees the page,
           "pages":      [png paths, one per page],
-          "musicxml":   [musicxml paths, one per page],
           "debug_png":  [debug png paths, one per page -- detected
                         noteheads/clefs/barlines/etc. boxed and labeled],
-          "notes_json": [notes json paths, one per page],
-          "markings_json": [markings json paths, one per page],
+          "notes_json": [per-page notes dicts, in memory -- NOT written to
+                        disk; the caller persists these to Postgres],
+          "markings_json": [per-page markings lists, in memory -- NOT written
+                        to disk; the caller persists these to Postgres],
           "markings_debug_png": [debug png paths, one per page -- detected
                         markings boxed and labeled on a clean copy of the
                         page, separate from "debug_png" above so marking
                         boxes aren't lost among part1_notes' note/clef/
                         barline/accidental boxes],
-          "piece_json": path to the combined, whole-piece JSON (also
-                        written to disk) -- same content as "piece_data"
-                        below, matching the downstream Rust consumer's
-                        PieceData/Notes struct shape,
-          "bars_json":  path to the bar-box JSON (also written to disk) --
-                        same content as "bar_boxes" below,
+          "musicxml":   [per-page MusicXML text, in memory -- the OMR step's
+                        .musicxml files read back so the caller can store
+                        them in Postgres,
           "bar_boxes":  [{"bar", "page", "x", "y", "w", "h", "page_size"}, ...]
                         -- where every bar sits on the page in pixels, so
                         feedback tagged with a bar number can be drawn onto
@@ -176,7 +173,7 @@ def process(pdf_path: str) -> dict:
     bar_boxes = _collect_bar_boxes(omr_results)
 
     t0 = time.time()
-    notes_json_paths = []
+    notes_by_page = []
     all_notes = []
     page_durations = []
     time_offset = 0.0
@@ -195,10 +192,10 @@ def process(pdf_path: str) -> dict:
         page_durations.append(page_duration)
         time_offset += page_duration
 
-        out_path = Path(xml_path).resolve().parent / f"{Path(xml_path).stem}_notes.json"
-        with open(out_path, "w") as f:
-            json.dump(page_result, f, indent=2)
-        notes_json_paths.append(str(out_path))
+        # The per-page notes JSON is no longer written to disk -- it's kept
+        # in memory here and persisted to Postgres (ProcessedPage.notes_json)
+        # by the caller.
+        notes_by_page.append(page_result)
     notes_time = time.time() - t0
 
     all_notes.sort(key=lambda n: (n["start"], n["hz"]))
@@ -209,8 +206,8 @@ def process(pdf_path: str) -> dict:
         n["id"] = i
 
     t0 = time.time()
-    markings_json_paths = []
     markings_debug_paths = []
+    markings_by_page = []
     all_markings = []
     time_offset = 0.0
     for png_path, xml_path, omr_result, page_duration in zip(
@@ -231,38 +228,42 @@ def process(pdf_path: str) -> dict:
         for mk in page_markings:
             all_markings.append({**mk, "offset_ql": round(mk["offset_ql"] + time_offset, 4)})
 
-        out_path = Path(xml_path).resolve().parent / f"{Path(xml_path).stem}_markings.json"
-        with open(out_path, "w") as f:
-            json.dump(page_markings, f, indent=2)
-        markings_json_paths.append(str(out_path))
+        # Per-page markings are kept in memory (persisted to Postgres as
+        # ProcessedPage.markings_json by the caller) rather than dumped to
+        # disk. Only the debug PNG above is a file.
+        markings_by_page.append(page_markings)
         time_offset += page_duration
     markings_time = time.time() - t0
 
     all_markings.sort(key=lambda mk: mk["offset_ql"])
 
     piece_data = _build_piece_data(pdf_path, bpm, time_signature, all_notes, all_markings)
-    piece_dir = Path(pdf_path).resolve().parent
-    piece_json_path = str(piece_dir / f"{piece_dir.name}.json")
-    with open(piece_json_path, "w") as f:
-        json.dump(piece_data, f, indent=2)
 
-    # Kept beside piece_data rather than inside it: piece_data mirrors the
-    # Rust-side PieceData struct, and where a bar sits on the page is the
-    # frontend's business, not the note-detection engine's.
-    bars_json_path = str(piece_dir / f"{piece_dir.name}_bars.json")
-    with open(bars_json_path, "w") as f:
-        json.dump(bar_boxes, f, indent=2)
+    # The MusicXML the OMR step wrote is structured text that belongs in
+    # Postgres (ProcessedPage.musicxml), so read each page's XML back into
+    # memory here. The file itself is left on disk as an OMR intermediate.
+    musicxml_by_page = []
+    for xml_path in xml_paths:
+        try:
+            musicxml_by_page.append(Path(xml_path).read_text())
+        except OSError:
+            musicxml_by_page.append("")
+
+    # piece_data (matches the Rust-side PieceData struct) and bar_boxes (where
+    # each bar sits on the page in pixels) are no longer written to disk --
+    # they're returned for the caller to store in Postgres.
 
     return {
+        # On-disk artifacts, as absolute paths (the caller converts these to
+        # "storage/..." db paths). PDFs and PNGs stay on disk by design.
         "enhanced_pdf": enhanced_pdf_path,
         "pages": pages,
-        "musicxml": xml_paths,
         "debug_png": debug_paths,
-        "notes_json": notes_json_paths,
-        "markings_json": markings_json_paths,
         "markings_debug_png": markings_debug_paths,
-        "piece_json": piece_json_path,
-        "bars_json": bars_json_path,
+        # Structured, in-memory output destined for Postgres.
+        "musicxml": musicxml_by_page,
+        "notes_json": notes_by_page,
+        "markings_json": markings_by_page,
         "bar_boxes": bar_boxes,
         "bpm": bpm,
         "time_signature": time_signature,
@@ -300,5 +301,5 @@ if __name__ == "__main__":
     print(f"[4/5] Note parsing ({len(result['notes'])} note(s)): {t['notes']}s")
     print(f"[5/5] Marking detection ({len(result['markings'])} marking(s)): {t['markings']}s")
     print(f"Total: {t['total']}s")
-    print(f"Piece JSON: {result['piece_json']}")
-    print(f"Bar boxes ({len(result['bar_boxes'])} bar(s)): {result['bars_json']}")
+    print(f"Piece: {result['piece_data']['piece_name']} ({len(result['piece_data']['notes'])} note(s))")
+    print(f"Bar boxes: {len(result['bar_boxes'])} bar(s)")
