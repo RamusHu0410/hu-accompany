@@ -11,7 +11,8 @@ import 'Record_Navigator_Page.dart';
 import 'package:hu_accomponist/src/rust/frb_generated.dart';
 import 'package:hu_accomponist/src/rust/models.dart';
 import 'Phrase_Send2_Server.dart';
-import ' Pull_back_phrase.dart';
+import 'Pull_back_Phrase.dart';
+import 'Character_mood_display.dart';
 
 
 
@@ -184,35 +185,61 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
     if (mounted) {
       setState(() => _isRecording = isRecording);
     }
-    if (!isRecording) {
+    if (isRecording) {
+      // A fresh recording gets a fresh session — the backend assigns the
+      // real session id on phrase 1's response (see below).
+      _feedbackSessionId = null;
+    } else {
       setCharacterMood(CharacterMood.normal);
     }
   }
 
-  /// Fired by Draggable_Recorder_Button once per phrase, as soon as Rust
-  /// finishes analyzing it. Uploads the raw notes, then polls the backend
-  /// for the scored feedback and reflects it in the companion's mood.
-  ///
-  /// TODO: once the real feedback endpoint exists, this is also the place
-  /// to surface PhraseReport.feedback in the UI (e.g. highlighting the
-  /// wrong note on the score) rather than only driving mood.
-  Future<void> _onPhraseReceived(
-    String sessionId,
-    int phraseNumber,
-    List<Notes> notes,
-  ) async {
-    await PhraseUploadService.sendPhrase(
-      sessionId: sessionId,
-      phraseNumber: phraseNumber,
-      notes: notes,
-    );
+  // Backend-assigned session id (format "<date>-<piece title>"), captured
+  // from phrase 1's response and reused for every later phrase in the
+  // same recording so they land in one session directory. Null until
+  // phrase 1 comes back.
+  String? _feedbackSessionId;
 
-    final report = await PhraseFeedbackService.fetchPhraseFeedback(
-      sessionId: sessionId,
+  /// Fired by Draggable_Recorder_Button once per phrase, as soon as Rust
+  /// finishes analyzing it. Sends it to /api/feedback/phrase, which
+  /// judges and returns the phrase's report in the same response, then
+  /// reflects the result in the companion's mood.
+  ///
+  /// TODO — three inputs the real endpoint requires that nothing in this
+  /// file currently tracks; wire these in from wherever they actually
+  /// live once that's decided:
+  ///   - `piece`: title/composer/composed_date for the loaded score —
+  ///     probably known back when the piece was picked from the library.
+  ///   - `bpm` / `timeSignature`: also piece-level, likely from the same
+  ///     place, or from the OMR output below.
+  ///   - `expectedNotes`: the ground-truth notes for this phrase's bars —
+  ///     presumably the notes_json your OMR pipeline
+  ///     (/api/score/process or /api/score/process-omr) already produced
+  ///     for this piece, sliced to the bars this phrase covers.
+  ///
+  /// TODO: once you're happy with the shape, this is also the place to
+  /// surface PhraseReport.feedback in the UI (e.g. highlighting the wrong
+  /// note on the score via each finding's `box`) rather than only driving
+  /// mood.
+  Future<void> _onPhraseReceived(int phraseNumber, List<Notes> notes) async {
+    final report = await PhraseUploadService.sendPhrase(
+      sessionId: _feedbackSessionId,
       phraseNumber: phraseNumber,
+      // PLACEHOLDER — see TODO above.
+      bpm: 96,
+      timeSignature: '4/4',
+      piece: const PieceInfo(
+        title: 'TODO',
+        composer: 'TODO',
+        composedDate: 'TODO',
+      ),
+      expectedNotes: const [],
+      userNotes: notes,
     );
 
     if (report == null || !mounted) return;
+
+    _feedbackSessionId = report.sessionId;
 
     // ASSUMPTION: overall >= 80 reads as "enjoying", otherwise "mad" —
     // adjust once you have a feel for real score distributions.
@@ -532,25 +559,18 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
               right: 0,
               bottom: 0,
               child: IgnorePointer(
-                child: SizedBox(
-                  // Tsundere is intentionally smaller than Wave so the score
-                  // remains easy to read. Both images are bottom-right aligned
-                  // so their feet sit on the screen's bottom edge.
+                child: CharacterMoodDisplay(
+                  assetPath: _characterAsset,
+                  // Tsundere is intentionally smaller than Wave so the
+                  // score remains easy to read. Both images are
+                  // bottom-right aligned so their feet sit on the
+                  // screen's bottom edge.
                   width: _selectedCharacter == CharacterType.tsundereMusic
                       ? 205
                       : 250,
                   height: _selectedCharacter == CharacterType.tsundereMusic
                       ? 285
                       : 310,
-                  child: AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 220),
-                    child: Image.asset(
-                      _characterAsset,
-                      key: ValueKey(_characterAsset),
-                      fit: BoxFit.contain,
-                      alignment: Alignment.bottomRight,
-                    ),
-                  ),
                 ),
               ),
             ),

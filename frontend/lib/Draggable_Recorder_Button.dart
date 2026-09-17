@@ -9,12 +9,10 @@ class Draggable_Recorder_Button extends StatefulWidget {
   final void Function(bool isRecording) onToggle;
 
   /// Fired once per phrase, the moment Rust finishes analyzing it.
-  /// [sessionId] ties every phrase in one recording together for the
-  /// backend; [phraseNumber] is 1-indexed within that session. Left
-  /// optional so this widget still works if a caller only cares about
-  /// onToggle.
-  final void Function(String sessionId, int phraseNumber, List<Notes> notes)?
-  onPhrase;
+  /// [phraseNumber] is 1-indexed within this recording. The backend owns
+  /// session grouping (see Phrase_Send2_Server.dart) — this widget no
+  /// longer invents a client-side session id.
+  final void Function(int phraseNumber, List<Notes> notes)? onPhrase;
 
   const Draggable_Recorder_Button({
     super.key,
@@ -37,7 +35,6 @@ class _Draggable_Recorder_ButtonState extends State<Draggable_Recorder_Button>
   // Owns the live notesStream() subscription for the current recording.
   // Null whenever we're not recording.
   StreamSubscription<List<Notes>>? _phraseSubscription;
-  String _sessionId = '';
   int _phraseNumber = 0;
 
   // Approximate footprint of the whole draggable widget (label row +
@@ -71,9 +68,6 @@ class _Draggable_Recorder_ButtonState extends State<Draggable_Recorder_Button>
   }
 
   Future<void> _startRecording() async {
-    // Cheap, no-dependency session id — good enough to group phrases
-    // client-side. Swap for a UUID package if the backend wants one.
-    _sessionId = DateTime.now().microsecondsSinceEpoch.toString();
     _phraseNumber = 0;
 
     try {
@@ -91,7 +85,7 @@ class _Draggable_Recorder_ButtonState extends State<Draggable_Recorder_Button>
       _phraseSubscription = notesStream().listen(
         (List<Notes> phrase) {
           _phraseNumber += 1;
-          widget.onPhrase?.call(_sessionId, _phraseNumber, phrase);
+          widget.onPhrase?.call(_phraseNumber, phrase);
         },
         onError: (Object error, StackTrace stackTrace) {
           debugPrint(
