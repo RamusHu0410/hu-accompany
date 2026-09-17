@@ -3,20 +3,32 @@ import csv
 import sys
 import zipfile
 import xml.etree.ElementTree as ET
+from pathlib import Path
+from db.db import SessionLocal
+from db.crud import get_or_create_score
 
-DB_PATH = "pdmx.db"
-CSV_PATH = "PDMX.csv"
+# --- CONFIG ---
+PDMX_ROOT = Path(__file__).parent  # folder containing pdmx.py, PDMX.csv, mxl/
+CSV_PATH = PDMX_ROOT / "PDMX.csv"
+DB_PATH = PDMX_ROOT / "pdmx.db"
 LIMIT = 5
+OUTPUT_PATH = "/Users/kingsleyleon/dev/projects/hu-accompany/backend/storage"
+db = SessionLocal()
+
+
+def resolve_pdmx_path(relative_path: str) -> Path:
+    # relative_path looks like "./mxl/10/44/xyz.mxl"
+    return PDMX_ROOT / relative_path.lstrip("./")
 
 
 def init_db():
-    _ = csv.field_size_limit(sys.maxsize)
+    csv.field_size_limit(sys.maxsize)
 
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
 
-    _ = cur.execute("DROP TABLE IF EXISTS pieces")
-    _ = cur.execute("""
+    cur.execute("DROP TABLE IF EXISTS pieces")
+    cur.execute("""
         CREATE TABLE pieces (
             title TEXT,
             song_name TEXT,
@@ -47,26 +59,26 @@ def init_db():
                     1 if row.get("subset:deduplicated") in ("True", "1", "true") else 0,
                 )
             )
-            if len(rows) >= 50_000:  # batch insert for speed
-                _ = cur.executemany("INSERT INTO pieces VALUES (?,?,?,?,?,?,?,?)", rows)
+            if len(rows) >= 50_000:
+                cur.executemany("INSERT INTO pieces VALUES (?,?,?,?,?,?,?,?)", rows)
                 rows = []
         if rows:
-            _ = cur.executemany("INSERT INTO pieces VALUES (?,?,?,?,?,?,?,?)", rows)
+            cur.executemany("INSERT INTO pieces VALUES (?,?,?,?,?,?,?,?)", rows)
 
-    _ = cur.execute("CREATE INDEX idx_composer ON pieces(composer_name COLLATE NOCASE)")
-    _ = cur.execute("CREATE INDEX idx_title ON pieces(title COLLATE NOCASE)")
-    _ = cur.execute("CREATE INDEX idx_rating ON pieces(rating DESC)")
+    cur.execute("CREATE INDEX idx_composer ON pieces(composer_name COLLATE NOCASE)")
+    cur.execute("CREATE INDEX idx_title ON pieces(title COLLATE NOCASE)")
+    cur.execute("CREATE INDEX idx_rating ON pieces(rating DESC)")
 
     conn.commit()
     conn.close()
-    print("Done.")
+    print("Database built.")
 
 
-def fetch_score_pdmx(composer: str, piece_name: str) -> list[sqlite3.Cursor]:
+def fetch_score_pdmx(composer: str, piece_name: str) -> list[sqlite3.Row]:
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     cur = conn.cursor()
-    _ = cur.execute(
+    cur.execute(
         """
         SELECT title, composer_name, artist_name, mxl, rating
         FROM pieces
@@ -74,26 +86,27 @@ def fetch_score_pdmx(composer: str, piece_name: str) -> list[sqlite3.Cursor]:
           AND title LIKE ? COLLATE NOCASE
         ORDER BY is_deduplicated DESC, rating DESC
         LIMIT ?
-    """,
+        """,
         (f"%{composer}%", f"%{piece_name}%", LIMIT),
     )
-    return cur.fetchall()
+    rows = cur.fetchall()
+    conn.close()
+    return rows
 
 
-def extract_musicxml(mxl_path: str, out_path: str | None) -> str:
+def extract_musicxml(mxl_path: Path, out_path: Path | None = None) -> Path:
     with zipfile.ZipFile(mxl_path) as z:
         rootfile = None
         try:
             container = z.read("META-INF/container.xml")
             root = ET.fromstring(container)
-            elem = root.find(".//{*}rootfile")  # wildcard-namespace match
+            elem = root.find(".//{*}rootfile")
             if elem is not None:
                 rootfile = elem.attrib.get("full-path")
         except (KeyError, ET.ParseError):
             pass
 
         if not rootfile:
-            # fallback: grab the first .xml/.musicxml that isn't container.xml
             candidates = [
                 n
                 for n in z.namelist()
@@ -107,7 +120,41 @@ def extract_musicxml(mxl_path: str, out_path: str | None) -> str:
         data = z.read(rootfile)
 
     if out_path is None:
-        out_path = mxl_path.rsplit(".", 1)[0] + ".musicxml"
-    with open(out_path, "wb") as f:
-        _ = f.write(data)
+        out_path = mxl_path.with_suffix(".musicxml")
+    out_path.write_bytes(data)
     return out_path
+
+
+def store_pdmx_piece(composer_name: str, piece_name: str):
+    db = SessionLocal()
+    try:
+        results = fetch_score_pdmx(composer_name, piece_name)
+        if not results:
+            print("No match found in PDMX.")
+            return None
+        best = results[0]
+
+        if best["mxl"] in (None, "N/A", ""):
+            print("No valid MusicXML for this entry.")
+            return None
+
+        mxl_abs_path = resolve_pdmx_path(best["mxl"])
+        xml_path = extract_musicxml(mxl_abs_path)
+        xml_content = xml_path.read_text(encoding="utf-8")
+
+        score, created = get_or_create_score(
+            db, best["composer_name"], best["title"], xml_content
+        )
+
+        if created:
+            print(f"Inserted new score (score_id={score.id})")
+        else:
+            print(f"Already in DB (score_id={score.id}) — skipped insert")
+
+        return score
+    finally:
+        db.close()
+
+
+if __name__ == "__main__":
+    store_pdmx_piece("Chopin", "Nocturne")
