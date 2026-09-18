@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'Search_Validator.dart';
-import 'Send_Strings_2Server.dart';
-import 'Pulling_Back_Data.dart';
+import '../utils/Search_Validator.dart';
+import '../services/Send_Strings_2Server.dart';
+import '../services/Pulling_Back_Data.dart';
+import '../widgets/Library_Browse.dart';
+import 'Shelf_Page.dart';
+import '../models/Shelf_Manager.dart';
 
 // ─── Plug your real data in here later ────────────────────────────────────────
 class MusicSheet {
@@ -28,16 +31,14 @@ class SelectedSheet {
   const SelectedSheet({required this.sheet, required this.pdfBytes});
 }
 
-const String _bookFont = 'Georgia';
-const List<String> _bookFontFallback = [
-  'Times New Roman',
-  'Iowan Old Style',
-  'serif',
-];
-const Color _ink = Color(0xFF2C2113);
-const Color _gold = Color(0xFF8A6D2F);
-const Color _cream = Color(0xFFF6EFDD);
-const Color _creamCard = Color(0xFFFFFBF2);
+// Styling lives in Library_Browse.dart so the page and its browse
+// components can't drift apart.
+const String _bookFont = libBookFont;
+const List<String> _bookFontFallback = libBookFontFallback;
+const Color _ink = libInk;
+const Color _gold = libGold;
+const Color _cream = libCream;
+const Color _creamCard = libCreamCard;
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // PAGE — a clean, flat search page (no skeuomorphic book) in the same
@@ -61,11 +62,45 @@ class _Music_Library_PageState extends State<Music_Library_Page> {
   String? _errorMessage;
   final ApiService _api = ApiService();
 
+  final Map<String, String> _filters = {};
+  LibraryCategory _category = LibraryCategory.browse;
+
+  /// True while the page is showing its browsable front matter rather than
+  /// the outcome of a search.
+  bool get _isBrowsing =>
+      !_hasSearched && !_isLoading && _errorMessage == null;
+
   @override
   void initState() {
     super.initState();
     // Drives the search field's focus glow animation.
     _focus.addListener(() => setState(() {}));
+  }
+
+  /// Filter chips are search shortcuts, not a separate facet system — the
+  /// picked values are folded into the same query string the field sends.
+  String get _composedQuery =>
+      [_search.text.trim(), ..._filters.values].where((s) => s.isNotEmpty).join(' ');
+
+  void _onFilterChanged(String filter, String? value) {
+    setState(() {
+      if (value == null) {
+        _filters.remove(filter);
+      } else {
+        _filters[filter] = value;
+      }
+    });
+    if (_composedQuery.isNotEmpty) _onSearchSubmitted(_composedQuery);
+  }
+
+  void _resetToBrowse() {
+    setState(() {
+      _search.clear();
+      _filters.clear();
+      _results = [];
+      _hasSearched = false;
+      _errorMessage = null;
+    });
   }
 
   // This helper intercepts the text and manages local states
@@ -109,6 +144,9 @@ class _Music_Library_PageState extends State<Music_Library_Page> {
   // or several (different arrangers/instrumentations/editors) — we don't
   // know which until we ask, so this always fetches first.
   void _onWorkTapped(WorkSummary work) async {
+    LibraryShelfStore.remember(
+      LibraryPick(title: work.title, composer: work.composer),
+    );
     setState(() {
       _isLoading = true;
       _errorMessage = null;
@@ -129,7 +167,7 @@ class _Music_Library_PageState extends State<Music_Library_Page> {
 
       if (editions.length == 1) {
         setState(() => _isLoading = false);
-        _openSheet(editions.first);
+        _openSheet(editions.first, composer: work.composer);
         return;
       }
 
@@ -143,7 +181,7 @@ class _Music_Library_PageState extends State<Music_Library_Page> {
         ),
         builder: (_) => _EditionPicker(work: work, editions: editions),
       );
-      if (chosen != null) _openSheet(chosen);
+      if (chosen != null) _openSheet(chosen, composer: work.composer);
     } catch (e) {
       debugPrint('fetchWorkEditions failed: $e');
       if (!mounted) return;
@@ -155,9 +193,9 @@ class _Music_Library_PageState extends State<Music_Library_Page> {
   }
 
   // Fires when a result row is tapped. Fetches the PDF for that one sheet,
-  // then closes the library and hands the result to ScoreViewerPage via
-  // the pop result.
-  void _openSheet(MusicSheet sheet) async {
+  // records it on the shelf, then closes the library and hands the
+  // result to ScoreViewerPage via the pop result.
+  void _openSheet(MusicSheet sheet, {required String composer}) async {
     setState(() {
       _isLoading = true;
       _errorMessage = null;
@@ -166,6 +204,11 @@ class _Music_Library_PageState extends State<Music_Library_Page> {
     try {
       final pdfBytes = await _api.fetchScorePdf(sheet.id);
       if (!mounted) return;
+      ShelfManager.recordPlay(
+        id: sheet.id,
+        title: sheet.title,
+        composer: composer,
+      );
       Navigator.pop(context, SelectedSheet(sheet: sheet, pdfBytes: pdfBytes));
     } catch (e) {
       setState(() {
@@ -219,11 +262,36 @@ class _Music_Library_PageState extends State<Music_Library_Page> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            const SizedBox(height: 12),
+                            const SizedBox(height: 8),
                             _header(),
-                            const SizedBox(height: 28),
-                            _searchField(),
+                            // The strip and the category row are front
+                            // matter — they fold away once a search is in
+                            // flight so results get the full height.
+                            _collapsible(
+                              visible: _isBrowsing,
+                              child: Padding(
+                                padding: const EdgeInsets.only(top: 22),
+                                child: _pickStrip(),
+                              ),
+                            ),
                             const SizedBox(height: 20),
+                            _searchField(),
+                            const SizedBox(height: 12),
+                            LibraryFilterChips(
+                              selected: _filters,
+                              onChanged: _onFilterChanged,
+                            ),
+                            _collapsible(
+                              visible: _isBrowsing,
+                              child: Padding(
+                                padding: const EdgeInsets.only(top: 14),
+                                child: QuickCategoryRow(
+                                  selected: _category,
+                                  onSelected: _onCategorySelected,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 16),
                             Expanded(child: _resultsArea()),
                           ],
                         ),
@@ -263,7 +331,7 @@ class _Music_Library_PageState extends State<Music_Library_Page> {
     );
   }
 
-  // ── Header: title, thin gold flourish, tagline, attribution ─────────────
+  // ── Header: title, thin gold flourish ───────────────────────────────────
   Widget _header() {
     return Column(
       children: [
@@ -273,12 +341,12 @@ class _Music_Library_PageState extends State<Music_Library_Page> {
           style: TextStyle(
             fontFamily: _bookFont,
             fontFamilyFallback: _bookFontFallback,
-            fontSize: 40,
+            fontSize: 34,
             fontWeight: FontWeight.w700,
             color: _ink,
           ),
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 10),
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
@@ -289,30 +357,44 @@ class _Music_Library_PageState extends State<Music_Library_Page> {
             Container(width: 32, height: 1, color: _gold.withValues(alpha: 0.45)),
           ],
         ),
-        const SizedBox(height: 12),
-        Text(
-          'search the collection',
-          style: TextStyle(
-            fontFamily: _bookFont,
-            fontFamilyFallback: _bookFontFallback,
-            fontStyle: FontStyle.italic,
-            fontSize: 15,
-            color: _gold,
-          ),
-        ),
-        const SizedBox(height: 6),
-        Text(
-          'All sheet music is sourced from IMSLP.org',
-          style: TextStyle(
-            fontFamily: _bookFont,
-            fontFamilyFallback: _bookFontFallback,
-            fontStyle: FontStyle.italic,
-            fontSize: 11,
-            color: _ink.withValues(alpha: 0.4),
-          ),
-        ),
       ],
     );
+  }
+
+  // Front matter folds away instead of snapping, so the results area
+  // growing doesn't feel like a page swap.
+  Widget _collapsible({required bool visible, required Widget child}) {
+    return AnimatedSize(
+      duration: const Duration(milliseconds: 240),
+      curve: Curves.easeOutCubic,
+      alignment: Alignment.topCenter,
+      child: visible ? child : const SizedBox(width: double.infinity),
+    );
+  }
+
+  // Recently played once there's history, curated picks before that.
+  Widget _pickStrip() {
+    final recents = LibraryShelfStore.recents;
+    return LibraryPickStrip(
+      label: recents.isEmpty ? 'Featured' : 'Recently played',
+      picks: recents.isEmpty ? kFeaturedPicks : recents,
+      onTap: _onPickTapped,
+    );
+  }
+
+  void _onPickTapped(LibraryPick pick) {
+    _search.text = pick.title;
+    _onSearchSubmitted(pick.title);
+  }
+
+  void _onCategorySelected(LibraryCategory category) {
+    if (category == LibraryCategory.collections) {
+      Navigator.of(
+        context,
+      ).push(MaterialPageRoute(builder: (_) => const Shelf_Page()));
+      return;
+    }
+    setState(() => _category = category);
   }
 
   // ── Search field: pill shape, animated focus glow ────────────────────────
@@ -349,7 +431,7 @@ class _Music_Library_PageState extends State<Music_Library_Page> {
               controller: _search,
               focusNode: _focus,
               textInputAction: TextInputAction.search,
-              onSubmitted: _onSearchSubmitted,
+              onSubmitted: (_) => _onSearchSubmitted(_composedQuery),
               onChanged: (_) => setState(() {}),
               style: const TextStyle(
                 fontFamily: _bookFont,
@@ -372,9 +454,9 @@ class _Music_Library_PageState extends State<Music_Library_Page> {
               cursorColor: _gold,
             ),
           ),
-          if (_search.text.isNotEmpty)
+          if (_search.text.isNotEmpty || _hasSearched)
             GestureDetector(
-              onTap: () => setState(_search.clear),
+              onTap: _resetToBrowse,
               child: Padding(
                 padding: const EdgeInsets.only(right: 16),
                 child: Icon(
@@ -418,19 +500,8 @@ class _Music_Library_PageState extends State<Music_Library_Page> {
         ),
       );
     } else if (!_hasSearched) {
-      key = const ValueKey('prompt');
-      child = Center(
-        child: Text(
-          'Start typing to search the library…',
-          style: TextStyle(
-            fontFamily: _bookFont,
-            fontFamilyFallback: _bookFontFallback,
-            fontStyle: FontStyle.italic,
-            fontSize: 14,
-            color: _ink.withValues(alpha: 0.35),
-          ),
-        ),
-      );
+      key = ValueKey('category_${_category.name}');
+      child = _categoryContent();
     } else if (_results.isEmpty) {
       key = const ValueKey('no_results');
       child = Center(
@@ -455,7 +526,14 @@ class _Music_Library_PageState extends State<Music_Library_Page> {
         separatorBuilder: (_, _) => const SizedBox(height: 10),
         itemBuilder: (context, i) {
           final work = _results[i];
-          return _ResultCard(work: work, onTap: () => _onWorkTapped(work));
+          return _ResultCard(
+            title: work.title,
+            composer: work.composer,
+            onTap: () => _onWorkTapped(work),
+            onFavorite: () => _toggleFavorite(
+              LibraryPick(title: work.title, composer: work.composer),
+            ),
+          );
         },
       );
     }
@@ -477,6 +555,66 @@ class _Music_Library_PageState extends State<Music_Library_Page> {
       child: KeyedSubtree(key: key, child: child),
     );
   }
+
+  // ── Idle content: whichever quick category is selected ──────────────────
+  Widget _categoryContent() {
+    switch (_category) {
+      case LibraryCategory.recent:
+        return LibraryShelfStore.recents.isEmpty
+            ? const LibraryEmptyNote(
+                icon: Icons.history_rounded,
+                message: 'Nothing opened yet.\nScores you open appear here.',
+              )
+            : _pickList(LibraryShelfStore.recents);
+      case LibraryCategory.favorites:
+        return LibraryShelfStore.favorites.isEmpty
+            ? const LibraryEmptyNote(
+                icon: Icons.star_border_rounded,
+                message: 'No favourites yet.\nTap the star on any result.',
+              )
+            : _pickList(LibraryShelfStore.favorites);
+      case LibraryCategory.collections:
+      case LibraryCategory.browse:
+        return _pickList(kFeaturedPicks, footer: true);
+    }
+  }
+
+  Widget _pickList(List<LibraryPick> picks, {bool footer = false}) {
+    return ListView.separated(
+      padding: const EdgeInsets.only(bottom: 24),
+      itemCount: picks.length + (footer ? 1 : 0),
+      separatorBuilder: (_, _) => const SizedBox(height: 10),
+      itemBuilder: (context, i) {
+        if (i == picks.length) {
+          return Padding(
+            padding: const EdgeInsets.only(top: 14),
+            child: Text(
+              'All sheet music is sourced from IMSLP.org',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontFamily: _bookFont,
+                fontFamilyFallback: _bookFontFallback,
+                fontStyle: FontStyle.italic,
+                fontSize: 11,
+                color: _ink.withValues(alpha: 0.4),
+              ),
+            ),
+          );
+        }
+        final pick = picks[i];
+        return _ResultCard(
+          title: pick.title,
+          composer: pick.composer,
+          onTap: () => _onPickTapped(pick),
+          onFavorite: () => _toggleFavorite(pick),
+        );
+      },
+    );
+  }
+
+  void _toggleFavorite(LibraryPick pick) {
+    setState(() => LibraryShelfStore.toggleFavorite(pick));
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -484,9 +622,16 @@ class _Music_Library_PageState extends State<Music_Library_Page> {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 class _ResultCard extends StatelessWidget {
-  final WorkSummary work;
+  final String title;
+  final String composer;
   final VoidCallback onTap;
-  const _ResultCard({required this.work, required this.onTap});
+  final VoidCallback onFavorite;
+  const _ResultCard({
+    required this.title,
+    required this.composer,
+    required this.onTap,
+    required this.onFavorite,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -524,20 +669,58 @@ class _ResultCard extends StatelessWidget {
               ),
               const SizedBox(width: 14),
               Expanded(
-                child: Text(
-                  work.title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontFamily: _bookFont,
-                    fontFamilyFallback: _bookFontFallback,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                    color: _ink,
-                  ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontFamily: _bookFont,
+                        fontFamilyFallback: _bookFontFallback,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: _ink,
+                      ),
+                    ),
+                    if (composer.isNotEmpty) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        composer,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontFamily: _bookFont,
+                          fontFamilyFallback: _bookFontFallback,
+                          fontStyle: FontStyle.italic,
+                          fontSize: 12,
+                          color: _ink.withValues(alpha: 0.5),
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ),
               const SizedBox(width: 8),
+              GestureDetector(
+                onTap: onFavorite,
+                behavior: HitTestBehavior.opaque,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  child: Icon(
+                    LibraryShelfStore.isFavorite(title)
+                        ? Icons.star_rounded
+                        : Icons.star_border_rounded,
+                    size: 19,
+                    color: LibraryShelfStore.isFavorite(title)
+                        ? _gold
+                        : _ink.withValues(alpha: 0.28),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 4),
               Icon(Icons.chevron_right, size: 18, color: _gold),
             ],
           ),

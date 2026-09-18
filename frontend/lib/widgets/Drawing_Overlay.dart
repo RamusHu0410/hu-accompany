@@ -17,7 +17,33 @@ class _Stroke {
   });
 }
 
+/// Holds the committed strokes so the toolbar (which lives outside this
+/// widget) can undo or clear them.
+class DrawingController extends ChangeNotifier {
+  final List<_Stroke> _strokes = [];
+
+  bool get canUndo => _strokes.isNotEmpty;
+
+  void undo() {
+    if (_strokes.isEmpty) return;
+    _strokes.removeLast();
+    notifyListeners();
+  }
+
+  void clear() {
+    if (_strokes.isEmpty) return;
+    _strokes.clear();
+    notifyListeners();
+  }
+
+  void _add(_Stroke stroke) {
+    _strokes.add(stroke);
+    notifyListeners();
+  }
+}
+
 class Drawing_Overlay extends StatefulWidget {
+  final DrawingController controller;
   final bool isDrawingMode;
   final bool isErasing;
   final Color penColor;
@@ -25,6 +51,7 @@ class Drawing_Overlay extends StatefulWidget {
   final double eraserSize;
   const Drawing_Overlay({
     super.key,
+    required this.controller,
     required this.isDrawingMode,
     this.isErasing = false,
     this.penColor = const Color(0xFFE94560),
@@ -37,7 +64,7 @@ class Drawing_Overlay extends StatefulWidget {
 }
 
 class _Drawing_OverlayState extends State<Drawing_Overlay> {
-  final List<_Stroke> _strokes = [];
+  List<_Stroke> get _strokes => widget.controller._strokes;
   _Stroke? _currentStroke;
 
   void _startStroke(Offset point) {
@@ -69,10 +96,8 @@ class _Drawing_OverlayState extends State<Drawing_Overlay> {
   void _endStroke() {
     final stroke = _currentStroke;
     if (stroke != null && stroke.points.isNotEmpty) {
-      setState(() {
-        _strokes.add(stroke);
-        _currentStroke = null;
-      });
+      setState(() => _currentStroke = null);
+      widget.controller._add(stroke);
     }
   }
 
@@ -87,10 +112,13 @@ class _Drawing_OverlayState extends State<Drawing_Overlay> {
       onPanStart: toolActive ? (d) => _startStroke(d.localPosition) : null,
       onPanUpdate: toolActive ? (d) => _extendStroke(d.localPosition) : null,
       onPanEnd: toolActive ? (d) => _endStroke() : null,
-      child: CustomPaint(
-        painter: _strokes.isNotEmpty || _currentStroke != null
-            ? _StrokePainter(strokes: _strokes, currentStroke: _currentStroke)
-            : null, // no painter = no repaint cost when canvas is empty
+      child: AnimatedBuilder(
+        animation: widget.controller,
+        builder: (_, _) => CustomPaint(
+          painter: _strokes.isNotEmpty || _currentStroke != null
+              ? _StrokePainter(strokes: _strokes, currentStroke: _currentStroke)
+              : null, // no painter = no repaint cost when canvas is empty
+        ),
       ),
     );
   }

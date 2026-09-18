@@ -1,6 +1,6 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
-import 'Note_Burst_Controller.dart';
+import '../controllers/Note_Burst_Controller.dart';
 import 'package:flutter/scheduler.dart';
 
 /// Paints whatever particles [controller] currently holds, and drives its

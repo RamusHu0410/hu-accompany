@@ -56,7 +56,7 @@ class NoteBurstController extends ChangeNotifier {
     // Spawn rate scales with spin speed — a slow drag barely spits out
     // any notes, a hard flick showers them.
     if (speed > 0.5) {
-      _spawnAccumulator += dt * (speed / (2 * pi)) * 3;
+      _spawnAccumulator += dt * (speed / (2 * pi)) * 4.5;
       while (_spawnAccumulator >= 1) {
         _spawnAccumulator -= 1;
         _spawnNote(diskRadius, speed);
@@ -83,7 +83,7 @@ class NoteBurstController extends ChangeNotifier {
         spinSpeed: (_rng.nextBool() ? 1 : -1) * (1.5 + _rng.nextDouble() * 2),
         lifespan: 0.9 + _rng.nextDouble() * 0.5,
         glyph: _glyphs[_rng.nextInt(_glyphs.length)],
-        baseSize: 14 + _rng.nextDouble() * 10,
+        baseSize: (14 + _rng.nextDouble() * 10) * 1.5,
       ),
     );
   }

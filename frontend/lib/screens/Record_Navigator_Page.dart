@@ -1,11 +1,11 @@
 import 'dart:math';
 import 'dart:ui';
 import 'package:flutter/material.dart';
-import 'Disk_Spin_Controller.dart';
-import 'Vinyl_Disk_Painter.dart';
+import '../controllers/Disk_Spin_Controller.dart';
+import '../widgets/Vinyl_Disk_Painter.dart';
 import 'Shelf_Page.dart';
 import 'Music_Library_Page.dart';
-import 'main.dart';
+import '../main.dart';
 
 /// One destination in the record crate — everything needed to draw its
 /// disk and to build the page it opens once it's spun up to speed.

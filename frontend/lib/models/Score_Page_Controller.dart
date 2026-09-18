@@ -1,6 +1,6 @@
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
-import 'Score_Page_Renderer.dart';
+import '../renderers/Score_Page_Renderer.dart';
 
 /// Lays out one score's pages on demand from its already-fetched PDF bytes,
 /// and keeps a page ahead pre-rendered so turning the page feels instant

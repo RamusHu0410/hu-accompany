@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'Score_Page_Controller.dart';
+import '../models/Score_Page_Controller.dart';
 import 'Score_Page_Renderer.dart';
 
 /// Vertically scrollable score pages. Each page fills the score area's width,

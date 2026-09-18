@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
-import 'Music_Library_Page.dart' show MusicSheet;
+import '../screens/Music_Library_Page.dart' show MusicSheet;
 import 'ServerDiscovery.dart';
 
 /// One entry in a composer's work list — just enough to display a row

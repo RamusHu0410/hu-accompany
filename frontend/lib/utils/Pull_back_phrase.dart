@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
-import 'ServerDiscovery.dart';
+import '../services/ServerDiscovery.dart';
 
 /// Models + fetch logic for backend/feedback_generator's two endpoints:
 ///   - POST /api/feedback/phrase  -> PhraseReport (see Phrase_Send2_Server.dart,

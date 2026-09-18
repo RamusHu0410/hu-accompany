@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'Vinyl_Disk_Painter.dart';
+import '../widgets/Vinyl_Disk_Painter.dart';
 
 /// Splash shown while the app boots — a small version of the same vinyl
 /// disk used throughout the app, spinning at a constant rate. Swaps to

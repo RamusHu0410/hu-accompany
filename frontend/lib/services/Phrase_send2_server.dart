@@ -3,7 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 import 'ServerDiscovery.dart';
-import 'Pull_back_Phrase.dart';
+import '../utils/Pull_back_Phrase.dart';
 import 'package:hu_accomponist/src/rust/models.dart';
 
 /// Sends one phrase to backend/feedback_generator's phase-1 endpoint.

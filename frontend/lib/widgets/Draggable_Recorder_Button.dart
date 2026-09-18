@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:liquid_glass_easy/liquid_glass_easy.dart';
 import 'package:hu_accomponist/src/rust/frb_generated.dart';
@@ -7,6 +8,10 @@ import 'package:hu_accomponist/src/rust/api.dart';
 
 class Draggable_Recorder_Button extends StatefulWidget {
   final void Function(bool isRecording) onToggle;
+
+  /// Tints the pulse halo — lets the score screen reflect the last phrase's
+  /// verdict without any extra chrome on top of the button.
+  final Color accent;
 
   /// Fired once per phrase, the moment Rust finishes analyzing it.
   /// [phraseNumber] is 1-indexed within this recording. The backend owns
@@ -18,6 +23,7 @@ class Draggable_Recorder_Button extends StatefulWidget {
     super.key,
     required this.onToggle,
     this.onPhrase,
+    this.accent = const Color(0xFF9A7A2C),
   });
 
   @override
@@ -41,22 +47,20 @@ class _Draggable_Recorder_ButtonState extends State<Draggable_Recorder_Button>
   // spacing + the 100x100 icon stack) — used to keep it fully on-screen
   // when dragged, since Positioned won't clamp this for us.
   static const double _buttonWidth = 100.0;
-  static const double _buttonHeight = 132.0;
+  static const double _buttonHeight = 156.0;
 
+  // Drives both the idle "tap to record" breathing halo and the faster
+  // recording pulse — same controller, different period.
   late final AnimationController _pulseCtrl;
-  late final Animation<double> _pulseAnim;
+
+  static const Duration _idlePeriod = Duration(milliseconds: 2400);
+  static const Duration _recordingPeriod = Duration(milliseconds: 1100);
 
   @override
   void initState() {
     super.initState();
-    _pulseCtrl = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 900),
-    );
-    _pulseAnim = Tween<double>(
-      begin: 1.0,
-      end: 1.5,
-    ).animate(CurvedAnimation(parent: _pulseCtrl, curve: Curves.easeInOut));
+    _pulseCtrl = AnimationController(vsync: this, duration: _idlePeriod)
+      ..repeat();
   }
 
   @override
@@ -113,16 +117,17 @@ class _Draggable_Recorder_ButtonState extends State<Draggable_Recorder_Button>
   void _toggle() {
     if (_isRecording) {
       _timer?.cancel();
-      _pulseCtrl.stop();
-      _pulseCtrl.reset();
       setState(() => _isRecording = false);
+      _pulseCtrl.duration = _idlePeriod;
+      _pulseCtrl.repeat();
       _stopRecording();
     } else {
       setState(() {
         _isRecording = true;
         _elapsed = Duration.zero;
       });
-      _pulseCtrl.repeat(reverse: true);
+      _pulseCtrl.duration = _recordingPeriod;
+      _pulseCtrl.repeat();
       _timer = Timer.periodic(const Duration(seconds: 1), (_) {
         setState(() => _elapsed += const Duration(seconds: 1));
       });
@@ -175,16 +180,32 @@ class _Draggable_Recorder_ButtonState extends State<Draggable_Recorder_Button>
                 ),
               ),
             ),
-            const SizedBox(height: 12),
-            AnimatedBuilder(
-              animation: _pulseAnim,
-              builder: (_, _) => SizedBox(
-                width: 100,
-                height: 100,
-                child: Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    AnimatedContainer(
+            const SizedBox(height: 10),
+            SizedBox(
+              width: 100,
+              height: 100,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  // Breathing halo — the idle hint that this circle is
+                  // tappable, and the live indicator once recording.
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      child: AnimatedBuilder(
+                        animation: _pulseCtrl,
+                        builder: (_, _) => CustomPaint(
+                          painter: _PulseHaloPainter(
+                            progress: _pulseCtrl.value,
+                            color: _isRecording
+                                ? widget.accent
+                                : const Color(0xFF9A8F7E),
+                            strength: _isRecording ? 0.38 : 0.24,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  AnimatedContainer(
                       duration: const Duration(milliseconds: 300),
                       curve: Curves.easeInOut,
                       width: 64,
@@ -236,7 +257,23 @@ class _Draggable_Recorder_ButtonState extends State<Draggable_Recorder_Button>
                         ),
                       ),
                     ),
-                  ],
+                ],
+              ),
+            ),
+            const SizedBox(height: 10),
+            SizedBox(
+              height: 14,
+              child: AnimatedBuilder(
+                animation: _pulseCtrl,
+                builder: (_, _) => CustomPaint(
+                  size: const Size(56, 14),
+                  painter: _WaveHintPainter(
+                    progress: _pulseCtrl.value,
+                    active: _isRecording,
+                    color: _isRecording
+                        ? widget.accent
+                        : const Color(0xFF9A8F7E),
+                  ),
                 ),
               ),
             ),
@@ -245,4 +282,78 @@ class _Draggable_Recorder_ButtonState extends State<Draggable_Recorder_Button>
       ),
     );
   }
+}
+
+/// Two soft rings expanding out of the button — barely-there when idle,
+/// firmer while recording.
+class _PulseHaloPainter extends CustomPainter {
+  final double progress;
+  final Color color;
+  final double strength;
+
+  _PulseHaloPainter({
+    required this.progress,
+    required this.color,
+    required this.strength,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = size.center(Offset.zero);
+    for (int i = 0; i < 2; i++) {
+      final t = (progress + i * 0.5) % 1.0;
+      final radius = 32 + t * 18;
+      final opacity = strength * (1 - t);
+      if (opacity <= 0.01) continue;
+      canvas.drawCircle(
+        center,
+        radius,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.4
+          ..color = color.withValues(alpha: opacity),
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(_PulseHaloPainter old) =>
+      old.progress != progress || old.color != color || old.strength != strength;
+}
+
+/// Five bars that stay flat-ish as a hint when idle and sway while
+/// recording, so the button reads as "listening" without extra chrome.
+class _WaveHintPainter extends CustomPainter {
+  final double progress;
+  final bool active;
+  final Color color;
+
+  _WaveHintPainter({
+    required this.progress,
+    required this.active,
+    required this.color,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    const barCount = 5;
+    final gap = size.width / barCount;
+    final midY = size.height / 2;
+    final paint = Paint()
+      ..strokeCap = StrokeCap.round
+      ..strokeWidth = 2.5
+      ..color = color.withValues(alpha: active ? 0.75 : 0.35);
+
+    for (int i = 0; i < barCount; i++) {
+      final phase = (progress + i / barCount) * 2 * pi;
+      final amplitude = active ? 5.0 : 1.6;
+      final half = 1.5 + amplitude * (0.5 + 0.5 * sin(phase));
+      final x = gap * (i + 0.5);
+      canvas.drawLine(Offset(x, midY - half), Offset(x, midY + half), paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_WaveHintPainter old) =>
+      old.progress != progress || old.active != active || old.color != color;
 }

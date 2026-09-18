@@ -1,18 +1,17 @@
 import 'package:flutter/material.dart';
-import 'Draggable_Recorder_Button.dart';
-import 'Drawing_Overlay.dart';
-import 'Music_Library_Page.dart';
-import 'Score_Page_Controller.dart';
-import 'Score_Pages_View.dart';
+import 'widgets/Draggable_Recorder_Button.dart';
+import 'widgets/Drawing_Overlay.dart';
+import 'screens/Music_Library_Page.dart';
+import 'models/Score_Page_Controller.dart';
+import 'renderers/Score_Pages_View.dart';
 import 'dart:ffi' as ffi;
 import 'dart:typed_data';
-import 'Vinyl_Loading_Screen.dart';
-import 'Record_Navigator_Page.dart';
+import 'screens/Vinyl_Loading_Screen.dart';
+import 'screens/Record_Navigator_Page.dart';
 import 'package:hu_accomponist/src/rust/frb_generated.dart';
 import 'package:hu_accomponist/src/rust/models.dart';
-import 'Phrase_Send2_Server.dart';
-import 'Pull_back_Phrase.dart';
-import 'Character_mood_display.dart';
+import 'services/Phrase_Send2_Server.dart';
+import 'utils/Pull_back_Phrase.dart';
 
 
 
@@ -22,14 +21,9 @@ typedef StartRecordingFuncDart = void Function();
 typedef StopRecordingFunc = ffi.Void Function();
 typedef StopRecordingFuncDart = void Function();
 
-/// Which companion is shown beside the score.
-enum CharacterType { wave, tsundereMusic }
-
-/// The three visual reactions available for Tsundere Music.
-///
-/// The Rust performance callback should set this to [mad] for a wrong note,
-/// [enjoying] for a correct note, and [normal] while idle or between phrases.
-enum CharacterMood { normal, mad, enjoying }
+/// How the last analyzed phrase went. Drives the recorder's halo tint —
+/// [none] while idle or between recordings.
+enum PhraseFeedback { none, good, off }
 
 // ─── Safe no-op stubs used when native symbols are unavailable ───────────────
 void _stubStart() =>
@@ -147,37 +141,21 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
   bool _isErasing = false;
   bool _isRecording = false;
 
-  CharacterType _selectedCharacter = CharacterType.wave;
-  CharacterMood _tsundereMood = CharacterMood.normal;
-
-  String get _characterAsset {
-    switch (_selectedCharacter) {
-      case CharacterType.wave:
-        return 'assets/images/wave.png';
-      case CharacterType.tsundereMusic:
-        switch (_tsundereMood) {
-          case CharacterMood.normal:
-            return 'assets/images/Tsundere_Music.png';
-          case CharacterMood.mad:
-            return 'assets/images/Tsundere_Music_Mad.png';
-          case CharacterMood.enjoying:
-            return 'assets/images/Tsundere_Music_Listen.png';
-        }
-    }
-  }
+  PhraseFeedback _feedback = PhraseFeedback.none;
+  final DrawingController _drawing = DrawingController();
 
   /// Call this from the Flutter-Rust-Bridge performance-result callback.
-  void setCharacterMood(CharacterMood mood) {
+  void setPhraseFeedback(PhraseFeedback feedback) {
     if (!mounted) return;
-    setState(() => _tsundereMood = mood);
+    setState(() => _feedback = feedback);
   }
 
   /// Convenience entry point for a Rust result that reports whether a note
   /// was correct. Replace the bool with the Rust result type when it is wired
   /// into Flutter-Rust-Bridge.
   void applyPerformanceResult({required bool playedCorrectly}) {
-    setCharacterMood(
-      playedCorrectly ? CharacterMood.enjoying : CharacterMood.mad,
+    setPhraseFeedback(
+      playedCorrectly ? PhraseFeedback.good : PhraseFeedback.off,
     );
   }
 
@@ -189,8 +167,7 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
       // A fresh recording gets a fresh session — the backend assigns the
       // real session id on phrase 1's response (see below).
       _feedbackSessionId = null;
-    } else {
-      setCharacterMood(CharacterMood.normal);
+      setPhraseFeedback(PhraseFeedback.none);
     }
   }
 
@@ -268,6 +245,7 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
   @override
   void dispose() {
     _pageController?.dispose();
+    _drawing.dispose();
     super.dispose();
   }
 
@@ -335,14 +313,15 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
       key: _scaffoldKey,
       backgroundColor: ivory,
       drawerEnableOpenDragGesture: false,
-      drawer: _CharacterSettingsDrawer(
-        selectedCharacter: _selectedCharacter,
-        selectedMood: _tsundereMood,
+      drawer: _PracticeSettingsDrawer(
         isRecording: _isRecording,
-        onCharacterChanged: (character) {
-          setState(() => _selectedCharacter = character);
+        feedback: _feedback,
+        hasScore: _hasScore,
+        onOpenLibrary: () {
+          Navigator.pop(context);
+          _goToNavPage();
         },
-        onMoodChanged: setCharacterMood,
+        onClearAnnotations: _drawing.clear,
       ),
       body: SafeArea(
         child: Stack(
@@ -457,6 +436,7 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
             // ─────────────────────────────────────────────
             Positioned.fill(
               child: Drawing_Overlay(
+                controller: _drawing,
                 isDrawingMode: _isDrawingMode,
                 isErasing: _isErasing,
                 penColor: _penColor,
@@ -500,18 +480,15 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
                     },
                   ),
                   const SizedBox(width: 8),
-                  _ElegantToolButton(
-                    icon: Icons.auto_fix_normal_outlined,
-                    active: _isErasing,
-                    color: gold,
-                    onTap: () {
-                      setState(() {
-                        _isErasing = !_isErasing;
-                        if (_isErasing) {
-                          _isDrawingMode = false;
-                        }
-                      });
-                    },
+                  AnimatedBuilder(
+                    animation: _drawing,
+                    builder: (_, _) => _ElegantToolButton(
+                      icon: Icons.undo_rounded,
+                      active: false,
+                      color: gold,
+                      enabled: _drawing.canUndo,
+                      onTap: _drawing.undo,
+                    ),
                   ),
                   const SizedBox(width: 8),
                   _ElegantToolButton(
@@ -539,9 +516,12 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
                   colors: _penColorOptions,
                   selectedColor: _penColor,
                   penSize: _penSize,
+                  isErasing: _isErasing,
                   onColorSelected: (color) {
                     setState(() {
                       _penColor = color;
+                      _isErasing = false;
+                      _isDrawingMode = true;
                     });
                   },
                   onSizeChanged: (size) {
@@ -549,31 +529,14 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
                       _penSize = size;
                     });
                   },
+                  onEraserToggled: () {
+                    setState(() {
+                      _isErasing = !_isErasing;
+                      if (_isErasing) _isDrawingMode = false;
+                    });
+                  },
                 ),
               ),
-
-            // ─────────────────────────────────────────────
-            // CHARACTER COMPANION
-            // ─────────────────────────────────────────────
-            Positioned(
-              right: 0,
-              bottom: 0,
-              child: IgnorePointer(
-                child: CharacterMoodDisplay(
-                  assetPath: _characterAsset,
-                  // Tsundere is intentionally smaller than Wave so the
-                  // score remains easy to read. Both images are
-                  // bottom-right aligned so their feet sit on the
-                  // screen's bottom edge.
-                  width: _selectedCharacter == CharacterType.tsundereMusic
-                      ? 205
-                      : 250,
-                  height: _selectedCharacter == CharacterType.tsundereMusic
-                      ? 285
-                      : 310,
-                ),
-              ),
-            ),
 
             // The draggable control owns its own Rust-bridge notesStream()
             // recording pipeline; it reports UI toggle state here and, per
@@ -581,6 +544,11 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
             Draggable_Recorder_Button(
               onToggle: _onRecordingChanged,
               onPhrase: _onPhraseReceived,
+              accent: switch (_feedback) {
+                PhraseFeedback.good => gold,
+                PhraseFeedback.off => const Color(0xFFB2564B),
+                PhraseFeedback.none => mutedBrown,
+              },
             ),
 
             // ─────────────────────────────────────────────
@@ -615,19 +583,19 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
   }
 }
 
-class _CharacterSettingsDrawer extends StatelessWidget {
-  final CharacterType selectedCharacter;
-  final CharacterMood selectedMood;
+class _PracticeSettingsDrawer extends StatelessWidget {
   final bool isRecording;
-  final ValueChanged<CharacterType> onCharacterChanged;
-  final ValueChanged<CharacterMood> onMoodChanged;
+  final bool hasScore;
+  final PhraseFeedback feedback;
+  final VoidCallback onOpenLibrary;
+  final VoidCallback onClearAnnotations;
 
-  const _CharacterSettingsDrawer({
-    required this.selectedCharacter,
-    required this.selectedMood,
+  const _PracticeSettingsDrawer({
     required this.isRecording,
-    required this.onCharacterChanged,
-    required this.onMoodChanged,
+    required this.hasScore,
+    required this.feedback,
+    required this.onOpenLibrary,
+    required this.onClearAnnotations,
   });
 
   @override
@@ -635,6 +603,13 @@ class _CharacterSettingsDrawer extends StatelessWidget {
     const gold = Color(0xFF9A7A2C);
     const paper = Color(0xFFFFFCF4);
     const brown = Color(0xFF30271F);
+    const mutedBrown = Color(0xFF75695B);
+
+    final feedbackLabel = switch (feedback) {
+      PhraseFeedback.good => 'Last phrase — on pitch',
+      PhraseFeedback.off => 'Last phrase — off pitch',
+      PhraseFeedback.none => 'No phrase analyzed yet',
+    };
 
     return Drawer(
       backgroundColor: paper,
@@ -653,83 +628,43 @@ class _CharacterSettingsDrawer extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             const Text(
-              'Your practice companion',
+              'Practice',
               style: TextStyle(
                 color: brown,
                 fontSize: 22,
                 fontWeight: FontWeight.w700,
               ),
             ),
-            const SizedBox(height: 20),
-            RadioListTile<CharacterType>(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Wave character'),
-              value: CharacterType.wave,
-              groupValue: selectedCharacter,
-              activeColor: gold,
-              onChanged: (value) {
-                if (value != null) onCharacterChanged(value);
-              },
+            const SizedBox(height: 24),
+            _DrawerRow(
+              icon: isRecording ? Icons.mic_rounded : Icons.mic_none_rounded,
+              iconColor: isRecording ? const Color(0xFFB2564B) : gold,
+              label: isRecording ? 'Recording is active' : 'Ready to record',
             ),
-            RadioListTile<CharacterType>(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Tsundere Music'),
-              value: CharacterType.tsundereMusic,
-              groupValue: selectedCharacter,
-              activeColor: gold,
-              onChanged: (value) {
-                if (value != null) onCharacterChanged(value);
+            const SizedBox(height: 14),
+            _DrawerRow(
+              icon: Icons.graphic_eq_rounded,
+              iconColor: switch (feedback) {
+                PhraseFeedback.good => gold,
+                PhraseFeedback.off => const Color(0xFFB2564B),
+                PhraseFeedback.none => mutedBrown,
               },
+              label: feedbackLabel,
             ),
             const Divider(height: 38),
-            const Text(
-              'TSUNDERE EXPRESSION',
-              style: TextStyle(
-                color: gold,
-                fontSize: 11,
-                letterSpacing: 1.6,
-                fontWeight: FontWeight.w700,
-              ),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.library_music_outlined, color: gold),
+              title: Text(hasScore ? 'Change score' : 'Open the library'),
+              textColor: brown,
+              onTap: onOpenLibrary,
             ),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                ChoiceChip(
-                  label: const Text('Normal'),
-                  selected: selectedMood == CharacterMood.normal,
-                  selectedColor: gold.withValues(alpha: 0.22),
-                  onSelected: (_) => onMoodChanged(CharacterMood.normal),
-                ),
-                ChoiceChip(
-                  label: const Text('Mad'),
-                  selected: selectedMood == CharacterMood.mad,
-                  selectedColor: gold.withValues(alpha: 0.22),
-                  onSelected: (_) => onMoodChanged(CharacterMood.mad),
-                ),
-                ChoiceChip(
-                  label: const Text('Enjoying'),
-                  selected: selectedMood == CharacterMood.enjoying,
-                  selectedColor: gold.withValues(alpha: 0.22),
-                  onSelected: (_) => onMoodChanged(CharacterMood.enjoying),
-                ),
-              ],
-            ),
-            const SizedBox(height: 30),
-            Row(
-              children: [
-                Icon(
-                  isRecording ? Icons.mic_rounded : Icons.mic_none_rounded,
-                  size: 18,
-                  color: isRecording ? Colors.redAccent : gold,
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  isRecording ? 'Recording is active' : 'Ready to record',
-                  style: const TextStyle(color: brown),
-                ),
-              ],
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.layers_clear_outlined, color: gold),
+              title: const Text('Clear annotations'),
+              textColor: brown,
+              onTap: onClearAnnotations,
             ),
           ],
         ),
@@ -738,9 +673,38 @@ class _CharacterSettingsDrawer extends StatelessWidget {
   }
 }
 
+class _DrawerRow extends StatelessWidget {
+  final IconData icon;
+  final Color iconColor;
+  final String label;
+
+  const _DrawerRow({
+    required this.icon,
+    required this.iconColor,
+    required this.label,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(icon, size: 18, color: iconColor),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Text(
+            label,
+            style: const TextStyle(color: Color(0xFF30271F), fontSize: 14),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _ElegantToolButton extends StatelessWidget {
   final IconData icon;
   final bool active;
+  final bool enabled;
   final Color color;
   final VoidCallback onTap;
 
@@ -749,6 +713,7 @@ class _ElegantToolButton extends StatelessWidget {
     required this.active,
     required this.color,
     required this.onTap,
+    this.enabled = true,
   });
 
   @override
@@ -756,33 +721,37 @@ class _ElegantToolButton extends StatelessWidget {
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        onTap: onTap,
+        onTap: enabled ? onTap : null,
         borderRadius: BorderRadius.circular(30),
-        child: AnimatedContainer(
+        child: AnimatedOpacity(
           duration: const Duration(milliseconds: 180),
-          width: 46,
-          height: 46,
-          decoration: BoxDecoration(
-            color: active ? color : const Color(0xFFFFFCF4),
-            shape: BoxShape.circle,
-            border: Border.all(
-              color: active ? color : const Color(0xFFD8C58D),
-              width: 1,
+          opacity: enabled ? 1 : 0.35,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            width: 46,
+            height: 46,
+            decoration: BoxDecoration(
+              color: active ? color : const Color(0xFFFFFCF4),
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: active ? color : const Color(0xFFD8C58D),
+                width: 1,
+              ),
+              boxShadow: active
+                  ? [
+                      BoxShadow(
+                        color: color.withValues(alpha: 0.18),
+                        blurRadius: 10,
+                        offset: const Offset(0, 3),
+                      ),
+                    ]
+                  : null,
             ),
-            boxShadow: active
-                ? [
-                    BoxShadow(
-                      color: color.withValues(alpha: 0.18),
-                      blurRadius: 10,
-                      offset: const Offset(0, 3),
-                    ),
-                  ]
-                : null,
-          ),
-          child: Icon(
-            icon,
-            size: 20,
-            color: active ? const Color(0xFFFFFCF4) : color,
+            child: Icon(
+              icon,
+              size: 20,
+              color: active ? const Color(0xFFFFFCF4) : color,
+            ),
           ),
         ),
       ),
@@ -794,15 +763,19 @@ class _ElegantPenPanel extends StatelessWidget {
   final List<Color> colors;
   final Color selectedColor;
   final double penSize;
+  final bool isErasing;
   final ValueChanged<Color> onColorSelected;
   final ValueChanged<double> onSizeChanged;
+  final VoidCallback onEraserToggled;
 
   const _ElegantPenPanel({
     required this.colors,
     required this.selectedColor,
     required this.penSize,
+    required this.isErasing,
     required this.onColorSelected,
     required this.onSizeChanged,
+    required this.onEraserToggled,
   });
 
   @override
@@ -891,6 +864,42 @@ class _ElegantPenPanel extends StatelessWidget {
                 ),
               ),
             ],
+          ),
+          const SizedBox(height: 6),
+          Container(height: 1, color: lightGold.withValues(alpha: 0.5)),
+          const SizedBox(height: 10),
+          GestureDetector(
+            onTap: onEraserToggled,
+            behavior: HitTestBehavior.opaque,
+            child: Row(
+              children: [
+                Icon(
+                  Icons.auto_fix_normal_outlined,
+                  size: 16,
+                  color: isErasing ? gold : brown.withValues(alpha: 0.6),
+                ),
+                const SizedBox(width: 10),
+                Text(
+                  'Eraser',
+                  style: TextStyle(
+                    color: isErasing ? gold : brown,
+                    fontSize: 12,
+                    fontWeight: isErasing ? FontWeight.w700 : FontWeight.w400,
+                  ),
+                ),
+                const Spacer(),
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 160),
+                  width: 8,
+                  height: 8,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: isErasing ? gold : Colors.transparent,
+                    border: Border.all(color: lightGold),
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
       ),
