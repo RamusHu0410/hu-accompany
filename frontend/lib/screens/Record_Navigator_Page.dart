@@ -8,6 +8,7 @@ import '../controllers/Disk_Spin_Controller.dart';
 import '../widgets/Vinyl_Disk_Painter.dart';
 import 'Shelf_Page.dart';
 import 'Music_Library_Page.dart';
+import 'Quiz_Home_Page.dart';
 import '../main.dart';
 
 /// One destination in the record crate — everything needed to draw its
@@ -60,6 +61,12 @@ class _Record_Navigator_PageState extends State<Record_Navigator_Page>
       sublabel: 'saved scores',
       diskColor: TurntablePalette.diskShelf,
       pageBuilder: (_) => const Shelf_Page(),
+    ),
+    _RecordEntry(
+      title: 'QUIZ',
+      sublabel: 'theory & history',
+      diskColor: TurntablePalette.diskQuiz,
+      pageBuilder: (_) => const Quiz_Home_Page(),
     ),
   ];
 
