@@ -1,4 +1,3 @@
-use crate::frb_generated::SseEncode;
 use crate::models::{Notes, PieceData};
 use crate::{NOTES_SINK, USER_DATA};
 use num_complex::Complex;

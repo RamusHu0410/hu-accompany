@@ -34,6 +34,8 @@ backend/image_processor/output/**
 !backend/image_processor/output/**/.gitkeep
 backend/image_processor/input/**
 !backend/image_processor/input/.gitkeep
+backend/services/music_src/mxl/
+backend/services/music_src/PDMX
 
 # ==========================================
 # 4. IDEs and System Dotfiles (The "dot files")
@@ -54,6 +56,8 @@ backend/image_processor/input/**
 .idea/
 *.iml
 *.iws
+*.tar.gz
+*.csv
 
 # Local environment variables (secrets)
 .env
