@@ -12,6 +12,16 @@ import 'package:hu_accomponist/src/rust/frb_generated.dart';
 import 'package:hu_accomponist/src/rust/models.dart';
 import 'services/Phrase_Send2_Server.dart';
 import 'utils/Pull_back_Phrase.dart';
+import 'models/Phrase_Feedback.dart';
+import 'theme/Color_Theme.dart';
+import 'theme/Design_Tokens.dart';
+import 'widgets/Practice_Tool_Buttons.dart';
+import 'widgets/Practice_Pen_Panel.dart';
+import 'widgets/Practice_Settings_Drawer.dart';
+
+// Re-exported so anything that already reached for PhraseFeedback through
+// main.dart keeps compiling after the enum moved to its own file.
+export 'models/Phrase_Feedback.dart';
 
 
 
@@ -21,9 +31,6 @@ typedef StartRecordingFuncDart = void Function();
 typedef StopRecordingFunc = ffi.Void Function();
 typedef StopRecordingFuncDart = void Function();
 
-/// How the last analyzed phrase went. Drives the recorder's halo tint —
-/// [none] while idle or between recordings.
-enum PhraseFeedback { none, good, off }
 
 // ─── Safe no-op stubs used when native symbols are unavailable ───────────────
 void _stubStart() =>
@@ -113,8 +120,20 @@ class HuAccumponistApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         brightness: Brightness.light,
-        scaffoldBackgroundColor: const Color(0xFFF7F2E7),
-        colorScheme: const ColorScheme.light(primary: Color(0xFF9A7A2C)),
+        scaffoldBackgroundColor: PracticePalette.ivory,
+        colorScheme: const ColorScheme.light(
+          primary: PracticePalette.gold,
+        ),
+        // Every platform's default route animation is replaced with one
+        // fade-through, so moving between screens feels like the same app
+        // regardless of which device it is running on.
+        pageTransitionsTheme: const PageTransitionsTheme(
+          builders: {
+            TargetPlatform.iOS: FadeForwardsPageTransitionsBuilder(),
+            TargetPlatform.android: FadeForwardsPageTransitionsBuilder(),
+            TargetPlatform.macOS: FadeForwardsPageTransitionsBuilder(),
+          },
+        ),
       ),
       // App now opens onto the vinyl spin-up splash and lands on the
       // turntable navigator (Practice / Search / Shelf, chosen by spinning
@@ -262,32 +281,24 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
 
   // Pen settings
   bool _showPenSettings = false;
-  Color _penColor = const Color(0xFF9A7A2C);
+  Color _penColor = PracticePalette.gold;
   double _penSize = 3.0;
-
-  static const List<Color> _penColorOptions = [
-    Color(0xFF9A7A2C), // muted gold
-    Color(0xFF30271F), // dark brown
-    Color(0xFF5B7188), // muted blue
-    Color(0xFF62765B), // muted green
-    Color(0xFFB1844D), // warm amber
-  ];
 
   void _goToNavPage() async {
     final selected = await Navigator.of(context).push<SelectedSheet>(
       PageRouteBuilder<SelectedSheet>(
-        transitionDuration: const Duration(milliseconds: 400),
+        transitionDuration: Motion.page,
+        reverseTransitionDuration: Motion.base,
         pageBuilder: (context, animation, secondaryAnimation) =>
             const Music_Library_Page(),
         transitionsBuilder: (context, animation, secondaryAnimation, child) {
-          final tween = Tween(
-            begin: const Offset(0.0, 1.0),
-            end: Offset.zero,
-          ).chain(CurveTween(curve: Curves.easeOutCubic));
-
+          final eased = CurveTween(curve: Motion.enter).animate(animation);
           return SlideTransition(
-            position: animation.drive(tween),
-            child: child,
+            position: Tween(
+              begin: const Offset(0.0, 1.0),
+              end: Offset.zero,
+            ).animate(eased),
+            child: FadeTransition(opacity: eased, child: child),
           );
         },
       ),
@@ -302,18 +313,11 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
 
   @override
   Widget build(BuildContext context) {
-    const ivory = Color(0xFFF7F2E7);
-    const paper = Color(0xFFFFFCF4);
-    const brown = Color(0xFF30271F);
-    const mutedBrown = Color(0xFF75695B);
-    const gold = Color(0xFF9A7A2C);
-    const lightGold = Color(0xFFD8C58D);
-
     return Scaffold(
       key: _scaffoldKey,
-      backgroundColor: ivory,
+      backgroundColor: PracticePalette.ivory,
       drawerEnableOpenDragGesture: false,
-      drawer: _PracticeSettingsDrawer(
+      drawer: PracticeSettingsDrawer(
         isRecording: _isRecording,
         feedback: _feedback,
         hasScore: _hasScore,
@@ -329,7 +333,9 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
             // ─────────────────────────────────────────────
             // CLEAN IVORY BACKGROUND
             // ─────────────────────────────────────────────
-            Positioned.fill(child: Container(color: ivory)),
+            const Positioned.fill(
+              child: ColoredBox(color: PracticePalette.ivory),
+            ),
 
             // Very subtle top border, matching the reference page.
             Positioned(
@@ -338,7 +344,7 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
               right: 0,
               child: Container(
                 height: 1,
-                color: lightGold.withValues(alpha: 0.35),
+                color: PracticePalette.lightGold.withValues(alpha: 0.35),
               ),
             ),
 
@@ -349,21 +355,21 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
               child: Padding(
                 // Keep the score clear of the top tools and bottom actions,
                 // while using nearly the entire available width on a phone.
-                padding: const EdgeInsets.fromLTRB(12, 72, 12, 82),
+                padding: const EdgeInsets.fromLTRB(
+                  Space.sm,
+                  72,
+                  Space.sm,
+                  82,
+                ),
                 child: Container(
                   decoration: BoxDecoration(
-                    color: paper,
+                    color: PracticePalette.paper,
+                    borderRadius: Radii.cardRadius,
                     border: Border.all(
-                      color: lightGold.withValues(alpha: 0.65),
+                      color: PracticePalette.lightGold.withValues(alpha: 0.65),
                       width: 1,
                     ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: brown.withValues(alpha: 0.10),
-                        blurRadius: 22,
-                        offset: const Offset(0, 8),
-                      ),
-                    ],
+                    boxShadow: Elevations.overlay(PracticePalette.brown),
                   ),
                   clipBehavior: Clip.antiAlias,
                   child: Stack(
@@ -375,12 +381,12 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
                       else
                         const Center(
                           child: Padding(
-                            padding: EdgeInsets.all(30),
+                            padding: EdgeInsets.all(Space.xxl),
                             child: Text(
                               'Select a score from the library',
                               textAlign: TextAlign.center,
                               style: TextStyle(
-                                color: mutedBrown,
+                                color: PracticePalette.mutedBrown,
                                 fontSize: 15,
                                 letterSpacing: 0.4,
                               ),
@@ -398,28 +404,22 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                Container(
-                                  width: 38,
-                                  height: 1,
-                                  color: lightGold.withValues(alpha: 0.65),
-                                ),
-                                const SizedBox(width: 10),
+                                _ornamentRule(),
+                                const SizedBox(width: Space.sm),
                                 Container(
                                   width: 7,
                                   height: 7,
                                   decoration: BoxDecoration(
                                     border: Border.all(
-                                      color: gold.withValues(alpha: 0.75),
+                                      color: PracticePalette.gold.withValues(
+                                        alpha: 0.75,
+                                      ),
                                     ),
                                     shape: BoxShape.circle,
                                   ),
                                 ),
-                                const SizedBox(width: 10),
-                                Container(
-                                  width: 38,
-                                  height: 1,
-                                  color: lightGold.withValues(alpha: 0.65),
-                                ),
+                                const SizedBox(width: Space.sm),
+                                _ornamentRule(),
                               ],
                             ),
                           ),
@@ -450,10 +450,10 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
             Positioned(
               top: 16,
               left: 22,
-              child: _ElegantToolButton(
+              child: PracticeToolButton(
                 icon: Icons.tune_rounded,
                 active: false,
-                color: gold,
+                color: PracticePalette.gold,
                 onTap: () => _scaffoldKey.currentState?.openDrawer(),
               ),
             ),
@@ -466,10 +466,10 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
               right: 22,
               child: Row(
                 children: [
-                  _ElegantToolButton(
+                  PracticeToolButton(
                     icon: Icons.edit_outlined,
                     active: _isDrawingMode,
-                    color: gold,
+                    color: PracticePalette.gold,
                     onTap: () {
                       setState(() {
                         _isDrawingMode = !_isDrawingMode;
@@ -479,22 +479,22 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
                       });
                     },
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: Space.xs),
                   AnimatedBuilder(
                     animation: _drawing,
-                    builder: (_, _) => _ElegantToolButton(
+                    builder: (_, _) => PracticeToolButton(
                       icon: Icons.undo_rounded,
                       active: false,
-                      color: gold,
+                      color: PracticePalette.gold,
                       enabled: _drawing.canUndo,
                       onTap: _drawing.undo,
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  _ElegantToolButton(
+                  const SizedBox(width: Space.xs),
+                  PracticeToolButton(
                     icon: Icons.palette_outlined,
                     active: _showPenSettings,
-                    color: gold,
+                    color: PracticePalette.gold,
                     onTap: () {
                       setState(() {
                         _showPenSettings = !_showPenSettings;
@@ -508,35 +508,50 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
             // ─────────────────────────────────────────────
             // PEN SETTINGS
             // ─────────────────────────────────────────────
-            if (_showPenSettings)
-              Positioned(
-                top: 68,
-                right: 22,
-                child: _ElegantPenPanel(
-                  colors: _penColorOptions,
-                  selectedColor: _penColor,
-                  penSize: _penSize,
-                  isErasing: _isErasing,
-                  onColorSelected: (color) {
-                    setState(() {
-                      _penColor = color;
-                      _isErasing = false;
-                      _isDrawingMode = true;
-                    });
-                  },
-                  onSizeChanged: (size) {
-                    setState(() {
-                      _penSize = size;
-                    });
-                  },
-                  onEraserToggled: () {
-                    setState(() {
-                      _isErasing = !_isErasing;
-                      if (_isErasing) _isDrawingMode = false;
-                    });
-                  },
+            Positioned(
+              top: 68,
+              right: 22,
+              // Scales and fades out of the palette button rather than
+              // appearing outright, so it reads as belonging to the
+              // control that opened it.
+              child: AnimatedScale(
+                scale: _showPenSettings ? 1 : 0.92,
+                duration: Motion.fast,
+                curve: Motion.enter,
+                alignment: Alignment.topRight,
+                child: AnimatedOpacity(
+                  opacity: _showPenSettings ? 1 : 0,
+                  duration: Motion.fast,
+                  child: IgnorePointer(
+                    ignoring: !_showPenSettings,
+                    child: PracticePenPanel(
+                      colors: PracticePalette.penColors,
+                      selectedColor: _penColor,
+                      penSize: _penSize,
+                      isErasing: _isErasing,
+                      onColorSelected: (color) {
+                        setState(() {
+                          _penColor = color;
+                          _isErasing = false;
+                          _isDrawingMode = true;
+                        });
+                      },
+                      onSizeChanged: (size) {
+                        setState(() {
+                          _penSize = size;
+                        });
+                      },
+                      onEraserToggled: () {
+                        setState(() {
+                          _isErasing = !_isErasing;
+                          if (_isErasing) _isDrawingMode = false;
+                        });
+                      },
+                    ),
+                  ),
                 ),
               ),
+            ),
 
             // The draggable control owns its own Rust-bridge notesStream()
             // recording pipeline; it reports UI toggle state here and, per
@@ -544,11 +559,7 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
             Draggable_Recorder_Button(
               onToggle: _onRecordingChanged,
               onPhrase: _onPhraseReceived,
-              accent: switch (_feedback) {
-                PhraseFeedback.good => gold,
-                PhraseFeedback.off => const Color(0xFFB2564B),
-                PhraseFeedback.none => mutedBrown,
-              },
+              accent: PracticeSettingsDrawer.feedbackColor(_feedback),
             ),
 
             // ─────────────────────────────────────────────
@@ -557,9 +568,9 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
             Positioned(
               left: 22,
               bottom: 20,
-              child: _MinimalBottomButton(
-                icon: Icons.search,
-                color: mutedBrown,
+              child: PracticeBottomButton(
+                icon: Icons.search_rounded,
+                color: PracticePalette.mutedBrown,
                 onTap: _goToNavPage,
               ),
             ),
@@ -570,9 +581,9 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
             Positioned(
               right: 22,
               bottom: 20,
-              child: _MinimalBottomButton(
-                icon: Icons.arrow_back,
-                color: mutedBrown,
+              child: PracticeBottomButton(
+                icon: Icons.arrow_back_rounded,
+                color: PracticePalette.mutedBrown,
                 onTap: () => Navigator.of(context).maybePop(),
               ),
             ),
@@ -581,361 +592,10 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
       ),
     );
   }
-}
 
-class _PracticeSettingsDrawer extends StatelessWidget {
-  final bool isRecording;
-  final bool hasScore;
-  final PhraseFeedback feedback;
-  final VoidCallback onOpenLibrary;
-  final VoidCallback onClearAnnotations;
-
-  const _PracticeSettingsDrawer({
-    required this.isRecording,
-    required this.hasScore,
-    required this.feedback,
-    required this.onOpenLibrary,
-    required this.onClearAnnotations,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    const gold = Color(0xFF9A7A2C);
-    const paper = Color(0xFFFFFCF4);
-    const brown = Color(0xFF30271F);
-    const mutedBrown = Color(0xFF75695B);
-
-    final feedbackLabel = switch (feedback) {
-      PhraseFeedback.good => 'Last phrase — on pitch',
-      PhraseFeedback.off => 'Last phrase — off pitch',
-      PhraseFeedback.none => 'No phrase analyzed yet',
-    };
-
-    return Drawer(
-      backgroundColor: paper,
-      child: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(20, 24, 20, 32),
-          children: [
-            const Text(
-              'SETTINGS',
-              style: TextStyle(
-                color: gold,
-                fontSize: 11,
-                letterSpacing: 2.4,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'Practice',
-              style: TextStyle(
-                color: brown,
-                fontSize: 22,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            const SizedBox(height: 24),
-            _DrawerRow(
-              icon: isRecording ? Icons.mic_rounded : Icons.mic_none_rounded,
-              iconColor: isRecording ? const Color(0xFFB2564B) : gold,
-              label: isRecording ? 'Recording is active' : 'Ready to record',
-            ),
-            const SizedBox(height: 14),
-            _DrawerRow(
-              icon: Icons.graphic_eq_rounded,
-              iconColor: switch (feedback) {
-                PhraseFeedback.good => gold,
-                PhraseFeedback.off => const Color(0xFFB2564B),
-                PhraseFeedback.none => mutedBrown,
-              },
-              label: feedbackLabel,
-            ),
-            const Divider(height: 38),
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.library_music_outlined, color: gold),
-              title: Text(hasScore ? 'Change score' : 'Open the library'),
-              textColor: brown,
-              onTap: onOpenLibrary,
-            ),
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.layers_clear_outlined, color: gold),
-              title: const Text('Clear annotations'),
-              textColor: brown,
-              onTap: onClearAnnotations,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _DrawerRow extends StatelessWidget {
-  final IconData icon;
-  final Color iconColor;
-  final String label;
-
-  const _DrawerRow({
-    required this.icon,
-    required this.iconColor,
-    required this.label,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Icon(icon, size: 18, color: iconColor),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Text(
-            label,
-            style: const TextStyle(color: Color(0xFF30271F), fontSize: 14),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _ElegantToolButton extends StatelessWidget {
-  final IconData icon;
-  final bool active;
-  final bool enabled;
-  final Color color;
-  final VoidCallback onTap;
-
-  const _ElegantToolButton({
-    required this.icon,
-    required this.active,
-    required this.color,
-    required this.onTap,
-    this.enabled = true,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: enabled ? onTap : null,
-        borderRadius: BorderRadius.circular(30),
-        child: AnimatedOpacity(
-          duration: const Duration(milliseconds: 180),
-          opacity: enabled ? 1 : 0.35,
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 180),
-            width: 46,
-            height: 46,
-            decoration: BoxDecoration(
-              color: active ? color : const Color(0xFFFFFCF4),
-              shape: BoxShape.circle,
-              border: Border.all(
-                color: active ? color : const Color(0xFFD8C58D),
-                width: 1,
-              ),
-              boxShadow: active
-                  ? [
-                      BoxShadow(
-                        color: color.withValues(alpha: 0.18),
-                        blurRadius: 10,
-                        offset: const Offset(0, 3),
-                      ),
-                    ]
-                  : null,
-            ),
-            child: Icon(
-              icon,
-              size: 20,
-              color: active ? const Color(0xFFFFFCF4) : color,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _ElegantPenPanel extends StatelessWidget {
-  final List<Color> colors;
-  final Color selectedColor;
-  final double penSize;
-  final bool isErasing;
-  final ValueChanged<Color> onColorSelected;
-  final ValueChanged<double> onSizeChanged;
-  final VoidCallback onEraserToggled;
-
-  const _ElegantPenPanel({
-    required this.colors,
-    required this.selectedColor,
-    required this.penSize,
-    required this.isErasing,
-    required this.onColorSelected,
-    required this.onSizeChanged,
-    required this.onEraserToggled,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    const paper = Color(0xFFFFFCF4);
-    const brown = Color(0xFF30271F);
-    const gold = Color(0xFF9A7A2C);
-    const lightGold = Color(0xFFD8C58D);
-
-    return Container(
-      width: 230,
-      padding: const EdgeInsets.fromLTRB(18, 16, 18, 14),
-      decoration: BoxDecoration(
-        color: paper,
-        border: Border.all(color: lightGold, width: 1),
-        boxShadow: [
-          BoxShadow(
-            color: brown.withValues(alpha: 0.12),
-            blurRadius: 18,
-            offset: const Offset(0, 7),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'PEN',
-            style: TextStyle(color: gold, fontSize: 10, letterSpacing: 2.5),
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: colors.map((color) {
-              final selected = color == selectedColor;
-
-              return GestureDetector(
-                onTap: () => onColorSelected(color),
-                child: Container(
-                  margin: const EdgeInsets.only(right: 10),
-                  width: 25,
-                  height: 25,
-                  decoration: BoxDecoration(
-                    color: color,
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: selected ? gold : Colors.transparent,
-                      width: 2,
-                    ),
-                  ),
-                ),
-              );
-            }).toList(),
-          ),
-          const SizedBox(height: 12),
-          Container(height: 1, color: lightGold.withValues(alpha: 0.5)),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              const Icon(Icons.line_weight, size: 15, color: gold),
-              Expanded(
-                child: SliderTheme(
-                  data: SliderTheme.of(context).copyWith(
-                    activeTrackColor: gold,
-                    inactiveTrackColor: lightGold.withValues(alpha: 0.45),
-                    thumbColor: gold,
-                    overlayColor: gold.withValues(alpha: 0.10),
-                    trackHeight: 1,
-                    thumbShape: const RoundSliderThumbShape(
-                      enabledThumbRadius: 5,
-                    ),
-                  ),
-                  child: Slider(
-                    value: penSize,
-                    min: 1,
-                    max: 14,
-                    onChanged: onSizeChanged,
-                  ),
-                ),
-              ),
-              SizedBox(
-                width: 25,
-                child: Text(
-                  penSize.toStringAsFixed(1),
-                  textAlign: TextAlign.right,
-                  style: const TextStyle(color: brown, fontSize: 11),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          Container(height: 1, color: lightGold.withValues(alpha: 0.5)),
-          const SizedBox(height: 10),
-          GestureDetector(
-            onTap: onEraserToggled,
-            behavior: HitTestBehavior.opaque,
-            child: Row(
-              children: [
-                Icon(
-                  Icons.auto_fix_normal_outlined,
-                  size: 16,
-                  color: isErasing ? gold : brown.withValues(alpha: 0.6),
-                ),
-                const SizedBox(width: 10),
-                Text(
-                  'Eraser',
-                  style: TextStyle(
-                    color: isErasing ? gold : brown,
-                    fontSize: 12,
-                    fontWeight: isErasing ? FontWeight.w700 : FontWeight.w400,
-                  ),
-                ),
-                const Spacer(),
-                AnimatedContainer(
-                  duration: const Duration(milliseconds: 160),
-                  width: 8,
-                  height: 8,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: isErasing ? gold : Colors.transparent,
-                    border: Border.all(color: lightGold),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _MinimalBottomButton extends StatelessWidget {
-  final IconData icon;
-  final Color color;
-  final VoidCallback onTap;
-
-  const _MinimalBottomButton({
-    required this.icon,
-    required this.color,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(30),
-        child: Container(
-          width: 48,
-          height: 48,
-          decoration: BoxDecoration(
-            color: const Color(0xFFFFFCF4),
-            shape: BoxShape.circle,
-            border: Border.all(color: const Color(0xFFD8C58D), width: 1),
-          ),
-          child: Icon(icon, size: 20, color: color),
-        ),
-      ),
-    );
-  }
+  static Widget _ornamentRule() => Container(
+    width: 38,
+    height: 1,
+    color: PracticePalette.lightGold.withValues(alpha: 0.65),
+  );
 }
