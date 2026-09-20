@@ -36,6 +36,7 @@ backend/image_processor/input/**
 !backend/image_processor/input/.gitkeep
 backend/services/music_src/mxl/
 backend/services/music_src/PDMX
+backend/services/music_src/mxl_cache/
 
 # ==========================================
 # 4. IDEs and System Dotfiles (The "dot files")

@@ -7,7 +7,10 @@ storage/scores/<Composer>/<Piece>/ layout.
 Called from pdf_to_notes.process() -- not meant to be run standalone.
 """
 
+import os
+import ssl
 import types
+import urllib.request
 from pathlib import Path
 
 import numpy as np
@@ -132,7 +135,52 @@ def _teaser() -> Image.Image:
 _draw_teaser.teaser = _teaser
 
 
+def _ensure_checkpoints() -> None:
+    """Download oemer's ONNX model weights on first use.
+
+    oemer ships the model architecture/metadata but not the weights
+    themselves (~100 MB), fetching them lazily on its own first run. It only
+    does that from its `omr` CLI, though -- calling extract() straight from
+    Python (as this module does) skips that path, so a fresh install crashes
+    with `onnxruntime ... NoSuchFile: .../unet_big/model.onnx`. Mirror the
+    download here (SSL verification is relaxed the same way oemer's own
+    downloader does, to sidestep the stock-macOS-Python missing-CA-bundle
+    issue) so the pipeline self-heals instead of erroring on a clean env.
+    """
+    from oemer.ete import MODULE_PATH, CHECKPOINTS_URL
+
+    # title in CHECKPOINTS_URL -> checkpoints subdir it belongs in. oemer
+    # stores each as "model.onnx" inside its own folder.
+    targets = {
+        "1st_model.onnx": os.path.join(MODULE_PATH, "checkpoints", "unet_big", "model.onnx"),
+        "2nd_model.onnx": os.path.join(MODULE_PATH, "checkpoints", "seg_net", "model.onnx"),
+    }
+    if all(os.path.exists(dest) for dest in targets.values()):
+        return
+
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+    for title, dest in targets.items():
+        if os.path.exists(dest):
+            continue
+        os.makedirs(os.path.dirname(dest), exist_ok=True)
+        url = CHECKPOINTS_URL[title]
+        # Download to a temp path first so an interrupted download never
+        # leaves a truncated file that later runs mistake for a complete one.
+        tmp = dest + ".part"
+        with urllib.request.urlopen(url, context=ctx) as resp, open(tmp, "wb") as f:
+            while True:
+                chunk = resp.read(1 << 20)
+                if not chunk:
+                    break
+                f.write(chunk)
+        os.replace(tmp, dest)
+
+
 def convert(png_path: str) -> dict:
+    _ensure_checkpoints()
+
     out_dir = Path(png_path).resolve().parent
     args = types.SimpleNamespace(
         img_path=png_path,

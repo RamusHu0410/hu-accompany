@@ -1,13 +1,19 @@
 import csv
+import os
 import sqlite3
 import sys
+import urllib.request
 import zipfile
 import xml.etree.ElementTree as ET
 from contextlib import closing
 from pathlib import Path
 
+from dotenv import load_dotenv
+
 from db.crud import get_or_create_score
 from db.db import SessionLocal
+
+load_dotenv()
 
 # --- CONFIG ---
 PDMX_ROOT = Path(__file__).parent  # folder containing pdmx.py, PDMX.csv, mxl/
@@ -15,10 +21,47 @@ CSV_PATH = PDMX_ROOT / "PDMX.csv"
 DB_PATH = PDMX_ROOT / "pdmx.db"
 LIMIT = 5
 
+# --- REMOTE MXL STORAGE (Cloudflare R2) ---
+# The 2.2 GB mxl/ tree is not committed to git. When PDMX_MXL_BASE_URL is set,
+# individual .mxl files are fetched on demand from object storage and cached
+# locally under PDMX_MXL_CACHE. The relative paths stored in pdmx.db (e.g.
+# "./mxl/10/44/xyz.mxl") map 1:1 to object keys under the base URL.
+# Leave PDMX_MXL_BASE_URL unset to use a local mxl/ folder (original behavior).
+PDMX_MXL_BASE_URL = os.environ.get("PDMX_MXL_BASE_URL")  # e.g. https://pub-xxxx.r2.dev
+PDMX_MXL_CACHE = Path(os.environ.get("PDMX_MXL_CACHE", PDMX_ROOT / "mxl_cache"))
+
 
 def resolve_pdmx_path(relative_path: str) -> Path:
     # relative_path looks like "./mxl/10/44/xyz.mxl"
-    return PDMX_ROOT / relative_path.lstrip("./")
+    rel = relative_path.lstrip("./")
+
+    # Local mode: no remote configured, resolve against the on-disk mxl/ folder.
+    if not PDMX_MXL_BASE_URL:
+        return PDMX_ROOT / rel
+
+    # Remote mode: return the cached copy, downloading it on first use.
+    local_path = PDMX_MXL_CACHE / rel
+    if not local_path.exists():
+        local_path.parent.mkdir(parents=True, exist_ok=True)
+        url = f"{PDMX_MXL_BASE_URL.rstrip('/')}/{rel}"
+        # Download to a temp file first so an interrupted download never leaves
+        # a truncated file behind that would be treated as a valid cache hit.
+        tmp_path = local_path.with_suffix(local_path.suffix + ".part")
+        try:
+            urllib.request.urlretrieve(url, tmp_path)
+            tmp_path.replace(local_path)
+        finally:
+            tmp_path.unlink(missing_ok=True)
+    return local_path
+    if not PDMX_BASE_URL:
+        return PDMX_ROOT / rel  # local mode, unchanged behavior
+
+    local = PDMX_CACHE / rel
+    if not local.exists():
+        local.parent.mkdir(parents=True, exist_ok=True)
+        url = f"{PDMX_BASE_URL.rstrip('/')}/{rel}"
+        urllib.request.urlretrieve(url, local)
+    return local
 
 
 def init_db():
