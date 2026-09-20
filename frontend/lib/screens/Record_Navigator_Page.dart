@@ -1,10 +1,14 @@
 import 'dart:math';
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import '../theme/Color_Theme.dart';
+import '../theme/Design_Tokens.dart';
 import '../controllers/Disk_Spin_Controller.dart';
 import '../widgets/Vinyl_Disk_Painter.dart';
 import 'Shelf_Page.dart';
 import 'Music_Library_Page.dart';
+import 'Quiz_Home_Page.dart';
 import '../main.dart';
 
 /// One destination in the record crate — everything needed to draw its
@@ -18,7 +22,7 @@ class _RecordEntry {
     required this.title,
     required this.sublabel,
     required this.pageBuilder,
-    this.diskColor = const Color(0xFF0B0B0D),
+    this.diskColor = TurntablePalette.diskPractice,
   });
 }
 
@@ -43,26 +47,40 @@ class _Record_Navigator_PageState extends State<Record_Navigator_Page>
     _RecordEntry(
       title: 'PRACTICE',
       sublabel: 'your score',
-      diskColor: const Color(0xFF0B0B0D),
+      diskColor: TurntablePalette.diskPractice,
       pageBuilder: (_) => const ScoreViewerPage(),
     ),
     _RecordEntry(
       title: 'SEARCH',
       sublabel: 'the library',
-      diskColor: const Color(0xFF16121A),
+      diskColor: TurntablePalette.diskSearch,
       pageBuilder: (_) => const Music_Library_Page(),
     ),
     _RecordEntry(
       title: 'SHELF',
       sublabel: 'saved scores',
-      diskColor: const Color(0xFF12140F),
+      diskColor: TurntablePalette.diskShelf,
       pageBuilder: (_) => const Shelf_Page(),
+    ),
+    _RecordEntry(
+      title: 'QUIZ',
+      sublabel: 'theory & history',
+      diskColor: TurntablePalette.diskQuiz,
+      pageBuilder: (_) => const Quiz_Home_Page(),
     ),
   ];
 
   int _activeIndex = 0;
   int? _incomingIndex;
-  double _swapProgress = 0; // 0..1, drives the disk-swap animation
+
+  /// 0..1, drives the disk-swap animation.
+  ///
+  /// A [ValueNotifier] rather than plain state: this changes on every frame
+  /// of both the drag and the settle animation, and routing it through
+  /// setState rebuilt the whole Stack — platter, tonearm, labels and dots —
+  /// 60 times a second to move two disks. Only the disk layers listen now.
+  final ValueNotifier<double> _swapProgress = ValueNotifier<double>(0);
+
   double _dragStartX = 0;
   bool _swiping = false;
   bool _launching = false;
@@ -83,12 +101,18 @@ class _Record_Navigator_PageState extends State<Record_Navigator_Page>
       vsync: this,
       duration: const Duration(milliseconds: 360),
     );
+    // Registered once for the widget's lifetime. It used to be added on
+    // every swap and removed from inside the callback, which stacked up
+    // duplicate listeners whenever a settle was interrupted by a new drag.
+    _swapController.addListener(_swapTick);
   }
 
   @override
   void dispose() {
+    _swapController.removeListener(_swapTick);
     _swapController.dispose();
     _zoomController.dispose();
+    _swapProgress.dispose();
     super.dispose();
   }
 
@@ -107,26 +131,27 @@ class _Record_Navigator_PageState extends State<Record_Navigator_Page>
     // mistaken for a swap and doesn't compete with the disk's own spin
     // gesture for the touch.
     if (delta >= 0) {
-      if (_incomingIndex != null || _swapProgress != 0) {
-        setState(() {
-          _incomingIndex = null;
-          _swapProgress = 0;
-        });
+      _swapProgress.value = 0;
+      // Only the disappearance of the incoming disk needs a rebuild; the
+      // progress reset above reaches the disk layers on its own.
+      if (_incomingIndex != null) {
+        setState(() => _incomingIndex = null);
       }
       return;
     }
 
     final width = MediaQuery.of(context).size.width;
-    _incomingIndex = (_activeIndex + 1) % _records.length;
-    setState(() {
-      _swapProgress = (delta.abs() / (width * 0.5)).clamp(0.0, 1.0);
-    });
+    final next = (_activeIndex + 1) % _records.length;
+    if (_incomingIndex != next) {
+      setState(() => _incomingIndex = next);
+    }
+    _swapProgress.value = (delta.abs() / (width * 0.5)).clamp(0.0, 1.0);
   }
 
   void _onHorizontalDragEnd(DragEndDetails d) {
     if (!_swiping || _launching) return;
     _swiping = false;
-    if (_swapProgress > 0.35 && _incomingIndex != null) {
+    if (_swapProgress.value > 0.35 && _incomingIndex != null) {
       _completeSwap();
     } else {
       _cancelSwap();
@@ -134,43 +159,35 @@ class _Record_Navigator_PageState extends State<Record_Navigator_Page>
   }
 
   void _completeSwap() {
-    _swapController.value = _swapProgress;
-    _swapController.forward(from: _swapProgress).then((_) {
+    HapticFeedback.selectionClick();
+    _swapController.forward(from: _swapProgress.value).then((_) {
       if (!mounted) return;
       setState(() {
         _activeIndex = _incomingIndex!;
         _incomingIndex = null;
-        _swapProgress = 0;
       });
+      _swapProgress.value = 0;
       _swapController.value = 0;
     });
-    _swapController.addListener(_swapTick);
   }
 
   void _cancelSwap() {
-    _swapController.value = _swapProgress;
-    _swapController.reverse(from: _swapProgress).then((_) {
+    _swapController.reverse(from: _swapProgress.value).then((_) {
       if (!mounted) return;
-      setState(() {
-        _incomingIndex = null;
-        _swapProgress = 0;
-      });
+      setState(() => _incomingIndex = null);
+      _swapProgress.value = 0;
     });
-    _swapController.addListener(_swapTick);
   }
 
   void _swapTick() {
     if (!mounted) return;
-    setState(() => _swapProgress = _swapController.value);
-    if (_swapController.status == AnimationStatus.completed ||
-        _swapController.status == AnimationStatus.dismissed) {
-      _swapController.removeListener(_swapTick);
-    }
+    _swapProgress.value = _swapController.value;
   }
 
   Future<void> _onDiskActivated() async {
     if (_launching) return;
     _launching = true;
+    HapticFeedback.mediumImpact();
 
     await _zoomController.forward(from: 0);
     if (!mounted) return;
@@ -178,10 +195,21 @@ class _Record_Navigator_PageState extends State<Record_Navigator_Page>
     final entry = _records[_activeIndex];
     await Navigator.of(context).push(
       PageRouteBuilder(
-        transitionDuration: const Duration(milliseconds: 250),
+        transitionDuration: Motion.slow,
+        reverseTransitionDuration: Motion.base,
         pageBuilder: (_, _, _) => entry.pageBuilder(context),
-        transitionsBuilder: (_, anim, _, child) =>
-            FadeTransition(opacity: anim, child: child),
+        // The page settles in from slightly enlarged, continuing the
+        // zoom the disk just performed rather than restarting the motion.
+        transitionsBuilder: (_, anim, _, child) {
+          final eased = CurvedAnimation(parent: anim, curve: Motion.enter);
+          return FadeTransition(
+            opacity: eased,
+            child: ScaleTransition(
+              scale: Tween<double>(begin: 1.06, end: 1.0).animate(eased),
+              child: child,
+            ),
+          );
+        },
       ),
     );
 
@@ -198,7 +226,7 @@ class _Record_Navigator_PageState extends State<Record_Navigator_Page>
     final incoming = _incomingIndex != null ? _records[_incomingIndex!] : null;
 
     return Scaffold(
-      backgroundColor: const Color(0xFF1B1B1F),
+      backgroundColor: TurntablePalette.background,
       body: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onHorizontalDragStart: _onHorizontalDragStart,
@@ -214,7 +242,7 @@ class _Record_Navigator_PageState extends State<Record_Navigator_Page>
                 height: diskSize + 40,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: const Color(0xFF232327),
+                  color: TurntablePalette.mat,
                   boxShadow: [
                     BoxShadow(
                       color: Colors.black.withValues(alpha: 0.5),
@@ -247,7 +275,7 @@ class _Record_Navigator_PageState extends State<Record_Navigator_Page>
 
             // Current page label
             Positioned(
-              bottom: 64,
+              bottom: Space.xxl * 2,
               left: 0,
               right: 0,
               child: Column(
@@ -255,17 +283,17 @@ class _Record_Navigator_PageState extends State<Record_Navigator_Page>
                   Text(
                     current.title,
                     style: const TextStyle(
-                      color: Color(0xFFEDE6DA),
+                      color: TurntablePalette.parchment,
                       fontSize: 13,
                       fontWeight: FontWeight.w700,
                       letterSpacing: 3,
                     ),
                   ),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: Space.xs - 2),
                   Text(
                     'spin the record to open it',
                     style: TextStyle(
-                      color: const Color(0xFFEDE6DA).withValues(alpha: 0.4),
+                      color: TurntablePalette.parchment.withValues(alpha: 0.4),
                       fontSize: 11,
                       letterSpacing: 0.5,
                     ),
@@ -276,7 +304,7 @@ class _Record_Navigator_PageState extends State<Record_Navigator_Page>
 
             // Which-record-is-loaded dots
             Positioned(
-              top: 24,
+              top: Space.xl,
               left: 0,
               right: 0,
               child: Row(
@@ -284,14 +312,15 @@ class _Record_Navigator_PageState extends State<Record_Navigator_Page>
                 children: List.generate(_records.length, (i) {
                   final active = i == _activeIndex;
                   return AnimatedContainer(
-                    duration: const Duration(milliseconds: 250),
-                    margin: const EdgeInsets.symmetric(horizontal: 4),
+                    duration: Motion.base,
+                    curve: Motion.enter,
+                    margin: const EdgeInsets.symmetric(horizontal: Space.xxs),
                     width: active ? 16 : 6,
                     height: 6,
                     decoration: BoxDecoration(
-                      color: const Color(
-                        0xFFEDE6DA,
-                      ).withValues(alpha: active ? 0.85 : 0.25),
+                      color: TurntablePalette.parchment.withValues(
+                        alpha: active ? 0.85 : 0.25,
+                      ),
                       borderRadius: BorderRadius.circular(3),
                     ),
                   );
@@ -328,54 +357,70 @@ class _Record_Navigator_PageState extends State<Record_Navigator_Page>
     required bool outgoing,
     bool spinnable = false,
   }) {
-    // At rest (no swap in flight) the "current" layer is treated as fully
-    // arrived — progress: 1.0 — so it renders centered on the platter
-    // instead of collapsing back to the off-screen "incoming" pose.
-    final progress = outgoing
-        ? _swapProgress
-        : (_incomingIndex != null ? _swapProgress : 1.0);
-    final dx = outgoing ? -progress * 260 : (1 - progress) * 260;
-    final dy = outgoing ? -progress * 90 : (1 - progress) * 40;
-    final scale = outgoing ? (1 - progress * 0.25) : (0.85 + progress * 0.15);
-    final opacity = outgoing
-        ? (1 - progress)
-        : (progress == 0 ? 1.0 : progress);
-    final rotationTilt = outgoing ? progress * 0.6 : (1 - progress) * -0.5;
+    // The disk itself is built once and threaded through both builders as
+    // `child`, so a swap frame only recomputes transforms — it never
+    // rebuilds the record, its label or its spin gesture.
+    final Widget disk = spinnable
+        ? SpinnableDisk(
+            size: diskSize,
+            label: entry.title,
+            sublabel: entry.sublabel,
+            diskColor: entry.diskColor,
+            onActivated: _onDiskActivated,
+          )
+        : VinylDisk(
+            size: diskSize,
+            rotation: 0,
+            label: entry.title,
+            sublabel: entry.sublabel,
+            diskColor: entry.diskColor,
+          );
+
+    final zoomed = AnimatedBuilder(
+      animation: _zoomController,
+      child: disk,
+      builder: (context, child) =>
+          Transform.scale(scale: 1 + _zoomController.value * 2.4, child: child),
+    );
+
+    final bool swapInFlight = _incomingIndex != null;
 
     return Center(
-      child: Transform.translate(
-        offset: Offset(dx, dy),
-        child: Transform.rotate(
-          angle: rotationTilt,
-          child: Transform.scale(
-            scale: scale,
-            child: Opacity(
-              opacity: opacity.clamp(0.0, 1.0),
-              child: AnimatedBuilder(
-                animation: _zoomController,
-                builder: (context, child) {
-                  final t = _zoomController.value;
-                  return Transform.scale(scale: 1 + t * 2.4, child: child);
-                },
-                child: spinnable
-                    ? SpinnableDisk(
-                        size: diskSize,
-                        label: entry.title,
-                        sublabel: entry.sublabel,
-                        diskColor: entry.diskColor,
-                        onActivated: _onDiskActivated,
-                      )
-                    : VinylDisk(
-                        size: diskSize,
-                        rotation: 0,
-                        label: entry.title,
-                        sublabel: entry.sublabel,
-                        diskColor: entry.diskColor,
-                      ),
+      child: ValueListenableBuilder<double>(
+        valueListenable: _swapProgress,
+        child: zoomed,
+        builder: (context, raw, child) {
+          // At rest (no swap in flight) the "current" layer is treated as
+          // fully arrived — progress: 1.0 — so it renders centered on the
+          // platter instead of collapsing back to the off-screen
+          // "incoming" pose.
+          final progress = outgoing ? raw : (swapInFlight ? raw : 1.0);
+          final dx = outgoing ? -progress * 260 : (1 - progress) * 260;
+          final dy = outgoing ? -progress * 90 : (1 - progress) * 40;
+          final scale = outgoing
+              ? (1 - progress * 0.25)
+              : (0.85 + progress * 0.15);
+          final opacity = outgoing
+              ? (1 - progress)
+              : (progress == 0 ? 1.0 : progress);
+          final rotationTilt = outgoing
+              ? progress * 0.6
+              : (1 - progress) * -0.5;
+
+          return Transform.translate(
+            offset: Offset(dx, dy),
+            child: Transform.rotate(
+              angle: rotationTilt,
+              child: Transform.scale(
+                scale: scale,
+                child: Opacity(
+                  opacity: opacity.clamp(0.0, 1.0),
+                  child: child,
+                ),
               ),
             ),
-          ),
-        ),
+          );
+        },
       ),
     );
   }
@@ -406,7 +451,7 @@ class _TonearmPainter extends CustomPainter {
     canvas.drawCircle(
       base,
       size.width * 0.09,
-      Paint()..color = const Color(0xFF2A2A2E),
+      Paint()..color = TurntablePalette.tonearmMount,
     );
     canvas.drawCircle(
       base,
@@ -418,7 +463,7 @@ class _TonearmPainter extends CustomPainter {
     );
 
     final armPaint = Paint()
-      ..color = const Color(0xFFB9B9BD)
+      ..color = TurntablePalette.tonearmArm
       ..strokeWidth = 4
       ..strokeCap = StrokeCap.round
       ..style = PaintingStyle.stroke;
@@ -434,7 +479,7 @@ class _TonearmPainter extends CustomPainter {
         const Rect.fromLTWH(-4, -10, 8, 20),
         const Radius.circular(3),
       ),
-      Paint()..color = const Color(0xFF1E1E22),
+      Paint()..color = TurntablePalette.tonearmHead,
     );
     canvas.restore();
   }

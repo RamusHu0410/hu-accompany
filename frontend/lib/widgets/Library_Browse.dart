@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../theme/Design_Tokens.dart';
+import 'Press_Scale.dart';
 
 // ─── Shared library styling ──────────────────────────────────────────────────
 const String libBookFont = 'Georgia';
@@ -78,14 +80,15 @@ class LibraryPickStrip extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _SectionLabel(label),
-        const SizedBox(height: 10),
+        const SizedBox(height: Space.sm),
         SizedBox(
           height: 112,
           child: ListView.separated(
             scrollDirection: Axis.horizontal,
+            physics: AppScroll.physics,
             clipBehavior: Clip.none,
             itemCount: picks.length,
-            separatorBuilder: (_, _) => const SizedBox(width: 10),
+            separatorBuilder: (_, _) => const SizedBox(width: Space.sm),
             itemBuilder: (_, i) =>
                 _PickCard(pick: picks[i], onTap: () => onTap(picks[i])),
           ),
@@ -102,64 +105,63 @@ class _PickCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(14),
-        child: Container(
-          width: 150,
-          padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-          decoration: BoxDecoration(
-            color: libCreamCard,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: libInk.withValues(alpha: 0.10)),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                width: 28,
-                height: 28,
-                decoration: BoxDecoration(
-                  color: libGold.withValues(alpha: 0.14),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: const Icon(
-                  Icons.play_arrow_rounded,
-                  size: 18,
-                  color: libGold,
-                ),
+    return PressScale(
+      onTap: onTap,
+      borderRadius: Radii.lgRadius,
+      pressedScale: 0.96,
+      child: Container(
+        width: 150,
+        padding: const EdgeInsets.all(Space.sm),
+        decoration: BoxDecoration(
+          color: libCreamCard,
+          borderRadius: Radii.lgRadius,
+          border: Border.all(color: libInk.withValues(alpha: 0.10)),
+          boxShadow: Elevations.card(Colors.black),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 28,
+              height: 28,
+              decoration: BoxDecoration(
+                color: libGold.withValues(alpha: 0.14),
+                borderRadius: BorderRadius.circular(8),
               ),
-              const Spacer(),
-              Text(
-                pick.title,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  fontFamily: libBookFont,
-                  fontFamilyFallback: libBookFontFallback,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  height: 1.2,
-                  color: libInk,
-                ),
+              child: const Icon(
+                Icons.play_arrow_rounded,
+                size: 18,
+                color: libGold,
               ),
-              const SizedBox(height: 2),
-              Text(
-                pick.composer,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontFamily: libBookFont,
-                  fontFamilyFallback: libBookFontFallback,
-                  fontStyle: FontStyle.italic,
-                  fontSize: 11,
-                  color: libInk.withValues(alpha: 0.5),
-                ),
+            ),
+            const Spacer(),
+            Text(
+              pick.title,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontFamily: libBookFont,
+                fontFamilyFallback: libBookFontFallback,
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                height: 1.2,
+                color: libInk,
               ),
-            ],
-          ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              pick.composer,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontFamily: libBookFont,
+                fontFamilyFallback: libBookFontFallback,
+                fontStyle: FontStyle.italic,
+                fontSize: 11,
+                color: libInk.withValues(alpha: 0.5),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -193,7 +195,7 @@ class LibraryFilterChips extends StatelessWidget {
       children: kLibraryFilters.entries.map((entry) {
         final value = selected[entry.key];
         return Padding(
-          padding: const EdgeInsets.only(right: 8),
+          padding: const EdgeInsets.only(right: Space.xs),
           child: _FilterChip(
             label: value ?? entry.key,
             active: value != null,
@@ -246,10 +248,15 @@ class _FilterChip extends StatelessWidget {
           )
           .toList(),
       child: Container(
-        padding: const EdgeInsets.fromLTRB(14, 8, 10, 8),
+        padding: const EdgeInsets.fromLTRB(
+          Space.md,
+          Space.xs,
+          Space.sm,
+          Space.xs,
+        ),
         decoration: BoxDecoration(
           color: active ? libGold.withValues(alpha: 0.12) : libCreamCard,
-          borderRadius: BorderRadius.circular(18),
+          borderRadius: Radii.pillRadius,
           border: Border.all(
             color: active ? libGold : libInk.withValues(alpha: 0.14),
           ),
@@ -314,46 +321,43 @@ class QuickCategoryRow extends StatelessWidget {
         final active = entry.key == selected;
         return Expanded(
           child: Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: Material(
-              color: Colors.transparent,
-              child: InkWell(
-                onTap: () => onSelected(entry.key),
-                borderRadius: BorderRadius.circular(14),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 160),
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  decoration: BoxDecoration(
-                    color: active
-                        ? libGold.withValues(alpha: 0.12)
-                        : libCreamCard,
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(
-                      color: active ? libGold : libInk.withValues(alpha: 0.10),
+            padding: const EdgeInsets.only(right: Space.xs),
+            child: PressScale(
+              onTap: () => onSelected(entry.key),
+              borderRadius: Radii.lgRadius,
+              pressedScale: 0.95,
+              child: AnimatedContainer(
+                duration: Motion.fast,
+                curve: Motion.standard,
+                padding: const EdgeInsets.symmetric(vertical: Space.sm),
+                decoration: BoxDecoration(
+                  color: active
+                      ? libGold.withValues(alpha: 0.12)
+                      : libCreamCard,
+                  borderRadius: Radii.lgRadius,
+                  border: Border.all(
+                    color: active ? libGold : libInk.withValues(alpha: 0.10),
+                  ),
+                ),
+                child: Column(
+                  children: [
+                    Icon(
+                      icon,
+                      size: 19,
+                      color: active ? libGold : libInk.withValues(alpha: 0.55),
                     ),
-                  ),
-                  child: Column(
-                    children: [
-                      Icon(
-                        icon,
-                        size: 19,
-                        color: active ? libGold : libInk.withValues(alpha: 0.55),
+                    const SizedBox(height: Space.xs),
+                    Text(
+                      label,
+                      style: TextStyle(
+                        fontFamily: libBookFont,
+                        fontFamilyFallback: libBookFontFallback,
+                        fontSize: 11,
+                        fontWeight: active ? FontWeight.w700 : FontWeight.w500,
+                        color: active ? libGold : libInk.withValues(alpha: 0.6),
                       ),
-                      const SizedBox(height: 6),
-                      Text(
-                        label,
-                        style: TextStyle(
-                          fontFamily: libBookFont,
-                          fontFamilyFallback: libBookFontFallback,
-                          fontSize: 11,
-                          fontWeight: active
-                              ? FontWeight.w700
-                              : FontWeight.w500,
-                          color: active ? libGold : libInk.withValues(alpha: 0.6),
-                        ),
-                      ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
             ),

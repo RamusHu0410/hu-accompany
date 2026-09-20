@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import '../theme/Color_Theme.dart';
+import '../theme/Design_Tokens.dart';
 import '../widgets/Score_Card.dart';
+import '../widgets/Shelf_Empty.dart';
+import '../widgets/Shelf_Skeleton.dart';
 import '../models/Shelf_Manager.dart';
 
 /// The shelf: every sheet the user has actually opened, most recent
@@ -49,21 +52,37 @@ class _Shelf_PageState extends State<Shelf_Page> {
         elevation: 0,
         title: Text(
           'Shelf',
-          style: TextStyle(color: textColor, letterSpacing: 2, fontSize: 14),
+          style: TextStyle(
+            color: textColor,
+            letterSpacing: 2,
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+          ),
         ),
         iconTheme: IconThemeData(color: textColor),
       ),
       body: SafeArea(
-        child: _loading
-            ? Center(
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: textColor.withValues(alpha: 0.6),
+        // The three states are crossfaded rather than swapped outright, so
+        // the skeleton dissolves into the real grid it was standing in for.
+        child: AnimatedSwitcher(
+          duration: Motion.slow,
+          switchInCurve: Motion.enter,
+          switchOutCurve: Motion.exit,
+          child: _loading
+              ? ShelfSkeleton(
+                  key: const ValueKey('shelf-loading'),
+                  brightness: brightness,
+                )
+              : _entries.isEmpty
+              ? ShelfEmpty(
+                  key: const ValueKey('shelf-empty'),
+                  textColor: textColor,
+                )
+              : KeyedSubtree(
+                  key: const ValueKey('shelf-content'),
+                  child: _sections(brightness, textColor),
                 ),
-              )
-            : _entries.isEmpty
-            ? _EmptyShelf(textColor: textColor)
-            : _sections(brightness, textColor),
+        ),
       ),
     );
   }
@@ -73,6 +92,7 @@ class _Shelf_PageState extends State<Shelf_Page> {
     final older = _entries.skip(_recentCount).toList();
 
     return CustomScrollView(
+      physics: AppScroll.physics,
       slivers: [
         _SectionHeader(
           title: older.isEmpty ? 'Your Collection' : 'Recently Played',
@@ -88,42 +108,8 @@ class _Shelf_PageState extends State<Shelf_Page> {
           ),
           _ScoreGrid(entries: older, brightness: brightness, textColor: textColor),
         ],
-        const SliverToBoxAdapter(child: SizedBox(height: 28)),
+        const SliverToBoxAdapter(child: SizedBox(height: Space.xxl)),
       ],
-    );
-  }
-}
-
-class _EmptyShelf extends StatelessWidget {
-  final Color textColor;
-  const _EmptyShelf({required this.textColor});
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 40),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.music_note_rounded,
-              size: 28,
-              color: textColor.withValues(alpha: 0.25),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              'Nothing on the shelf yet.\nScores you open land here.',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: textColor.withValues(alpha: 0.5),
-                fontSize: 13,
-                height: 1.4,
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }
@@ -142,7 +128,12 @@ class _SectionHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return SliverToBoxAdapter(
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
+        padding: const EdgeInsets.fromLTRB(
+          Space.lg,
+          Space.lg,
+          Space.lg,
+          Space.sm,
+        ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.baseline,
           textBaseline: TextBaseline.alphabetic,
@@ -156,7 +147,7 @@ class _SectionHeader extends StatelessWidget {
                 letterSpacing: 0.3,
               ),
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: Space.xs),
             Text(
               '$count',
               style: TextStyle(
@@ -186,12 +177,12 @@ class _ScoreGrid extends StatelessWidget {
     final subtitleColor = ShelfPalette.subtextColor(brightness);
 
     return SliverPadding(
-      padding: const EdgeInsets.symmetric(horizontal: 20),
+      padding: const EdgeInsets.symmetric(horizontal: Space.lg),
       sliver: SliverGrid(
         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
           crossAxisCount: 3,
-          mainAxisSpacing: 18,
-          crossAxisSpacing: 14,
+          mainAxisSpacing: Space.md,
+          crossAxisSpacing: Space.sm,
           childAspectRatio: 0.54,
         ),
         delegate: SliverChildBuilderDelegate((context, i) {

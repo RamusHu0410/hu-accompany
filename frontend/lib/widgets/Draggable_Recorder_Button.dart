@@ -1,6 +1,10 @@
 import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import '../theme/Color_Theme.dart';
+import '../theme/Design_Tokens.dart';
+import 'Recorder_Painters.dart';
 import 'package:liquid_glass_easy/liquid_glass_easy.dart';
 import 'package:hu_accomponist/src/rust/frb_generated.dart';
 import 'package:hu_accomponist/src/rust/models.dart';
@@ -34,9 +38,17 @@ class Draggable_Recorder_Button extends StatefulWidget {
 class _Draggable_Recorder_ButtonState extends State<Draggable_Recorder_Button>
     with SingleTickerProviderStateMixin {
   bool _isRecording = false;
-  Duration _elapsed = Duration.zero;
   Timer? _timer;
-  Offset _position = const Offset(20, 400);
+
+  /// Both tick far more often than the rest of the button changes — the
+  /// timer once a second, the drag once a frame — and both used to go
+  /// through setState, rebuilding the glass lens and the two painters
+  /// along with them. Kept as notifiers so each drives only the one
+  /// subtree that reads it.
+  final ValueNotifier<Duration> _elapsed = ValueNotifier(Duration.zero);
+  final ValueNotifier<Offset> _position = ValueNotifier(
+    const Offset(20, 400),
+  );
 
   // Owns the live notesStream() subscription for the current recording.
   // Null whenever we're not recording.
@@ -68,6 +80,8 @@ class _Draggable_Recorder_ButtonState extends State<Draggable_Recorder_Button>
     _timer?.cancel();
     _phraseSubscription?.cancel();
     _pulseCtrl.dispose();
+    _elapsed.dispose();
+    _position.dispose();
     super.dispose();
   }
 
@@ -116,244 +130,213 @@ class _Draggable_Recorder_ButtonState extends State<Draggable_Recorder_Button>
 
   void _toggle() {
     if (_isRecording) {
+      // Lighter than the start tick: stopping is a release, and the two
+      // being distinguishable by feel means the button can be operated
+      // without looking at it.
+      HapticFeedback.lightImpact();
       _timer?.cancel();
       setState(() => _isRecording = false);
       _pulseCtrl.duration = _idlePeriod;
       _pulseCtrl.repeat();
       _stopRecording();
     } else {
-      setState(() {
-        _isRecording = true;
-        _elapsed = Duration.zero;
-      });
+      HapticFeedback.mediumImpact();
+      setState(() => _isRecording = true);
+      _elapsed.value = Duration.zero;
       _pulseCtrl.duration = _recordingPeriod;
       _pulseCtrl.repeat();
       _timer = Timer.periodic(const Duration(seconds: 1), (_) {
-        setState(() => _elapsed += const Duration(seconds: 1));
+        _elapsed.value += const Duration(seconds: 1);
       });
       _startRecording();
     }
     widget.onToggle(_isRecording);
   }
 
-  String get _elapsedLabel {
-    final m = _elapsed.inMinutes.remainder(60).toString().padLeft(2, '0');
-    final s = _elapsed.inSeconds.remainder(60).toString().padLeft(2, '0');
+  static String _format(Duration elapsed) {
+    final m = elapsed.inMinutes.remainder(60).toString().padLeft(2, '0');
+    final s = elapsed.inSeconds.remainder(60).toString().padLeft(2, '0');
     return '$m:$s';
   }
 
   @override
   Widget build(BuildContext context) {
-    return Positioned(
-      left: _position.dx,
-      top: _position.dy,
-      child: GestureDetector(
-        onPanUpdate: (details) {
-          final screenSize = MediaQuery.of(context).size;
-          final maxX = screenSize.width - _buttonWidth;
-          final maxY = screenSize.height - _buttonHeight;
-          setState(() {
-            final next = _position + details.delta;
-            _position = Offset(
-              next.dx.clamp(0.0, maxX < 0 ? 0.0 : maxX),
-              next.dy.clamp(0.0, maxY < 0 ? 0.0 : maxY),
-            );
-          });
-        },
-        onTap: _toggle,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            AnimatedSwitcher(
-              duration: const Duration(milliseconds: 250),
-              child: Text(
-                _isRecording ? _elapsedLabel : 'Tap to record',
-                key: ValueKey(_isRecording),
-                style: TextStyle(
+    // Built once per real state change and threaded through the position
+    // builder as `child`, so dragging only re-runs the Positioned above it.
+    final content = GestureDetector(
+      onPanUpdate: _onPanUpdate,
+      onTap: _toggle,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          AnimatedSwitcher(
+            duration: Motion.base,
+            switchInCurve: Motion.enter,
+            switchOutCurve: Motion.exit,
+            child: _isRecording
+                ? ValueListenableBuilder<Duration>(
+                    key: const ValueKey(true),
+                    valueListenable: _elapsed,
+                    builder: (context, elapsed, _) =>
+                        Text(_format(elapsed), style: _labelStyle(true)),
+                  )
+                : Text(
+                    'Tap to record',
+                    key: const ValueKey(false),
+                    style: _labelStyle(false),
+                  ),
+          ),
+          const SizedBox(height: Space.sm),
+          SizedBox(
+            width: 100,
+            height: 100,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                // Breathing halo — the idle hint that this circle is
+                // tappable, and the live indicator once recording.
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: AnimatedBuilder(
+                      animation: _pulseCtrl,
+                      builder: (_, _) => CustomPaint(
+                        painter: RecorderPulseHaloPainter(
+                          progress: _pulseCtrl.value,
+                          color: _isRecording
+                              ? widget.accent
+                              : RecorderPalette.haloIdle,
+                          strength: _isRecording ? 0.38 : 0.24,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                _lens(),
+              ],
+            ),
+          ),
+          const SizedBox(height: Space.sm),
+          SizedBox(
+            height: 14,
+            child: AnimatedBuilder(
+              animation: _pulseCtrl,
+              builder: (_, _) => CustomPaint(
+                size: const Size(56, 14),
+                painter: RecorderWaveHintPainter(
+                  progress: _pulseCtrl.value,
+                  active: _isRecording,
                   color: _isRecording
-                      ? const Color(0xFF4D4A45)
-                      : const Color(0xFF77736B),
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: 1.2,
-                  fontFeatures: const [FontFeature.tabularFigures()],
+                      ? widget.accent
+                      : RecorderPalette.haloIdle,
                 ),
               ),
             ),
-            const SizedBox(height: 10),
-            SizedBox(
-              width: 100,
-              height: 100,
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  // Breathing halo — the idle hint that this circle is
-                  // tappable, and the live indicator once recording.
-                  Positioned.fill(
-                    child: IgnorePointer(
-                      child: AnimatedBuilder(
-                        animation: _pulseCtrl,
-                        builder: (_, _) => CustomPaint(
-                          painter: _PulseHaloPainter(
-                            progress: _pulseCtrl.value,
-                            color: _isRecording
-                                ? widget.accent
-                                : const Color(0xFF9A8F7E),
-                            strength: _isRecording ? 0.38 : 0.24,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                  AnimatedContainer(
-                      duration: const Duration(milliseconds: 300),
-                      curve: Curves.easeInOut,
-                      width: 64,
-                      height: 64,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.22),
-                            blurRadius: 16,
-                            offset: const Offset(0, 6),
-                          ),
-                          BoxShadow(
-                            color: Colors.white.withValues(alpha: 0.55),
-                            blurRadius: 10,
-                            spreadRadius: 1,
-                          ),
-                        ],
-                      ),
-                      child: LiquidGlassLens(
-                        style: LiquidGlassStyle(
-                          shape:
-                              const LiquidGlassShape.continuousRoundedRectangle(
-                                cornerRadius: 32,
-                              ),
-                          appearance: LiquidGlassAppearance(
-                            // A neutral transparent lens: no purple idle
-                            // tint or red recording tint.
-                            color: Colors.white.withValues(alpha: 0.10),
-                          ),
-                          refraction: const LiquidGlassRefraction(
-                            distortion: 0.12,
-                            distortionWidth: 20,
-                            magnification: 1.05,
-                          ),
-                        ),
-                        child: Center(
-                          child: AnimatedSwitcher(
-                            duration: const Duration(milliseconds: 200),
-                            child: Icon(
-                              _isRecording
-                                  ? Icons.stop_rounded
-                                  : Icons.mic_rounded,
-                              key: ValueKey(_isRecording),
-                              color: const Color(0xFF5F5A52),
-                              size: 30,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 10),
-            SizedBox(
-              height: 14,
-              child: AnimatedBuilder(
-                animation: _pulseCtrl,
-                builder: (_, _) => CustomPaint(
-                  size: const Size(56, 14),
-                  painter: _WaveHintPainter(
-                    progress: _pulseCtrl.value,
-                    active: _isRecording,
-                    color: _isRecording
-                        ? widget.accent
-                        : const Color(0xFF9A8F7E),
-                  ),
-                ),
-              ),
-            ),
-          ],
+          ),
+        ],
+      ),
+    );
+
+    return ValueListenableBuilder<Offset>(
+      valueListenable: _position,
+      child: content,
+      builder: (context, pos, child) =>
+          Positioned(left: pos.dx, top: pos.dy, child: child!),
+    );
+  }
+
+  void _onPanUpdate(DragUpdateDetails details) {
+    final screenSize = MediaQuery.of(context).size;
+    final maxX = screenSize.width - _buttonWidth;
+    final maxY = screenSize.height - _buttonHeight;
+    final next = _position.value + details.delta;
+    _position.value = Offset(
+      next.dx.clamp(0.0, maxX < 0 ? 0.0 : maxX),
+      next.dy.clamp(0.0, maxY < 0 ? 0.0 : maxY),
+    );
+  }
+
+  TextStyle _labelStyle(bool recording) => TextStyle(
+    color: recording
+        ? RecorderPalette.labelActive
+        : RecorderPalette.labelIdle,
+    fontSize: 14,
+    fontWeight: FontWeight.w600,
+    letterSpacing: 1.2,
+    fontFeatures: const [FontFeature.tabularFigures()],
+  );
+
+  Widget _lens() {
+    return AnimatedContainer(
+      duration: Motion.slow,
+      curve: Motion.standard,
+      width: 64,
+      height: 64,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.22),
+            blurRadius: 16,
+            offset: const Offset(0, 6),
+          ),
+          BoxShadow(
+            color: Colors.white.withValues(alpha: 0.55),
+            blurRadius: 10,
+            spreadRadius: 1,
+          ),
+        ],
+      ),
+      child: LiquidGlassLens(
+        style: LiquidGlassStyle(
+          shape: const LiquidGlassShape.continuousRoundedRectangle(
+            cornerRadius: 32,
+          ),
+          appearance: LiquidGlassAppearance(
+            // A neutral transparent lens: no purple idle tint or red
+            // recording tint.
+            color: Colors.white.withValues(alpha: 0.10),
+          ),
+          refraction: const LiquidGlassRefraction(
+            distortion: 0.12,
+            distortionWidth: 20,
+            magnification: 1.05,
+          ),
         ),
+        child: Center(child: _micIcon()),
       ),
     );
   }
-}
 
-/// Two soft rings expanding out of the button — barely-there when idle,
-/// firmer while recording.
-class _PulseHaloPainter extends CustomPainter {
-  final double progress;
-  final Color color;
-  final double strength;
+  /// The idle mic breathes in time with the halo so the control reads as
+  /// alive and waiting rather than as a static graphic. While recording the
+  /// stop square stays still — a moving stop target is harder to hit, and
+  /// the halo already carries the liveness at that point.
+  Widget _micIcon() {
+    final icon = AnimatedSwitcher(
+      duration: Motion.fast,
+      transitionBuilder: (child, animation) => FadeTransition(
+        opacity: animation,
+        child: ScaleTransition(scale: animation, child: child),
+      ),
+      child: Icon(
+        _isRecording ? Icons.stop_rounded : Icons.mic_rounded,
+        key: ValueKey(_isRecording),
+        color: RecorderPalette.icon,
+        size: 30,
+      ),
+    );
 
-  _PulseHaloPainter({
-    required this.progress,
-    required this.color,
-    required this.strength,
-  });
+    if (_isRecording) return icon;
 
-  @override
-  void paint(Canvas canvas, Size size) {
-    final center = size.center(Offset.zero);
-    for (int i = 0; i < 2; i++) {
-      final t = (progress + i * 0.5) % 1.0;
-      final radius = 32 + t * 18;
-      final opacity = strength * (1 - t);
-      if (opacity <= 0.01) continue;
-      canvas.drawCircle(
-        center,
-        radius,
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 1.4
-          ..color = color.withValues(alpha: opacity),
-      );
-    }
+    return AnimatedBuilder(
+      animation: _pulseCtrl,
+      child: icon,
+      builder: (context, child) {
+        // A full sine cycle over the controller's period: out and back,
+        // with no discontinuity at the wrap point.
+        final breath = sin(_pulseCtrl.value * 2 * pi);
+        return Transform.scale(scale: 1 + 0.045 * breath, child: child);
+      },
+    );
   }
-
-  @override
-  bool shouldRepaint(_PulseHaloPainter old) =>
-      old.progress != progress || old.color != color || old.strength != strength;
-}
-
-/// Five bars that stay flat-ish as a hint when idle and sway while
-/// recording, so the button reads as "listening" without extra chrome.
-class _WaveHintPainter extends CustomPainter {
-  final double progress;
-  final bool active;
-  final Color color;
-
-  _WaveHintPainter({
-    required this.progress,
-    required this.active,
-    required this.color,
-  });
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    const barCount = 5;
-    final gap = size.width / barCount;
-    final midY = size.height / 2;
-    final paint = Paint()
-      ..strokeCap = StrokeCap.round
-      ..strokeWidth = 2.5
-      ..color = color.withValues(alpha: active ? 0.75 : 0.35);
-
-    for (int i = 0; i < barCount; i++) {
-      final phase = (progress + i / barCount) * 2 * pi;
-      final amplitude = active ? 5.0 : 1.6;
-      final half = 1.5 + amplitude * (0.5 + 0.5 * sin(phase));
-      final x = gap * (i + 0.5);
-      canvas.drawLine(Offset(x, midY - half), Offset(x, midY + half), paint);
-    }
-  }
-
-  @override
-  bool shouldRepaint(_WaveHintPainter old) =>
-      old.progress != progress || old.active != active || old.color != color;
 }

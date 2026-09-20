@@ -4,6 +4,11 @@ import '../utils/Search_Validator.dart';
 import '../services/Send_Strings_2Server.dart';
 import '../services/Pulling_Back_Data.dart';
 import '../widgets/Library_Browse.dart';
+import '../widgets/Library_Result_Card.dart';
+import '../widgets/Library_Edition_Picker.dart';
+import '../widgets/Library_Search_Field.dart';
+import '../widgets/Library_Skeleton.dart';
+import '../theme/Design_Tokens.dart';
 import 'Shelf_Page.dart';
 import '../models/Shelf_Manager.dart';
 
@@ -38,7 +43,6 @@ const List<String> _bookFontFallback = libBookFontFallback;
 const Color _ink = libInk;
 const Color _gold = libGold;
 const Color _cream = libCream;
-const Color _creamCard = libCreamCard;
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // PAGE — a clean, flat search page (no skeuomorphic book) in the same
@@ -54,7 +58,6 @@ class Music_Library_Page extends StatefulWidget {
 
 class _Music_Library_PageState extends State<Music_Library_Page> {
   final TextEditingController _search = TextEditingController();
-  final FocusNode _focus = FocusNode();
 
   List<WorkSummary> _results = [];
   bool _hasSearched = false;
@@ -69,13 +72,6 @@ class _Music_Library_PageState extends State<Music_Library_Page> {
   /// the outcome of a search.
   bool get _isBrowsing =>
       !_hasSearched && !_isLoading && _errorMessage == null;
-
-  @override
-  void initState() {
-    super.initState();
-    // Drives the search field's focus glow animation.
-    _focus.addListener(() => setState(() {}));
-  }
 
   /// Filter chips are search shortcuts, not a separate facet system — the
   /// picked values are folded into the same query string the field sends.
@@ -177,9 +173,11 @@ class _Music_Library_PageState extends State<Music_Library_Page> {
         context: context,
         backgroundColor: _cream,
         shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          borderRadius: BorderRadius.vertical(
+            top: Radius.circular(Radii.modal),
+          ),
         ),
-        builder: (_) => _EditionPicker(work: work, editions: editions),
+        builder: (_) => LibraryEditionPicker(work: work, editions: editions),
       );
       if (chosen != null) _openSheet(chosen, composer: work.composer);
     } catch (e) {
@@ -236,7 +234,6 @@ class _Music_Library_PageState extends State<Music_Library_Page> {
   @override
   void dispose() {
     _search.dispose();
-    _focus.dispose();
     super.dispose();
   }
 
@@ -274,9 +271,15 @@ class _Music_Library_PageState extends State<Music_Library_Page> {
                                 child: _pickStrip(),
                               ),
                             ),
-                            const SizedBox(height: 20),
-                            _searchField(),
-                            const SizedBox(height: 12),
+                            const SizedBox(height: Space.lg),
+                            LibrarySearchField(
+                              controller: _search,
+                              hasSearched: _hasSearched,
+                              onSubmitted: () =>
+                                  _onSearchSubmitted(_composedQuery),
+                              onClear: _resetToBrowse,
+                            ),
+                            const SizedBox(height: Space.sm),
                             LibraryFilterChips(
                               selected: _filters,
                               onChanged: _onFilterChanged,
@@ -325,7 +328,7 @@ class _Music_Library_PageState extends State<Music_Library_Page> {
               color: _ink.withValues(alpha: 0.7),
             ),
           ),
-          const _CloseButton(),
+          const LibraryCloseButton(),
         ],
       ),
     );
@@ -365,8 +368,8 @@ class _Music_Library_PageState extends State<Music_Library_Page> {
   // growing doesn't feel like a page swap.
   Widget _collapsible({required bool visible, required Widget child}) {
     return AnimatedSize(
-      duration: const Duration(milliseconds: 240),
-      curve: Curves.easeOutCubic,
+      duration: Motion.base,
+      curve: Motion.enter,
       alignment: Alignment.topCenter,
       child: visible ? child : const SizedBox(width: double.infinity),
     );
@@ -397,82 +400,6 @@ class _Music_Library_PageState extends State<Music_Library_Page> {
     setState(() => _category = category);
   }
 
-  // ── Search field: pill shape, animated focus glow ────────────────────────
-  Widget _searchField() {
-    final focused = _focus.hasFocus;
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 200),
-      curve: Curves.easeOut,
-      height: 56,
-      decoration: BoxDecoration(
-        color: _creamCard,
-        borderRadius: BorderRadius.circular(28),
-        border: Border.all(
-          color: focused ? _gold : _ink.withValues(alpha: 0.14),
-          width: focused ? 1.4 : 1,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: focused
-                ? _gold.withValues(alpha: 0.18)
-                : Colors.black.withValues(alpha: 0.04),
-            blurRadius: focused ? 18 : 8,
-            offset: const Offset(0, 3),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          const SizedBox(width: 20),
-          Icon(Icons.search, size: 20, color: _ink.withValues(alpha: 0.5)),
-          const SizedBox(width: 12),
-          Expanded(
-            child: TextField(
-              controller: _search,
-              focusNode: _focus,
-              textInputAction: TextInputAction.search,
-              onSubmitted: (_) => _onSearchSubmitted(_composedQuery),
-              onChanged: (_) => setState(() {}),
-              style: const TextStyle(
-                fontFamily: _bookFont,
-                fontFamilyFallback: _bookFontFallback,
-                fontSize: 16,
-                color: _ink,
-              ),
-              decoration: InputDecoration(
-                hintText: 'Search by title or composer…',
-                hintStyle: TextStyle(
-                  fontFamily: _bookFont,
-                  fontFamilyFallback: _bookFontFallback,
-                  fontStyle: FontStyle.italic,
-                  fontSize: 15,
-                  color: _ink.withValues(alpha: 0.35),
-                ),
-                border: InputBorder.none,
-                isDense: true,
-              ),
-              cursorColor: _gold,
-            ),
-          ),
-          if (_search.text.isNotEmpty || _hasSearched)
-            GestureDetector(
-              onTap: _resetToBrowse,
-              child: Padding(
-                padding: const EdgeInsets.only(right: 16),
-                child: Icon(
-                  Icons.close,
-                  size: 18,
-                  color: _ink.withValues(alpha: 0.4),
-                ),
-              ),
-            )
-          else
-            const SizedBox(width: 20),
-        ],
-      ),
-    );
-  }
-
   // ── Results area: loading / error / prompt / empty / list, all
   // cross-faded smoothly rather than snapping between states ──────────────
   Widget _resultsArea() {
@@ -481,9 +408,7 @@ class _Music_Library_PageState extends State<Music_Library_Page> {
 
     if (_isLoading) {
       key = const ValueKey('loading');
-      child = const Center(
-        child: CircularProgressIndicator(strokeWidth: 2, color: _gold),
-      );
+      child = const LibrarySkeleton();
     } else if (_errorMessage != null) {
       key = ValueKey('error_${_errorMessage.hashCode}');
       child = Center(
@@ -521,12 +446,13 @@ class _Music_Library_PageState extends State<Music_Library_Page> {
       key = ValueKey('results_${_results.length}_${_results.first.title}');
       child = ListView.separated(
         key: key,
-        padding: const EdgeInsets.only(bottom: 24),
+        physics: AppScroll.physics,
+        padding: const EdgeInsets.only(bottom: Space.xl),
         itemCount: _results.length,
-        separatorBuilder: (_, _) => const SizedBox(height: 10),
+        separatorBuilder: (_, _) => const SizedBox(height: Space.sm),
         itemBuilder: (context, i) {
           final work = _results[i];
-          return _ResultCard(
+          return LibraryResultCard(
             title: work.title,
             composer: work.composer,
             onTap: () => _onWorkTapped(work),
@@ -539,9 +465,9 @@ class _Music_Library_PageState extends State<Music_Library_Page> {
     }
 
     return AnimatedSwitcher(
-      duration: const Duration(milliseconds: 280),
-      switchInCurve: Curves.easeOut,
-      switchOutCurve: Curves.easeIn,
+      duration: Motion.slow,
+      switchInCurve: Motion.enter,
+      switchOutCurve: Motion.exit,
       transitionBuilder: (child, animation) => FadeTransition(
         opacity: animation,
         child: SlideTransition(
@@ -581,9 +507,10 @@ class _Music_Library_PageState extends State<Music_Library_Page> {
 
   Widget _pickList(List<LibraryPick> picks, {bool footer = false}) {
     return ListView.separated(
-      padding: const EdgeInsets.only(bottom: 24),
+      physics: AppScroll.physics,
+      padding: const EdgeInsets.only(bottom: Space.xl),
       itemCount: picks.length + (footer ? 1 : 0),
-      separatorBuilder: (_, _) => const SizedBox(height: 10),
+      separatorBuilder: (_, _) => const SizedBox(height: Space.sm),
       itemBuilder: (context, i) {
         if (i == picks.length) {
           return Padding(
@@ -602,7 +529,7 @@ class _Music_Library_PageState extends State<Music_Library_Page> {
           );
         }
         final pick = picks[i];
-        return _ResultCard(
+        return LibraryResultCard(
           title: pick.title,
           composer: pick.composer,
           onTap: () => _onPickTapped(pick),
@@ -614,252 +541,5 @@ class _Music_Library_PageState extends State<Music_Library_Page> {
 
   void _toggleFavorite(LibraryPick pick) {
     setState(() => LibraryShelfStore.toggleFavorite(pick));
-  }
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// RESULT CARD — a clean pill-shaped row, tap to open.
-// ═══════════════════════════════════════════════════════════════════════════════
-
-class _ResultCard extends StatelessWidget {
-  final String title;
-  final String composer;
-  final VoidCallback onTap;
-  final VoidCallback onFavorite;
-  const _ResultCard({
-    required this.title,
-    required this.composer,
-    required this.onTap,
-    required this.onFavorite,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(20),
-        splashColor: _gold.withValues(alpha: 0.08),
-        highlightColor: _gold.withValues(alpha: 0.05),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          decoration: BoxDecoration(
-            color: _creamCard,
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: _ink.withValues(alpha: 0.10)),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.04),
-                blurRadius: 8,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(
-                  color: _gold.withValues(alpha: 0.14),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(Icons.music_note, size: 18, color: _gold),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontFamily: _bookFont,
-                        fontFamilyFallback: _bookFontFallback,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                        color: _ink,
-                      ),
-                    ),
-                    if (composer.isNotEmpty) ...[
-                      const SizedBox(height: 2),
-                      Text(
-                        composer,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontFamily: _bookFont,
-                          fontFamilyFallback: _bookFontFallback,
-                          fontStyle: FontStyle.italic,
-                          fontSize: 12,
-                          color: _ink.withValues(alpha: 0.5),
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-              const SizedBox(width: 8),
-              GestureDetector(
-                onTap: onFavorite,
-                behavior: HitTestBehavior.opaque,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 4),
-                  child: Icon(
-                    LibraryShelfStore.isFavorite(title)
-                        ? Icons.star_rounded
-                        : Icons.star_border_rounded,
-                    size: 19,
-                    color: LibraryShelfStore.isFavorite(title)
-                        ? _gold
-                        : _ink.withValues(alpha: 0.28),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 4),
-              Icon(Icons.chevron_right, size: 18, color: _gold),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// Close button — top-right corner
-// ═══════════════════════════════════════════════════════════════════════════════
-class _CloseButton extends StatelessWidget {
-  const _CloseButton();
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: () => Navigator.pop(context),
-      child: Container(
-        width: 32,
-        height: 32,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: _creamCard,
-          border: Border.all(color: _ink.withValues(alpha: 0.16)),
-        ),
-        child: Icon(
-          Icons.close_rounded,
-          size: 16,
-          color: _ink.withValues(alpha: 0.6),
-        ),
-      ),
-    );
-  }
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// EDITION PICKER — bottom sheet shown when a tapped work has more than
-// one version (different arrangers/instrumentations/editors).
-// ═══════════════════════════════════════════════════════════════════════════════
-
-class _EditionPicker extends StatelessWidget {
-  final WorkSummary work;
-  final List<MusicSheet> editions;
-  const _EditionPicker({required this.work, required this.editions});
-
-  @override
-  Widget build(BuildContext context) {
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Center(
-              child: Container(
-                width: 36,
-                height: 4,
-                margin: const EdgeInsets.only(bottom: 16),
-                decoration: BoxDecoration(
-                  color: _ink.withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-            ),
-            Text(
-              work.title,
-              style: const TextStyle(
-                fontFamily: _bookFont,
-                fontFamilyFallback: _bookFontFallback,
-                color: _ink,
-                fontSize: 17,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(height: 2),
-            Text(
-              '${editions.length} versions found — choose one',
-              style: TextStyle(
-                fontFamily: _bookFont,
-                fontFamilyFallback: _bookFontFallback,
-                fontStyle: FontStyle.italic,
-                color: _ink.withValues(alpha: 0.5),
-                fontSize: 13,
-              ),
-            ),
-            const SizedBox(height: 14),
-            Flexible(
-              child: ListView.separated(
-                shrinkWrap: true,
-                itemCount: editions.length,
-                separatorBuilder: (_, _) => const SizedBox(height: 8),
-                itemBuilder: (_, i) {
-                  final edition = editions[i];
-                  return GestureDetector(
-                    onTap: () => Navigator.pop(context, edition),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 12,
-                      ),
-                      decoration: BoxDecoration(
-                        color: _ink.withValues(alpha: 0.06),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: _ink.withValues(alpha: 0.18)),
-                      ),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              edition.title,
-                              style: const TextStyle(
-                                fontFamily: _bookFont,
-                                fontFamilyFallback: _bookFontFallback,
-                                color: _ink,
-                                fontSize: 14,
-                                fontWeight: FontWeight.w500,
-                              ),
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Icon(
-                            Icons.chevron_right_rounded,
-                            size: 18,
-                            color: _ink.withValues(alpha: 0.4),
-                          ),
-                        ],
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
   }
 }

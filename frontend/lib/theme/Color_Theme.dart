@@ -47,3 +47,55 @@ class ShelfPalette {
     return cardGradients[index];
   }
 }
+
+/// The warm paper palette used by the score/practice surface and its
+/// controls. These are the exact tones that were previously re-declared as
+/// local `const` blocks inside main.dart's build methods — naming them once
+/// here is what keeps the drawer, the pen panel and the tool buttons from
+/// drifting apart when one of them is edited.
+abstract final class PracticePalette {
+  static const Color ivory = Color(0xFFF7F2E7);
+  static const Color paper = Color(0xFFFFFCF4);
+  static const Color brown = Color(0xFF30271F);
+  static const Color mutedBrown = Color(0xFF75695B);
+  static const Color gold = Color(0xFF9A7A2C);
+  static const Color lightGold = Color(0xFFD8C58D);
+
+  /// Used for the off-pitch verdict and the live-recording state.
+  static const Color alert = Color(0xFFB2564B);
+
+  static const List<Color> penColors = [
+    gold,
+    brown,
+    Color(0xFF5B7188), // muted blue
+    Color(0xFF62765B), // muted green
+    Color(0xFFB1844D), // warm amber
+  ];
+}
+
+/// The dark turntable surface: the navigator, the boot splash, and the
+/// disks themselves. Separate from [PracticePalette] on purpose — the
+/// navigator is deliberately a dark room the lit pages open out of.
+abstract final class TurntablePalette {
+  static const Color background = Color(0xFF1B1B1F);
+  static const Color mat = Color(0xFF232327);
+  static const Color parchment = Color(0xFFEDE6DA);
+
+  static const Color diskPractice = Color(0xFF0B0B0D);
+  static const Color diskSearch = Color(0xFF16121A);
+  static const Color diskShelf = Color(0xFF12140F);
+  static const Color diskQuiz = Color(0xFF1A1016);
+
+  static const Color tonearmMount = Color(0xFF2A2A2E);
+  static const Color tonearmArm = Color(0xFFB9B9BD);
+  static const Color tonearmHead = Color(0xFF1E1E22);
+}
+
+/// The recorder button's own neutrals, which sit on top of the score paper
+/// rather than in either palette above.
+abstract final class RecorderPalette {
+  static const Color labelIdle = Color(0xFF77736B);
+  static const Color labelActive = Color(0xFF4D4A45);
+  static const Color haloIdle = Color(0xFF9A8F7E);
+  static const Color icon = Color(0xFF5F5A52);
+}
