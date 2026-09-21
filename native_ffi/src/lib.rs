@@ -65,4 +65,87 @@ mod api {
     pub fn notes_stream(s: StreamSink<Vec<Notes>>) {
         *NOTES_SINK.write().unwrap() = Some(s);
     }
+
+    /// TEST ONLY. Pushes an already-detected phrase straight into the
+    /// notes_stream sink, so the Dart side receives it exactly as if the
+    /// microphone and pitch detection had produced it.
+    ///
+    /// This exists so the Rust -> Dart -> Python -> Dart round trip can be
+    /// exercised without working audio capture. It deliberately does not
+    /// touch `listen_audio`, `stop_audio` or any part of the real capture
+    /// path -- it only borrows the same sink those would ultimately feed.
+    ///
+    /// `json_data` is the sample payload used by the Python backend (see
+    /// backend/feedback_generator/sample_data/phrase_imperfect.json); the
+    /// `user_notes` array is what gets injected. Fields the real `Notes`
+    /// struct carries but that sample omits (`is_end` and the optional
+    /// expressive ones) default rather than failing to parse.
+    ///
+    /// Returns a status string instead of panicking, because an unwrap here
+    /// would abort across the FFI boundary and take the app down.
+    pub fn inject_test_phrase(json_data: String) -> String {
+        use serde::Deserialize;
+
+        #[derive(Deserialize)]
+        struct TestNote {
+            note_id: u64,
+            pitch_hz: f64,
+            #[serde(default)]
+            start_time_ms: Option<f32>,
+            #[serde(default)]
+            end_time_ms: Option<f32>,
+            #[serde(default)]
+            duration_ms: Option<f32>,
+            #[serde(default)]
+            has_accent: Option<bool>,
+        }
+
+        #[derive(Deserialize)]
+        struct TestPayload {
+            user_notes: Vec<TestNote>,
+        }
+
+        let payload: TestPayload = match serde_json::from_str(&json_data) {
+            Ok(parsed) => parsed,
+            Err(e) => return format!("inject_test_phrase: bad JSON -- {e}"),
+        };
+
+        if payload.user_notes.is_empty() {
+            return "inject_test_phrase: user_notes was empty".to_string();
+        }
+
+        let last = payload.user_notes.len() - 1;
+        let notes: Vec<Notes> = payload
+            .user_notes
+            .into_iter()
+            .enumerate()
+            .map(|(i, n)| Notes {
+                note_id: n.note_id,
+                pitch_hz: n.pitch_hz,
+                start_time_ms: n.start_time_ms,
+                end_time_ms: n.end_time_ms,
+                duration_ms: n.duration_ms,
+                // The real detector marks the closing note of a phrase, so
+                // the injected phrase terminates the same way.
+                is_end: i == last,
+                vibrato_depth: None,
+                pedal_action: None,
+                has_accent: n.has_accent,
+                markings: None,
+            })
+            .collect();
+
+        let count = notes.len();
+        match NOTES_SINK.read() {
+            Ok(guard) => match guard.as_ref() {
+                Some(sink) => {
+                    let _ = sink.add(notes);
+                    format!("inject_test_phrase: sent {count} note(s)")
+                }
+                None => "inject_test_phrase: no listener -- call notesStream() first"
+                    .to_string(),
+            },
+            Err(_) => "inject_test_phrase: notes sink lock poisoned".to_string(),
+        }
+    }
 }

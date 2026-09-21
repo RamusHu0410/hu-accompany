@@ -1,112 +1,46 @@
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
-import 'widgets/Draggable_Recorder_Button.dart';
-import 'widgets/Drawing_Overlay.dart';
-import 'screens/Music_Library_Page.dart';
-import 'models/Score_Page_Controller.dart';
-import 'renderers/Score_Pages_View.dart';
-import 'dart:ffi' as ffi;
+import 'package:hu_accomponist/features/practice/Draggable_Recorder_Button.dart';
+import 'package:hu_accomponist/features/practice/Drawing_Overlay.dart';
+import 'package:hu_accomponist/features/search/Music_Library_Page.dart';
+import 'package:hu_accomponist/features/practice/Score_Page_Controller.dart';
+import 'package:hu_accomponist/features/practice/Score_Pages_View.dart';
 import 'dart:typed_data';
-import 'screens/Vinyl_Loading_Screen.dart';
-import 'screens/Record_Navigator_Page.dart';
-import 'package:hu_accomponist/src/rust/frb_generated.dart';
+import 'package:hu_accomponist/features/home/Vinyl_Loading_Screen.dart';
+import 'package:hu_accomponist/features/home/Record_Navigator_Page.dart';
 import 'package:hu_accomponist/src/rust/models.dart';
-import 'services/Phrase_Send2_Server.dart';
-import 'utils/Pull_back_Phrase.dart';
-import 'models/Phrase_Feedback.dart';
-import 'theme/Color_Theme.dart';
-import 'theme/Design_Tokens.dart';
-import 'widgets/Practice_Tool_Buttons.dart';
-import 'widgets/Practice_Pen_Panel.dart';
-import 'widgets/Practice_Settings_Drawer.dart';
+import 'package:hu_accomponist/integrations/feedback/Phrase_send2_server.dart';
+import 'package:hu_accomponist/integrations/feedback/Pull_back_phrase.dart';
+import 'package:hu_accomponist/features/practice/Phrase_Feedback.dart';
+import 'package:hu_accomponist/shared/theme/Color_Theme.dart';
+import 'package:hu_accomponist/shared/theme/Design_Tokens.dart';
+import 'package:hu_accomponist/features/practice/Practice_Tool_Buttons.dart';
+import 'package:hu_accomponist/features/practice/Practice_Pen_Panel.dart';
+import 'package:hu_accomponist/features/practice/Practice_Settings_Drawer.dart';
+import 'package:hu_accomponist/features/practice/Practice_Companion.dart';
+import 'package:hu_accomponist/integrations/audio/Test_Phrase_Injector.dart';
+import 'package:hu_accomponist/integrations/audio/Rust_Bridge.dart';
+
 
 // Re-exported so anything that already reached for PhraseFeedback through
 // main.dart keeps compiling after the enum moved to its own file.
-export 'models/Phrase_Feedback.dart';
+export 'package:hu_accomponist/features/practice/Phrase_Feedback.dart';
 
-
-
-
-typedef StartRecordingFunc = ffi.Void Function();
-typedef StartRecordingFuncDart = void Function();
-typedef StopRecordingFunc = ffi.Void Function();
-typedef StopRecordingFuncDart = void Function();
-
-
-// ─── Safe no-op stubs used when native symbols are unavailable ───────────────
-void _stubStart() =>
-    debugPrint('NativeBridge: start_recording stub (symbols not linked yet)');
-void _stubStop() =>
-    debugPrint('NativeBridge: stop_recording stub (symbols not linked yet)');
-
-class NativeBridge {
-  // Nullable so we know whether real lookup succeeded
-  ffi.DynamicLibrary? _nativeLib;
-
-  // Always callable — fall back to stubs if lookup failed
-  StartRecordingFuncDart _startRecording = _stubStart;
-  StopRecordingFuncDart _stopRecording = _stubStop;
-
-  bool get isNativeAvailable => _nativeLib != null;
-
-  NativeBridge() {
-    // All lookup work is inside try/catch so a missing symbol
-    // can NEVER reach main() and block the UI from rendering.
-    try {
-      final lib = ffi.DynamicLibrary.executable();
-
-      _startRecording = lib
-          .lookup<ffi.NativeFunction<StartRecordingFunc>>('start_recording')
-          .asFunction();
-
-      _stopRecording = lib
-          .lookup<ffi.NativeFunction<StopRecordingFunc>>('stop_recording')
-          .asFunction();
-
-      _nativeLib = lib; // only set AFTER both lookups succeed
-      debugPrint('NativeBridge: native symbols linked successfully.');
-    } on ArgumentError catch (e) {
-      // Symbol not found — app keeps running with stubs
-      debugPrint('NativeBridge: symbol lookup failed — $e');
-      debugPrint(
-        'NativeBridge: running with no-op stubs. '
-        'Make sure start_recording / stop_recording are compiled '
-        'into the iOS Runner target with external "C" linkage.',
-      );
-    } catch (e) {
-      debugPrint('NativeBridge: unexpected init error — $e');
-    }
-  }
-
-  // Public API — callers never touch private fields directly
-  void startRecording() => _startRecording();
-  void stopRecording() => _stopRecording();
-}
-
-// Single shared instance — safe because constructor never throws now
-final NativeBridge _nativeBridge = NativeBridge();
-// NOTE: AudioNative (raw dart:ffi start_recording/stop_recording) is no
-// longer wired in here — recording now goes through Draggable_Recorder_Button,
-// which owns the Rust-bridge notesStream() pipeline directly. AudioNative
-// and NativeBridge above are both now unused by this flow; left in place
-// in case you still want them, but worth deleting if not.
+// Audio capture is driven through integrations/audio/Audio_Native.dart,
+// which owns the dart:ffi lookup of start_recording/stop_recording. Those
+// are C symbols rather than flutter_rust_bridge calls because native_ffi
+// marks listen_audio/stop_audio as `#[frb(ignore)]`; src/rust/api.dart
+// therefore exposes only initSession/getUserData/notesStream.
 
 Future<void> main() async {
   // Attempt to load the native Rust library, but never let a failure here
-  // block the UI from rendering — same reasoning as NativeBridge above.
+  // block the UI from rendering.
   // Right now this is expected to potentially fail while the Xcode/cargokit
   // integration for native_ffi is still being fixed; once that's sorted,
   // this try/catch can stay as a permanent safety net regardless.
-  try {
-    await RustLib.init();
-    debugPrint('RustLib: initialized successfully.');
-  } catch (e) {
-    debugPrint('RustLib: init failed — $e');
-    debugPrint(
-      'RustLib: continuing without Rust bindings. '
-      'Any feature that calls into native_ffi will be unavailable '
-      'until the native library is rebuilt/relinked.',
-    );
-  }
+  // Loading strategy differs per platform (static on iOS, dynamic
+  // elsewhere), and failure must never block the UI — see Rust_Bridge.dart.
+  await RustBridge.ensureInitialized();
 
   runApp(const HuAccumponistApp());
 }
@@ -161,6 +95,11 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
   bool _isRecording = false;
 
   PhraseFeedback _feedback = PhraseFeedback.none;
+
+  /// The most recent analyzed phrase, handed to the companion for display.
+  /// Purely presentational -- [_feedback] still drives the recorder halo,
+  /// exactly as before.
+  PhraseReport? _latestReport;
   final DrawingController _drawing = DrawingController();
 
   /// Call this from the Flutter-Rust-Bridge performance-result callback.
@@ -186,6 +125,7 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
       // A fresh recording gets a fresh session — the backend assigns the
       // real session id on phrase 1's response (see below).
       _feedbackSessionId = null;
+      setState(() => _latestReport = null);
       setPhraseFeedback(PhraseFeedback.none);
     }
   }
@@ -196,51 +136,90 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
   // phrase 1 comes back.
   String? _feedbackSessionId;
 
+  /// Tempo and metre assumed for bar numbering. Nothing in the app knows
+  /// the real values for a loaded score; named here so the assumption is
+  /// visible rather than sitting as two literals inside the request.
+  static const double _assumedBpm = 96;
+  static const String _assumedTimeSignature = '4/4';
+
+  /// Overridden only by the debug sample injector, which knows the real
+  /// tempo and metre for its fixture.
+  double? _sampleBpm;
+  String? _sampleTimeSignature;
+
+  /// Ground-truth notes for the loaded piece, in the backend's
+  /// expected_notes shape. Empty until something populates it: the OMR
+  /// endpoints that would produce it are never called from this app.
+  List<Map<String, dynamic>> _expectedNotes = const [];
+
   /// Fired by Draggable_Recorder_Button once per phrase, as soon as Rust
   /// finishes analyzing it. Sends it to /api/feedback/phrase, which
   /// judges and returns the phrase's report in the same response, then
   /// reflects the result in the companion's mood.
   ///
-  /// TODO — three inputs the real endpoint requires that nothing in this
-  /// file currently tracks; wire these in from wherever they actually
-  /// live once that's decided:
-  ///   - `piece`: title/composer/composed_date for the loaded score —
-  ///     probably known back when the piece was picked from the library.
-  ///   - `bpm` / `timeSignature`: also piece-level, likely from the same
-  ///     place, or from the OMR output below.
-  ///   - `expectedNotes`: the ground-truth notes for this phrase's bars —
-  ///     presumably the notes_json your OMR pipeline
-  ///     (/api/score/process or /api/score/process-omr) already produced
-  ///     for this piece, sliced to the bars this phrase covers.
+  /// `piece` now carries the real title and composer captured when the
+  /// score was picked from the library (see [_piece]).
   ///
-  /// TODO: once you're happy with the shape, this is also the place to
-  /// surface PhraseReport.feedback in the UI (e.g. highlighting the wrong
-  /// note on the score via each finding's `box`) rather than only driving
-  /// mood.
+  /// Two inputs still have no source anywhere in the app, and are sent as
+  /// documented defaults rather than invented values:
+  ///
+  ///   - `bpm` / `timeSignature`: nothing tracks the loaded score's tempo
+  ///     or metre. /api/score/process takes bpm as an *input*, so it
+  ///     cannot supply one either. [_assumedBpm] and [_assumedTimeSignature]
+  ///     name that assumption instead of burying two literals in the call;
+  ///     the backend uses them only to number bars, so a wrong tempo
+  ///     mislabels bar numbers but does not invalidate pitch scoring.
+  ///
+  ///   - `expectedNotes`: the app never calls /api/score/process or
+  ///     /api/score/process-omr, so no OMR note data exists on the device
+  ///     for any piece. Sent empty. The backend requires a non-empty
+  ///     `expected_notes` to judge against, so until that pipeline is
+  ///     called, phrases will come back rejected rather than scored — see
+  ///     the diagnostics line below, which says so explicitly in the
+  ///     terminal instead of failing silently.
   Future<void> _onPhraseReceived(int phraseNumber, List<Notes> notes) async {
+    if (_expectedNotes.isEmpty) {
+      debugPrint(
+        '[Diagnostics] phrase $phraseNumber: no expected_notes for '
+        '"${_piece.title}" — the OMR pipeline (/api/score/process) is never '
+        'called by this app, so the backend has nothing to judge against '
+        'and will reject this phrase.',
+      );
+    }
+
     final report = await PhraseUploadService.sendPhrase(
       sessionId: _feedbackSessionId,
       phraseNumber: phraseNumber,
-      // PLACEHOLDER — see TODO above.
-      bpm: 96,
-      timeSignature: '4/4',
-      piece: const PieceInfo(
-        title: 'TODO',
-        composer: 'TODO',
-        composedDate: 'TODO',
-      ),
-      expectedNotes: const [],
+      bpm: _sampleBpm ?? _assumedBpm,
+      timeSignature: _sampleTimeSignature ?? _assumedTimeSignature,
+      piece: _piece,
+      expectedNotes: _expectedNotes,
       userNotes: notes,
     );
 
     if (report == null || !mounted) return;
 
     _feedbackSessionId = report.sessionId;
+    // Surfaces the report the call already returns. The request itself is
+    // untouched -- this only consumes the response.
+    setState(() => _latestReport = report);
 
-    // ASSUMPTION: overall >= 80 reads as "enjoying", otherwise "mad" —
-    // adjust once you have a feel for real score distributions.
-    applyPerformanceResult(playedCorrectly: report.scores.overall >= 80);
+    setPhraseFeedback(PhraseFeedback.forScore(report.scores.overall));
   }
+
+  /// Identity of the loaded score, captured when it is picked from the
+  /// library and sent with every phrase.
+  ///
+  /// `composedDate` is empty because nothing in the app knows it: the
+  /// library's MusicSheet/WorkSummary carry title, composer and IMSLP url
+  /// only. The backend treats `piece` as optional metadata and stores it
+  /// as-is, so an empty date is honest; a fabricated one would be written
+  /// into every stored phrase file.
+  PieceInfo _piece = const PieceInfo(
+    title: '',
+    composer: '',
+    composedDate: '',
+  );
 
   // Null until a sheet has been picked from the library.
   Uint8List? _pdfBytes;
@@ -251,8 +230,16 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
   // torn down and its cache/prefetch thrown away on every setState.
   ScorePageController? _pageController;
 
-  // Swaps in a new score, or clears it if [pdfBytes] is null.
-  void _setScore(Uint8List? pdfBytes) {
+  // Swaps in a new score, or clears it if [selected] is null.
+  void _setScore(SelectedSheet? selected) {
+    final pdfBytes = selected?.pdfBytes;
+    _piece = selected == null
+        ? const PieceInfo(title: '', composer: '', composedDate: '')
+        : PieceInfo(
+            title: selected.sheet.title,
+            composer: selected.composer,
+            composedDate: '',
+          );
     final previousController = _pageController;
     _pdfBytes = pdfBytes;
     _pageController = pdfBytes != null ? ScorePageController(pdfBytes) : null;
@@ -276,13 +263,44 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
     // a pdfBytes field now instead of musicXml, and whatever populates it
     // needs to call ApiService.fetchScorePdf() instead of the old
     // fetchMusicSheet().
-    _setScore(widget.selected?.pdfBytes);
+    _setScore(widget.selected);
   }
 
   // Pen settings
   bool _showPenSettings = false;
   Color _penColor = PracticePalette.gold;
   double _penSize = 3.0;
+
+  /// Debug only. Pushes the canned sample phrase through Rust so the full
+  /// Rust -> Dart -> Python -> Dart chain can be exercised without working
+  /// audio capture. Rust's own status string is surfaced, because the most
+  /// common outcome is "no listener" — nothing has subscribed to
+  /// notesStream() until recording has been started at least once.
+  Future<void> _injectSamplePhrase() async {
+    // Stand in for the missing OMR pipeline: without ground truth the
+    // backend has nothing to judge against and rejects the phrase, so the
+    // fixture's own expected_notes/piece/timing are loaded into the session
+    // first. This is exactly the state the app would be in if
+    // /api/score/process were ever called for the loaded score.
+    final sample = await TestPhraseInjector.loadSample();
+    if (sample != null && mounted) {
+      setState(() {
+        _expectedNotes = sample.expectedNotes;
+        _piece = sample.piece;
+        _sampleBpm = sample.bpm;
+        _sampleTimeSignature = sample.timeSignature;
+      });
+    }
+
+    final status = await TestPhraseInjector.injectSample();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(status),
+        duration: const Duration(seconds: 3),
+      ),
+    );
+  }
 
   void _goToNavPage() async {
     final selected = await Navigator.of(context).push<SelectedSheet>(
@@ -306,7 +324,7 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
 
     if (selected != null) {
       setState(() {
-        _setScore(selected.pdfBytes);
+        _setScore(selected);
       });
     }
   }
@@ -560,6 +578,32 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
               onToggle: _onRecordingChanged,
               onPhrase: _onPhraseReceived,
               accent: PracticeSettingsDrawer.feedbackColor(_feedback),
+            ),
+
+            // ─────────────────────────────────────────────
+            // DEBUG: inject the sample phrase through Rust
+            // ─────────────────────────────────────────────
+            if (kDebugMode)
+              Positioned(
+                left: Space.lg,
+                bottom: 76,
+                child: PracticeBottomButton(
+                  icon: Icons.science_outlined,
+                  color: PracticePalette.mutedBrown,
+                  onTap: _injectSamplePhrase,
+                ),
+              ),
+
+            // ─────────────────────────────────────────────
+            // PHRASE FEEDBACK + COMPANION
+            // ─────────────────────────────────────────────
+            Positioned(
+              right: Space.lg,
+              bottom: 76,
+              child: PracticeCompanion(
+                report: _latestReport,
+                isRecording: _isRecording,
+              ),
             ),
 
             // ─────────────────────────────────────────────

@@ -1,0 +1,27 @@
+{
+  "phrase": 1,
+  "timing": {"bpm": 96, "time_signature": "4/4"},
+  "piece": {"title": "C Major Scale Study", "composer": "Anon.", "composed_date": "n.d."},
+
+  "expected_notes": [
+    {"note_id": 1, "pitch_hz": 261.63, "start_time_ms": 0,    "end_time_ms": 625,  "duration_ms": 625},
+    {"note_id": 2, "pitch_hz": 293.66, "start_time_ms": 625,  "end_time_ms": 1250, "duration_ms": 625},
+    {"note_id": 3, "pitch_hz": 329.63, "start_time_ms": 1250, "end_time_ms": 1875, "duration_ms": 625},
+    {"note_id": 4, "pitch_hz": 349.23, "start_time_ms": 1875, "end_time_ms": 2500, "duration_ms": 625},
+    {"note_id": 5, "pitch_hz": 392.00, "start_time_ms": 2500, "end_time_ms": 3125, "duration_ms": 625},
+    {"note_id": 6, "pitch_hz": 440.00, "start_time_ms": 3125, "end_time_ms": 3750, "duration_ms": 625},
+    {"note_id": 7, "pitch_hz": 493.88, "start_time_ms": 3750, "end_time_ms": 4375, "duration_ms": 625},
+    {"note_id": 8, "pitch_hz": 523.25, "start_time_ms": 4375, "end_time_ms": 5000, "duration_ms": 625}
+  ],
+
+  "user_notes": [
+    {"note_id": 1,  "pitch_hz": 261.63, "start_time_ms": 0,    "end_time_ms": 625,  "duration_ms": 625},
+    {"note_id": 2,  "pitch_hz": 311.13, "start_time_ms": 625,  "end_time_ms": 1250, "duration_ms": 625},
+    {"note_id": 3,  "pitch_hz": 329.63, "start_time_ms": 1430, "end_time_ms": 2055, "duration_ms": 625},
+    {"note_id": 4,  "pitch_hz": 349.23, "start_time_ms": 1875, "end_time_ms": 2195, "duration_ms": 320},
+    {"note_id": 5,  "pitch_hz": 392.00, "start_time_ms": 2500, "end_time_ms": 3125, "duration_ms": 625},
+    {"note_id": 99, "pitch_hz": 369.99, "start_time_ms": 3400, "end_time_ms": 3700, "duration_ms": 300},
+    {"note_id": 7,  "pitch_hz": 493.88, "start_time_ms": 3750, "end_time_ms": 4375, "duration_ms": 625},
+    {"note_id": 8,  "pitch_hz": 523.25, "start_time_ms": 4375, "end_time_ms": 5000, "duration_ms": 625}
+  ]
+}

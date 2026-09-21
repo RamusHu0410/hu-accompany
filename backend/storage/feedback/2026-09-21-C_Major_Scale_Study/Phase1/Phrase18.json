@@ -1,0 +1,123 @@
+{
+  "piece": {
+    "title": "C Major Scale Study",
+    "composer": "Anon.",
+    "composed_date": "n.d."
+  },
+  "recorded_at": "2026-09-21T16:47:26.404830+00:00",
+  "phrase": 18,
+  "bpm": 96.0,
+  "time_signature": "4/4",
+  "bars": [
+    1,
+    2
+  ],
+  "scores": {
+    "overall": 87,
+    "pitch": 82,
+    "rhythm": 84,
+    "tempo": 100,
+    "dynamics": null,
+    "articulation": null,
+    "notes": null,
+    "pedaling": null
+  },
+  "feedback": [
+    {
+      "bars": 1,
+      "category": "pitch",
+      "severity": "major",
+      "confidence": 1.0,
+      "message": "Wrong note \u2014 you played D#4 instead of D4.",
+      "details": {
+        "note_id": 2,
+        "cents": 100.0,
+        "expected_hz": 293.66,
+        "user_hz": 311.13,
+        "expected_note": "D4",
+        "user_note": "D#4",
+        "suggestion": "Practice this transition slowly and focus on the correct note."
+      },
+      "box": null
+    },
+    {
+      "bars": 1,
+      "category": "rhythm",
+      "severity": "major",
+      "confidence": 0.73,
+      "message": "This note came in late, disrupting the rhythm.",
+      "details": {
+        "note_id": 3,
+        "issue": "onset",
+        "diff_ms": 180.0,
+        "direction": "late",
+        "suggestion": "Practice this passage with a metronome, focusing on landing the note exactly on the beat."
+      },
+      "box": null
+    },
+    {
+      "bars": 1,
+      "category": "rhythm",
+      "severity": "major",
+      "confidence": 0.81,
+      "message": "This note was cut short compared to what's written.",
+      "details": {
+        "note_id": 4,
+        "issue": "duration",
+        "diff_ms": -305.0,
+        "pct": 0.488,
+        "direction": "too_short",
+        "suggestion": "Slow down and count out this note's full written duration before returning to full tempo."
+      },
+      "box": null
+    },
+    {
+      "bars": 2,
+      "category": "pitch",
+      "severity": "major",
+      "confidence": 1.0,
+      "message": "Wrong note \u2014 you played F#4 instead of A4.",
+      "details": {
+        "note_id": 6,
+        "cents": -300.0,
+        "expected_hz": 440.0,
+        "user_hz": 369.99,
+        "expected_note": "A4",
+        "user_note": "F#4",
+        "suggestion": "Practice this transition slowly and focus on the correct note."
+      },
+      "box": null
+    },
+    {
+      "bars": 2,
+      "category": "rhythm",
+      "severity": "major",
+      "confidence": 0.93,
+      "message": "This note came in late, disrupting the rhythm.",
+      "details": {
+        "note_id": 6,
+        "issue": "onset",
+        "diff_ms": 275.0,
+        "direction": "late",
+        "suggestion": "Practice this passage with a metronome, focusing on landing the note exactly on the beat."
+      },
+      "box": null
+    },
+    {
+      "bars": 2,
+      "category": "rhythm",
+      "severity": "major",
+      "confidence": 0.84,
+      "message": "This note was cut short compared to what's written.",
+      "details": {
+        "note_id": 6,
+        "issue": "duration",
+        "diff_ms": -325.0,
+        "pct": 0.52,
+        "direction": "too_short",
+        "suggestion": "Slow down and count out this note's full written duration before returning to full tempo."
+      },
+      "box": null
+    }
+  ]
+}
