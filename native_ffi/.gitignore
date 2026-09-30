@@ -1,1 +1,11 @@
 /target
+
+# Real-audio fixtures: downloaded data and private room recordings stay local
+/fixtures/real/guitarset/
+/fixtures/real/silent_room_*.wav
+/take.wav
+/fixtures/real/guitarset_heldout/
+/fixtures/piano/rendered/
+/fixtures/piano/soundfont/
+/fixtures/real/maestro_heldout/
+/fixtures/real/.cache/

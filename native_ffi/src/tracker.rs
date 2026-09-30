@@ -1,0 +1,522 @@
+//! Per-note state machines: turn frame-by-frame "is it sounding?" answers into
+//! one record per played note (start, end, duration, measured pitch).
+//!
+//! Each expected note has its own state, so chord notes and overlapping
+//! (let-ring) notes never interfere with each other.
+
+use crate::dsp::{cents, Detection};
+use crate::models::{NoteState, Notes};
+use std::collections::HashMap;
+
+/// Consecutive detected frames before a note counts as started. Filters
+/// clicks and speech that briefly lines up with a note (3 hops ≈ 17 ms).
+pub const ON_FRAMES: u32 = 3;
+/// Consecutive missing frames before a note counts as stopped. Bridges short
+/// dropouts (reverb, vibrato, bow changes) so one note isn't split in two.
+pub const OFF_FRAMES: u32 = 8;
+/// Hysteresis, like a Schmitt trigger: a note must beat its rival semitone
+/// neighbours by a START threshold to begin, but only by SUSTAIN_DOMINANCE to
+/// keep sounding. The attack of a different note (broadband pluck) briefly
+/// flatters wrong neighbours, so starting is strict; a real note fading
+/// inside a chord would flicker on and off, so sustaining is lenient.
+///
+/// Starting is stricter for a lone note than inside a chord: chord notes'
+/// harmonics overlap and inflate their rivals, so a correct chord note
+/// measures lower dominance than the same note played alone.
+/// Tuned on GuitarSet (tests/real_audio.rs).
+pub const START_DOMINANCE_SINGLE: f32 = 2.5;
+pub const START_DOMINANCE_CHORD: f32 = 1.7;
+pub const SUSTAIN_DOMINANCE: f32 = 1.5;
+/// A note is listened for from this long before its score start until this
+/// long after its score end (players are never perfectly on time).
+pub const TIMING_MARGIN_MS: f32 = 85.0;
+/// Repeated notes of the same pitch share one harmonic series, so the
+/// analyser can't tell a ringing note from its repeat. When a note's pitch is
+/// already sounding as we start listening for it, and the score has an earlier
+/// note of that pitch, the sound is that earlier note's tail. The repeat only
+/// starts on a new attack: its level must rise this far above the quietest
+/// level heard since listening began (1.5 ≈ +3.5 dB). Tuned on GuitarSet:
+/// 1.2-2.0 barely differ for chords; below 1.5 more wrong solo notes pass.
+pub const ATTACK_RATIO: f32 = 1.5;
+
+/// Time span covered by one analysis frame.
+///
+/// A long window hears a note as soon as it enters the window's END and until
+/// it leaves the window's START. So onsets are stamped with `end_ms` of the
+/// first frame that hears the note, and offsets with `start_ms` of the first
+/// frame that no longer does. Stamping both with the centre would stretch
+/// every note by about half a window at each end.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Frame {
+    pub start_ms: f32,
+    pub end_ms: f32,
+}
+
+impl Frame {
+    /// Zero-width frame (tests, or when window length doesn't matter).
+    pub fn at(ms: f32) -> Self {
+        Self { start_ms: ms, end_ms: ms }
+    }
+    pub fn centre_ms(&self) -> f32 {
+        (self.start_ms + self.end_ms) / 2.0
+    }
+}
+
+#[derive(Default)]
+struct Track {
+    state: Option<NoteState>, // None = Idle; Some(Playing) once confirmed
+    present_run: u32,
+    absent_run: u32,
+    first_present: Frame,
+    first_absent: Frame,
+    pitches: Vec<f64>,
+    /// Set on the first observation: the pitch was already ringing from an
+    /// earlier same-pitch note, so only a re-attack may start this one.
+    needs_attack: bool,
+    /// Quietest level since listening began (0 once the pitch fell silent).
+    min_level: f32,
+}
+
+pub struct NoteTracker {
+    notes: Vec<Notes>,
+    /// Per note: stop listening for it (if not yet started) once the next
+    /// same-pitch note's window opens, so one sound can't start both.
+    handover_ms: Vec<f32>,
+    /// Per note: the previous note of the same pitch, if any.
+    predecessor: Vec<Option<usize>>,
+    tracks: HashMap<usize, Track>,
+}
+
+impl NoteTracker {
+    /// Notes without a score start time are ignored: we can't know when to listen.
+    pub fn new(notes: &[Notes]) -> Self {
+        let mut notes: Vec<Notes> =
+            notes.iter().filter(|n| n.start_time_ms.is_some()).cloned().collect();
+        notes.sort_by(|a, b| a.start_time_ms.unwrap().total_cmp(&b.start_time_ms.unwrap()));
+
+        let successor: Vec<Option<usize>> = (0..notes.len())
+            .map(|i| (i + 1..notes.len()).find(|&j| cents(notes[j].pitch_hz, notes[i].pitch_hz).abs() < 50.0))
+            .collect();
+        let handover_ms = successor
+            .iter()
+            .map(|s| s.map_or(f32::INFINITY, |j| notes[j].start_time_ms.unwrap() - TIMING_MARGIN_MS))
+            .collect();
+        let mut predecessor = vec![None; notes.len()];
+        for (i, s) in successor.iter().enumerate() {
+            if let Some(j) = *s {
+                predecessor[j] = Some(i);
+            }
+        }
+        Self { notes, handover_ms, predecessor, tracks: HashMap::new() }
+    }
+
+    fn window(&self, i: usize) -> (f32, f32) {
+        let n = &self.notes[i];
+        let start = n.start_time_ms.unwrap();
+        // No score end: listen for one margin's worth after the start.
+        let end = n.end_time_ms.unwrap_or(start);
+        (start - TIMING_MARGIN_MS, end + TIMING_MARGIN_MS)
+    }
+
+    fn is_playing(&self, i: usize) -> bool {
+        matches!(self.tracks.get(&i).and_then(|t| t.state.as_ref()), Some(NoteState::Playing { .. }))
+    }
+
+    /// Earlier notes of the same pitch as `i`, most recent first.
+    fn same_pitch_before(&self, i: usize) -> impl Iterator<Item = usize> + '_ {
+        std::iter::successors(self.predecessor[i], |&p| self.predecessor[p])
+    }
+
+    /// Notes to test at `now_ms`: inside their score window (and not yet handed
+    /// over to a repeat of the same pitch), or still sounding.
+    pub fn candidates(&self, now_ms: f32) -> Vec<usize> {
+        (0..self.notes.len())
+            .filter(|&i| {
+                let (open, close) = self.window(i);
+                let listening = open <= now_ms && now_ms <= close && now_ms < self.handover_ms[i];
+                listening || self.is_playing(i)
+            })
+            .collect()
+    }
+
+    pub fn pitch_hz(&self, i: usize) -> f64 {
+        self.notes[i].pitch_hz
+    }
+
+    /// Feeds one frame. `observations` = (candidate index, the analyser's
+    /// evidence for that note, if any). Returns notes that finished on this frame.
+    pub fn update(&mut self, frame: Frame, observations: &[(usize, Option<Detection>)]) -> Vec<Notes> {
+        let now_ms = frame.centre_ms();
+        // How many notes the score says are sounding right now (no margin).
+        let polyphony = observations
+            .iter()
+            .filter(|&&(i, _)| {
+                let n = &self.notes[i];
+                n.start_time_ms.is_some_and(|s| s <= now_ms)
+                    && n.end_time_ms.is_some_and(|e| now_ms <= e)
+            })
+            .count();
+        let start_needed = if polyphony >= 2 { START_DOMINANCE_CHORD } else { START_DOMINANCE_SINGLE };
+        let mut finished = Vec::new();
+        let mut started = Vec::new();
+        for &(i, evidence) in observations {
+            let first_sight = !self.tracks.contains_key(&i);
+            let inherits_sound = first_sight
+                && self.predecessor[i].is_some()
+                && (evidence.is_some_and(|d| d.dominance >= SUSTAIN_DOMINANCE)
+                    || self.same_pitch_before(i).any(|p| self.is_playing(p)));
+            let track = self.tracks.entry(i).or_default();
+            if first_sight {
+                track.needs_attack = inherits_sound;
+                track.min_level = f32::INFINITY;
+            }
+            let needed = if track.state.is_some() { SUSTAIN_DOMINANCE } else { start_needed };
+            let mut heard = evidence.filter(|d| d.dominance >= needed).map(|d| d.pitch_hz);
+            if track.state.is_none() && track.needs_attack {
+                let level = evidence.map_or(0.0, |d| d.attack_level);
+                track.min_level = track.min_level.min(level);
+                if level < ATTACK_RATIO * track.min_level {
+                    heard = None; // still the earlier note's tail
+                }
+            }
+            match heard {
+                Some(hz) => {
+                    if track.present_run == 0 && track.state.is_none() {
+                        track.first_present = frame;
+                        track.pitches.clear();
+                    }
+                    track.present_run += 1;
+                    track.absent_run = 0;
+                    track.pitches.push(hz);
+                    if track.state.is_none() && track.present_run >= ON_FRAMES {
+                        track.state = Some(NoteState::Playing { start_ms: track.first_present.end_ms });
+                        started.push((i, track.first_present.end_ms));
+                    }
+                }
+                None => {
+                    if track.state.is_none() {
+                        track.present_run = 0; // blip never confirmed: forget it
+                        continue;
+                    }
+                    if track.absent_run == 0 {
+                        track.first_absent = frame;
+                    }
+                    track.absent_run += 1;
+                    if track.absent_run >= OFF_FRAMES {
+                        let at = track.first_absent;
+                        finished.extend(self.close(i, at));
+                    }
+                }
+            }
+        }
+        // A re-attack ends the earlier same-pitch note(s) still ringing: the
+        // string was struck again, at a moment we measured.
+        for (i, start_ms) in started {
+            let ringing: Vec<usize> = self.same_pitch_before(i).filter(|&p| self.is_playing(p)).collect();
+            for p in ringing {
+                finished.extend(self.close(p, Frame::at(start_ms)));
+            }
+        }
+        finished
+    }
+
+    /// End of stream (recording stopped): close every note still sounding.
+    pub fn finish(&mut self, now_ms: f32) -> Vec<Notes> {
+        let mut playing: Vec<usize> = (0..self.notes.len()).filter(|&i| self.is_playing(i)).collect();
+        playing.sort();
+        playing.into_iter().filter_map(|i| self.close(i, Frame::at(now_ms))).collect()
+    }
+
+    /// `ended` = first frame that no longer heard the note.
+    fn close(&mut self, i: usize, ended: Frame) -> Option<Notes> {
+        let track = self.tracks.remove(&i)?;
+        let Some(NoteState::Playing { start_ms }) = track.state else {
+            return None;
+        };
+        let mut end_ms = ended.start_ms;
+        let mut start_ms = start_ms;
+        if end_ms <= start_ms {
+            // Sounds shorter than the window (or only heard once they filled
+            // much of it) make the edge stamps cross. For those the frame
+            // centres are the better estimate.
+            start_ms = track.first_present.centre_ms();
+            end_ms = ended.centre_ms();
+            if end_ms <= start_ms {
+                return None;
+            }
+        }
+        let mut pitches = track.pitches;
+        pitches.sort_by(f64::total_cmp);
+        let note = &self.notes[i];
+        Some(Notes {
+            note_id: note.note_id,
+            pitch_hz: pitches[pitches.len() / 2], // median: robust to attack transients
+            start_time_ms: Some(start_ms),
+            end_time_ms: Some(end_ms),
+            duration_ms: Some(end_ms - start_ms),
+            is_end: note.is_end,
+            vibrato_depth: None,
+            pedal_action: None,
+            has_accent: None,
+            markings: None,
+        })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const HOP_MS: f32 = 5.0;
+
+    /// Evidence with no rival at all.
+    fn certain(pitch_hz: f64) -> Detection {
+        Detection { pitch_hz, dominance: f32::INFINITY, attack_level: 1.0 }
+    }
+
+    fn note(id: u64, hz: f64, start: f32, end: f32) -> Notes {
+        Notes {
+            note_id: id,
+            pitch_hz: hz,
+            start_time_ms: Some(start),
+            end_time_ms: Some(end),
+            duration_ms: Some(end - start),
+            is_end: false,
+            vibrato_depth: None,
+            pedal_action: None,
+            has_accent: None,
+            markings: None,
+        }
+    }
+
+    /// Drives the tracker from `from_ms` to `to_ms`; `sounding(i, t)` says
+    /// whether note i is heard at time t (measured at its score pitch).
+    fn run(
+        tracker: &mut NoteTracker,
+        from_ms: f32,
+        to_ms: f32,
+        sounding: impl Fn(usize, f32) -> bool,
+    ) -> Vec<Notes> {
+        let mut out = Vec::new();
+        let mut t = from_ms;
+        while t < to_ms {
+            let obs: Vec<(usize, Option<Detection>)> = tracker
+                .candidates(t)
+                .into_iter()
+                .map(|i| (i, sounding(i, t).then(|| certain(tracker.pitch_hz(i)))))
+                .collect();
+            out.extend(tracker.update(Frame::at(t), &obs));
+            t += HOP_MS;
+        }
+        out
+    }
+
+    #[test]
+    fn test_one_record_per_played_note() {
+        let mut tr = NoteTracker::new(&[note(1, 440.0, 0.0, 500.0)]);
+        let out = run(&mut tr, 0.0, 1000.0, |_, t| (0.0..500.0).contains(&t));
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].start_time_ms, Some(0.0));
+        assert_eq!(out[0].end_time_ms, Some(500.0));
+        assert_eq!(out[0].pitch_hz, 440.0);
+    }
+
+    #[test]
+    fn test_short_dropout_does_not_split_a_note() {
+        let mut tr = NoteTracker::new(&[note(1, 440.0, 0.0, 500.0)]);
+        // 3 missing frames (15 ms) in the middle, e.g. a reverb flicker.
+        let out = run(&mut tr, 0.0, 1000.0, |_, t| (0.0..500.0).contains(&t) && !(200.0..215.0).contains(&t));
+        assert_eq!(out.len(), 1, "dropout split the note: {out:?}");
+    }
+
+    #[test]
+    fn test_blip_shorter_than_on_frames_is_ignored() {
+        let mut tr = NoteTracker::new(&[note(1, 440.0, 0.0, 500.0)]);
+        let out = run(&mut tr, 0.0, 1000.0, |_, t| (100.0..110.0).contains(&t)); // 2 frames
+        assert!(out.is_empty(), "blip reported as a note: {out:?}");
+    }
+
+    #[test]
+    fn test_weak_evidence_cannot_start_a_note_but_can_sustain_one() {
+        let mut tr = NoteTracker::new(&[note(1, 440.0, 0.0, 1000.0)]);
+        let between = (SUSTAIN_DOMINANCE + START_DOMINANCE_SINGLE) / 2.0;
+        let mut out = Vec::new();
+        let mut t = 0.0;
+        while t < 1000.0 {
+            let dominance = match t {
+                t if t < 100.0 => between,          // like a wrong-neighbour pluck: must not start
+                t if t < 200.0 => START_DOMINANCE_SINGLE, // clear note: starts
+                t if t < 400.0 => between,          // fading in a chord: keeps going
+                _ => 0.0,                           // gone
+            };
+            let obs = [(0, Some(Detection { pitch_hz: 440.0, dominance, attack_level: 1.0 }))];
+            out.extend(tr.update(Frame::at(t), &obs));
+            t += HOP_MS;
+        }
+        assert_eq!(out.len(), 1, "{out:?}");
+        assert_eq!(out[0].start_time_ms, Some(100.0));
+        assert_eq!(out[0].end_time_ms, Some(400.0));
+    }
+
+    #[test]
+    fn test_chord_notes_start_on_weaker_evidence_than_lone_notes() {
+        let dominance = (START_DOMINANCE_CHORD + START_DOMINANCE_SINGLE) / 2.0;
+        let evidence = Some(Detection { pitch_hz: 440.0, dominance, attack_level: 1.0 });
+        let started = |notes: &[Notes]| {
+            let mut tr = NoteTracker::new(notes);
+            let obs: Vec<_> = (0..notes.len()).map(|i| (i, evidence)).collect();
+            let mut t = 0.0;
+            while t < 300.0 {
+                tr.update(Frame::at(t), &obs);
+                t += HOP_MS;
+            }
+            tr.finish(300.0).len()
+        };
+        assert_eq!(started(&[note(1, 440.0, 0.0, 500.0)]), 0, "lone note needs stronger evidence");
+        let chord = [note(1, 440.0, 0.0, 500.0), note(2, 554.37, 0.0, 500.0)];
+        assert_eq!(started(&chord), 2, "chord notes start on this evidence");
+    }
+
+    /// Frames like the real pipeline's: 93 ms long, 5 ms apart.
+    fn run_real_frames(tracker: &mut NoteTracker, heard: impl Fn(Frame) -> bool) -> Vec<Notes> {
+        let mut out = Vec::new();
+        let mut t = 0.0;
+        while t < 1000.0 {
+            let frame = Frame { start_ms: t, end_ms: t + 93.0 };
+            out.extend(tracker.update(frame, &[(0, heard(frame).then_some(certain(440.0)))]));
+            t += HOP_MS;
+        }
+        out.extend(tracker.finish(1000.0));
+        out
+    }
+
+    #[test]
+    fn test_short_sound_gets_edge_stamps() {
+        // Heard as soon as it touches the window: edges give the true times.
+        let mut tr = NoteTracker::new(&[note(1, 440.0, 0.0, 500.0)]);
+        let out = run_real_frames(&mut tr, |f| f.start_ms < 260.0 && f.end_ms > 200.0);
+        assert_eq!(out.len(), 1, "{out:?}");
+        assert_eq!((out[0].start_time_ms, out[0].end_time_ms), (Some(203.0), Some(260.0)));
+    }
+
+    #[test]
+    fn test_crossed_edge_stamps_fall_back_to_centres() {
+        // Only heard while near the window centre (190-230 ms): edge stamps
+        // would put the end before the start. Never send that to the backend.
+        let mut tr = NoteTracker::new(&[note(1, 440.0, 0.0, 500.0)]);
+        let out = run_real_frames(&mut tr, |f| (190.0..230.0).contains(&f.centre_ms()));
+        assert_eq!(out.len(), 1, "{out:?}");
+        let (start, end) = (out[0].start_time_ms.unwrap(), out[0].end_time_ms.unwrap());
+        assert!(end > start, "end before start: {:?}", out[0]);
+        assert!((start - 190.0).abs() <= HOP_MS && (end - 230.0).abs() <= HOP_MS, "{start}-{end}");
+    }
+
+    #[test]
+    fn test_chord_notes_are_tracked_independently() {
+        let chord = [note(1, 261.63, 0.0, 500.0), note(2, 329.63, 0.0, 500.0), note(3, 392.0, 0.0, 500.0)];
+        let mut tr = NoteTracker::new(&chord);
+        // Note 2 is released early; the others ring on.
+        let out = run(&mut tr, 0.0, 1000.0, |i, t| t < if i == 1 { 250.0 } else { 500.0 });
+        let ends: HashMap<u64, f32> = out.iter().map(|n| (n.note_id, n.end_time_ms.unwrap())).collect();
+        assert_eq!(ends, HashMap::from([(1, 500.0), (2, 250.0), (3, 500.0)]));
+    }
+
+    #[test]
+    fn test_note_held_past_its_score_window_keeps_sounding() {
+        let mut tr = NoteTracker::new(&[note(1, 440.0, 0.0, 500.0)]);
+        let out = run(&mut tr, 0.0, 2000.0, |_, t| t < 1200.0);
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].end_time_ms, Some(1200.0), "held-too-long duration must be kept");
+    }
+
+    /// Drives the tracker with one pitch whose loudness follows `level(t)`
+    /// (0 = not heard). Every candidate sees the same evidence, as in the real
+    /// pipeline: same-pitch notes share one harmonic series.
+    fn run_levels(tracker: &mut NoteTracker, to_ms: f32, level: impl Fn(f32) -> f32) -> Vec<Notes> {
+        let mut out = Vec::new();
+        let mut t = 0.0;
+        while t < to_ms {
+            let l = level(t);
+            let evidence = (l > 0.0).then_some(Detection { pitch_hz: 440.0, dominance: f32::INFINITY, attack_level: l });
+            let obs: Vec<_> = tracker.candidates(t).into_iter().map(|i| (i, evidence)).collect();
+            out.extend(tracker.update(Frame::at(t), &obs));
+            t += HOP_MS;
+        }
+        out.extend(tracker.finish(to_ms));
+        out
+    }
+
+    /// A plucked string: full level at `at_ms`, decaying ~9 dB per 250 ms.
+    fn pluck(t: f32, at_ms: f32) -> f32 {
+        if t < at_ms { 0.0 } else { (-(t - at_ms) / 400.0).exp() }
+    }
+
+    fn times(n: &Notes) -> (u64, f32, f32) {
+        (n.note_id, n.start_time_ms.unwrap(), n.end_time_ms.unwrap())
+    }
+
+    #[test]
+    fn test_ringing_note_is_not_stolen_by_next_same_pitch_note() {
+        // Note 2 is re-plucked 100 ms late, while note 1 still rings.
+        let notes = [note(1, 440.0, 0.0, 500.0), note(2, 440.0, 500.0, 1000.0)];
+        let mut tr = NoteTracker::new(&notes);
+        let out = run_levels(&mut tr, 1500.0, |t| if t < 600.0 { pluck(t, 0.0) } else if t < 1100.0 { pluck(t, 600.0) } else { 0.0 });
+        let got: Vec<_> = out.iter().map(times).collect();
+        // Note 2 starts at its re-pluck, not when its window opened (415 ms),
+        // and note 1 ends at that same, measured moment.
+        assert_eq!(got, vec![(1, 0.0, 600.0), (2, 600.0, 1100.0)]);
+    }
+
+    #[test]
+    fn test_held_note_without_replay_is_one_record() {
+        // The player lets note 1 ring through note 2's slot and never re-plucks:
+        // that is what happened, so that is what we report.
+        let notes = [note(1, 440.0, 0.0, 500.0), note(2, 440.0, 500.0, 1000.0)];
+        let mut tr = NoteTracker::new(&notes);
+        let out = run_levels(&mut tr, 1500.0, |t| if t < 1000.0 { pluck(t, 0.0) } else { 0.0 });
+        let got: Vec<_> = out.iter().map(times).collect();
+        assert_eq!(got, vec![(1, 0.0, 1000.0)]);
+    }
+
+    #[test]
+    fn test_repeat_after_silence_starts_without_needing_an_attack_jump() {
+        // Note 1 dies out before note 2's window opens (415 ms).
+        let notes = [note(1, 440.0, 0.0, 300.0), note(2, 440.0, 500.0, 1000.0)];
+        let mut tr = NoteTracker::new(&notes);
+        let out = run_levels(&mut tr, 1500.0, |t| match t {
+            t if t < 300.0 => 1.0,
+            t if (520.0..1000.0).contains(&t) => 0.2, // quiet, flat: no jump at all
+            _ => 0.0,
+        });
+        let got: Vec<_> = out.iter().map(times).collect();
+        assert_eq!(got, vec![(1, 0.0, 300.0), (2, 520.0, 1000.0)]);
+    }
+
+    #[test]
+    fn test_missed_predecessor_tail_is_not_credited_to_next_note() {
+        // Note 1 sounds but outside its own window (never detected); its tail is
+        // still ringing when note 2's window opens. Note 2 must wait for its pluck.
+        let notes = [note(1, 440.0, 2000.0, 2100.0), note(2, 440.0, 2500.0, 3000.0)];
+        let mut tr = NoteTracker::new(&notes);
+        let out = run_levels(&mut tr, 3500.0, |t| if t < 2600.0 { pluck(t, 1000.0) * 3.0 } else if t < 3100.0 { pluck(t, 2600.0) } else { 0.0 });
+        let starts: Vec<_> = out.iter().filter(|n| n.note_id == 2).map(|n| n.start_time_ms.unwrap()).collect();
+        assert_eq!(starts, vec![2600.0]);
+    }
+
+    #[test]
+    fn test_finish_closes_notes_still_sounding() {
+        let mut tr = NoteTracker::new(&[note(1, 440.0, 0.0, 500.0)]);
+        assert!(run(&mut tr, 0.0, 300.0, |_, _| true).is_empty());
+        let out = tr.finish(300.0);
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].end_time_ms, Some(300.0));
+    }
+
+    #[test]
+    fn test_unplayed_note_emits_nothing() {
+        let mut tr = NoteTracker::new(&[note(1, 440.0, 0.0, 500.0)]);
+        let mut out = run(&mut tr, 0.0, 1000.0, |_, _| false);
+        out.extend(tr.finish(1000.0));
+        assert!(out.is_empty());
+    }
+}

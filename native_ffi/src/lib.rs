@@ -4,6 +4,7 @@ pub mod audio;
 pub mod dsp;
 pub mod models;
 pub mod run_onnx;
+pub mod tracker;
 
 // Crates
 use crate::frb_generated::StreamSink;
@@ -28,11 +29,11 @@ pub extern "C" fn listen_audio() {
         return;
     }
     let (tx, rx) = std::sync::mpsc::channel::<Vec<f32>>();
-    let _my_live_stream = audio::create_stream(tx);
-    std::thread::spawn(move || {
-        audio::start_processing_loop(rx);
-    });
-    if let Ok(stream) = _my_live_stream {
+    // Only start the processing thread once we know the mic's real sample rate.
+    if let Ok((stream, sample_rate)) = audio::create_stream(tx) {
+        std::thread::spawn(move || {
+            audio::start_processing_loop(rx, sample_rate);
+        });
         *stream_guard = Some(SendStream(stream));
     }
 }

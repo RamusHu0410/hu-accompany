@@ -1,0 +1,12 @@
+{
+  "piece_name": "three notes (A4, C5, E5)",
+  "curr_phase": 0,
+  "instrument": null,
+  "curr_music_phrase": 0,
+  "timing": { "bpm": 60.0, "beat_unit": 4 },
+  "notes": [
+    { "note_id": 1, "pitch_hz": 440.0,  "start_time_ms": 0.0,    "end_time_ms": 1000.0, "duration_ms": 1000.0, "is_end": false, "vibrato_depth": null, "pedal_action": null, "has_accent": null, "markings": null },
+    { "note_id": 2, "pitch_hz": 523.25, "start_time_ms": 1500.0, "end_time_ms": 2500.0, "duration_ms": 1000.0, "is_end": false, "vibrato_depth": null, "pedal_action": null, "has_accent": null, "markings": null },
+    { "note_id": 3, "pitch_hz": 659.26, "start_time_ms": 3000.0, "end_time_ms": 4000.0, "duration_ms": 1000.0, "is_end": true,  "vibrato_depth": null, "pedal_action": null, "has_accent": null, "markings": null }
+  ]
+}
