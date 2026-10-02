@@ -1,0 +1,3 @@
+basic_pitch_nmp.onnx: the "nmp" model of Basic Pitch (Spotify AB, 2022),
+https://github.com/spotify/basic-pitch (basic_pitch/saved_models/icassp_2022/nmp.onnx)
+Licensed under the Apache License 2.0, see BASIC_PITCH_LICENSE. Unmodified.

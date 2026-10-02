@@ -29,6 +29,14 @@ pub fn load_wav_mono(path: &str) -> (Vec<f32>, hound::WavSpec) {
 /// chunks, and returns every record the detector produced.
 /// Uses the ACTIVE_PIECE / USER_DATA globals, so callers must not overlap.
 pub fn run_pipeline(mono: &[f32], sample_rate: u32, piece: &PieceData) -> Vec<Notes> {
+    // NOTE_TEMPLATES=path/to/templates.json: run calibrated (see learn_templates).
+    *native_ffi::NOTE_TEMPLATES.lock().unwrap() = std::env::var("NOTE_TEMPLATES").ok().filter(|p| !p.is_empty()).map(|p| {
+        serde_json::from_str(&std::fs::read_to_string(&p).unwrap_or_else(|e| panic!("NOTE_TEMPLATES {p}: {e}")))
+            .unwrap_or_else(|e| panic!("NOTE_TEMPLATES {p}: {e}"))
+    });
+    // EVIDENCE=dsp: compare against the DSP-only pipeline.
+    let neural = std::env::var("EVIDENCE").map_or(true, |v| v != "dsp");
+    native_ffi::USE_NEURAL.store(neural, std::sync::atomic::Ordering::Relaxed);
     *USER_DATA.lock().unwrap() = None;
     *ACTIVE_PIECE.lock().unwrap() = Some(piece.clone());
 

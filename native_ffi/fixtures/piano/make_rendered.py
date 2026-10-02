@@ -127,6 +127,13 @@ def piece_sevenths_and_repeats():
     return chords([c for c in prog for _ in range(2)], 600, hold=0.85)
 
 
+def piece_calibration():
+    # Every key alone, soft then loud: what each note's harmonics look like on
+    # this instrument (timbre changes with strike strength, so both).
+    return [(p, i * 1000, i * 1000 + 700, v)
+            for i, (v, p) in enumerate((v, p) for v in (60, 100) for p in range(21, 109))]
+
+
 PIECES = {
     "01_scale_solo": piece_scale,
     "02_repeated_solo": piece_repeated,
@@ -259,13 +266,17 @@ def validate(name, notes):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--soundfont", type=Path, help="use this .sf2 instead of downloading YDP")
-    parser.add_argument("--out", type=Path, default=OUT_DIR)
+    parser.add_argument("--out", type=Path, default=None)
+    parser.add_argument("--calibration", action="store_true",
+                        help="render only the chromatic calibration scale (for learning note templates)")
     args = parser.parse_args()
+    pieces = {"chromatic_calibration": piece_calibration} if args.calibration else PIECES
+    args.out = args.out or (HERE / "calibration" if args.calibration else OUT_DIR)
     soundfont = args.soundfont or ensure_soundfont()
     args.out.mkdir(parents=True, exist_ok=True)
     print(f"soundfont: {soundfont}")
 
-    for name, make in PIECES.items():
+    for name, make in pieces.items():
         # Whole milliseconds: MIDI ticks are 1 ms, and the JSON must match the audio exactly.
         notes = [(p, round(s) + LEAD_IN_MS, round(e) + LEAD_IN_MS, v) for p, s, e, v in make()]
         validate(name, notes)

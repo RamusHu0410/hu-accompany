@@ -1,7 +1,10 @@
 use crate::dsp::{Analyzer, Detection, FFT_SIZE, HOP_SIZE};
 use crate::models::Notes;
-use crate::tracker::{Frame, NoteTracker};
-use crate::{ACTIVE_PIECE, NOTES_SINK, USER_DATA};
+use crate::run_onnx::{neural_evidence, NetFrame, StreamingPitchNet, FRAME_MS};
+use crate::tracker::{Frame, NoteTracker, Thresholds};
+use crate::templates::NoteTemplates;
+use crate::{ACTIVE_PIECE, NOTES_SINK, NOTE_TEMPLATES, USE_NEURAL, USER_DATA};
+use std::sync::atomic::Ordering;
 use cpal::Stream;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use std::sync::mpsc::Receiver;
@@ -52,6 +55,12 @@ pub fn create_stream(
 }
 
 pub fn start_processing_loop(rx: Receiver<Vec<f32>>, sample_rate: u32) {
+    if USE_NEURAL.load(Ordering::Relaxed) {
+        match StreamingPitchNet::new(sample_rate) {
+            Ok(net) => return neural_processing_loop(rx, sample_rate, net),
+            Err(e) => eprintln!("pitch network unavailable, using DSP evidence: {e}"),
+        }
+    }
     let ms_per_sample = 1000.0 / sample_rate as f32;
     let mut analyzer = Analyzer::new(sample_rate);
     let mut tracker: Option<NoteTracker> = None;
@@ -68,7 +77,10 @@ pub fn start_processing_loop(rx: Receiver<Vec<f32>>, sample_rate: u32) {
                 end_ms: (consumed_samples + FFT_SIZE as u64) as f32 * ms_per_sample,
             };
             if tracker.is_none() {
-                tracker = tracker_for_active_piece();
+                tracker = tracker_for_active_piece(Thresholds::DSP);
+                if tracker.is_some() {
+                    analyzer.set_templates(templates_for_active_piece());
+                }
             }
             if let Some(tracker) = tracker.as_mut() {
                 // Only run the FFT when some note is expected or still sounding.
@@ -95,13 +107,85 @@ pub fn start_processing_loop(rx: Receiver<Vec<f32>>, sample_rate: u32) {
     }
 }
 
+/// Like the DSP loop, but the tracker steps through the pitch network's frames
+/// (86/s), ~100-300 ms behind live (the network's look-ahead plus its run
+/// interval; notes are only reported once they end anyway). For each frame the
+/// DSP analyser looks at the audio centred on the same moment, for the
+/// measured pitch and the re-attack level.
+fn neural_processing_loop(rx: Receiver<Vec<f32>>, sample_rate: u32, mut net: StreamingPitchNet) {
+    let ms_per_sample = 1000.0 / sample_rate as f32;
+    let mut analyzer = Analyzer::new(sample_rate);
+    let mut tracker: Option<NoteTracker> = None;
+    // Device audio still needed by the DSP analyser; history[0] is sample `history_start`.
+    let mut history: Vec<f32> = Vec::new();
+    let mut history_start: usize = 0;
+    let mut window = vec![0.0f32; FFT_SIZE];
+
+    let mut step = |frames: Vec<NetFrame>, history: &[f32], history_start: usize, tracker: &mut Option<NoteTracker>| {
+        for nf in frames {
+            if tracker.is_none() {
+                *tracker = tracker_for_active_piece(Thresholds::NEURAL);
+            }
+            let Some(tracker) = tracker.as_mut() else { continue };
+            let frame = Frame { start_ms: nf.start_ms(), end_ms: nf.start_ms() + FRAME_MS as f32 };
+            let candidates = tracker.candidates(frame.centre_ms());
+            if candidates.is_empty() {
+                continue;
+            }
+            // DSP window centred on this frame (zeros before the stream / past the end).
+            let centre = (frame.centre_ms() / ms_per_sample) as i64;
+            for (j, w) in window.iter_mut().enumerate() {
+                let g = centre - (FFT_SIZE / 2) as i64 + j as i64 - history_start as i64;
+                *w = if g >= 0 { history.get(g as usize).copied().unwrap_or(0.0) } else { 0.0 };
+            }
+            analyzer.analyze(&window);
+            let expected: Vec<f64> = candidates.iter().map(|&i| tracker.pitch_hz(i)).collect();
+            let observations: Vec<(usize, Option<Detection>)> = candidates
+                .iter()
+                .map(|&i| (i, neural_evidence(&nf, &analyzer, tracker.pitch_hz(i), &expected)))
+                .collect();
+            publish(tracker.update(frame, &observations));
+        }
+    };
+
+    while let Ok(chunk) = rx.recv() {
+        history.extend_from_slice(&chunk);
+        match net.push(&chunk) {
+            Ok(frames) => step(frames, &history, history_start, &mut tracker),
+            Err(e) => eprintln!("pitch network error: {e}"),
+        }
+        // The network lags < 1 s; keep 2 s of audio for the DSP windows.
+        let keep = 2 * sample_rate as usize;
+        if history.len() > keep + sample_rate as usize {
+            let drop = history.len() - keep;
+            history.drain(..drop);
+            history_start += drop;
+        }
+    }
+    if let Ok(frames) = net.finish() {
+        step(frames, &history, history_start, &mut tracker);
+    }
+    if let Some(tracker) = tracker.as_mut() {
+        let end_ms = (history_start + history.len()) as f32 * ms_per_sample;
+        publish(tracker.finish(end_ms));
+    }
+}
+
 /// Builds a tracker once a piece is loaded and in a scoring phase.
 /// The piece is captured once per recording: stop and restart audio to switch.
-fn tracker_for_active_piece() -> Option<NoteTracker> {
+fn tracker_for_active_piece(thresholds: Thresholds) -> Option<NoteTracker> {
     let guard = ACTIVE_PIECE.lock().unwrap();
     let piece = guard.as_ref()?;
     // Phases 0 and 1 are scored against the score; 2 and 3 aren't implemented yet.
-    matches!(piece.curr_phase, 0 | 1).then(|| NoteTracker::new(&piece.notes))
+    matches!(piece.curr_phase, 0 | 1).then(|| NoteTracker::with_thresholds(&piece.notes, thresholds))
+}
+
+/// Calibrated note shapes, but only if they were learned on the instrument
+/// this piece is for (a piano's harmonics say nothing about a guitar's).
+fn templates_for_active_piece() -> Option<NoteTemplates> {
+    let instrument = ACTIVE_PIECE.lock().unwrap().as_ref()?.instrument.clone()?;
+    let templates = NOTE_TEMPLATES.lock().unwrap().clone()?;
+    (templates.instrument == format!("{instrument:?}")).then_some(templates)
 }
 
 /// Buffers finished notes and streams them to Dart when it is listening.

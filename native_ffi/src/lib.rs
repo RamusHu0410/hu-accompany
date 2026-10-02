@@ -2,8 +2,10 @@ mod frb_generated; /* AUTO INJECTED BY flutter_rust_bridge. This line may not be
 // Modules
 pub mod audio;
 pub mod dsp;
+pub mod joint;
 pub mod models;
 pub mod run_onnx;
+pub mod templates;
 pub mod tracker;
 
 // Crates
@@ -20,6 +22,10 @@ static NOTES_SINK: RwLock<Option<StreamSink<Vec<Notes>>>> = RwLock::new(None);
 static ACTIVE_STREAM: Lazy<Mutex<Option<SendStream>>> = Lazy::new(|| Mutex::new(None));
 pub static ACTIVE_PIECE: LazyLock<Mutex<Option<PieceData>>> = LazyLock::new(|| Mutex::new(None));
 pub static USER_DATA: LazyLock<Mutex<Option<Vec<Notes>>>> = LazyLock::new(|| Mutex::new(None));
+/// Use the pitch network (run_onnx.rs) as the note evidence; false = DSP only.
+pub static USE_NEURAL: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
+/// Learned note shapes of the player's instrument (calibration), if any.
+pub static NOTE_TEMPLATES: LazyLock<Mutex<Option<templates::NoteTemplates>>> = LazyLock::new(|| Mutex::new(None));
 
 #[frb(ignore)]
 #[unsafe(no_mangle)]

@@ -3,10 +3,14 @@
 //! We never transcribe blindly. The score tells us which notes should be
 //! sounding, so for each one we only ask whether its harmonic series stands out
 //! (a) above the room's noise floor and (b) above the same series one semitone
-//! higher and lower. That works for single notes and chords alike.
+//! higher and lower. Every frame is explained jointly by all expected notes and
+//! their neighbours (joint.rs), so a neighbour can't borrow a chord mate's peaks.
 
+use crate::joint;
+use crate::templates::NoteTemplates;
 use num_complex::Complex;
 use realfft::{RealFftPlanner, RealToComplex};
+use std::cell::RefCell;
 use std::sync::Arc;
 
 /// Analysis window: 4096 samples ≈ 93 ms at 44.1 kHz / 85 ms at 48 kHz.
@@ -27,6 +31,25 @@ const SEARCH_CENTS: f64 = 30.0;
 /// A Hann window's main lobe spans ±2 bins; neighbours this far apart don't
 /// leak into each other's peaks.
 const MIN_SEMITONE_GAP_BINS: f64 = 3.0;
+/// The joint fit models each note up to this harmonic: enough to explain the
+/// peaks chord mates share, short of the weak, very sharp top of a piano string.
+const MAX_FIT_HARMONIC: usize = 24;
+/// First harmonic of each band with its own loudness in the joint fit. Real
+/// instruments don't share one harmonic recipe (a piano bass has a weak
+/// fundamental), so each band of a note is fitted separately.
+const FIT_BANDS: [usize; 4] = [1, 3, 6, 11];
+/// Harmonics of different notes closer than this (in bins) are one FFT peak.
+const SLOT_MERGE_BINS: f64 = 1.0;
+const FIT_ITERATIONS: usize = 100;
+/// Harmonics judged are below this number. Around harmonic 17 a semitone
+/// shift equals one harmonic spacing (17 × 6% ≈ 1), so the neighbour's comb
+/// lands back on the note's own; real strings are also sharpest up there.
+const MAX_JUDGED_HARMONIC: usize = 16;
+/// Notes too low to reach MIN_SEMITONE_GAP_BINS anywhere (below ~E2 at
+/// 44.1 kHz) use the harmonics at least this close to their best separation.
+/// Known limit: below A#1 (58 Hz) even the best harmonics are ~2 bins from a
+/// neighbour's, inside the window's blur; A0-A1 need a longer window.
+const BEST_SEPARATION_SHARE: f64 = 0.8;
 /// A note must beat each non-expected semitone neighbour by this factor.
 pub const NEIGHBOUR_RATIO: f32 = 1.5;
 /// A note's loudest harmonic must be this far above the spectral median.
@@ -44,13 +67,23 @@ pub const ATTACK_WINDOW: usize = 2048;
 pub struct Detection {
     /// Measured pitch (what the player actually played).
     pub pitch_hz: f64,
-    /// Harmonic salience of the note ÷ that of its strongest rival semitone
-    /// neighbour. 1.0 = can't tell them apart; infinity = no rival at all.
+    /// The note's energy ÷ that of its strongest non-expected semitone
+    /// neighbour, both from the frame's joint fit, at the note's
+    /// well-separated harmonics. 1.0 = can't tell them apart; infinity = the
+    /// neighbour explains nothing.
     pub dominance: f32,
     /// How strongly the note's harmonics sound in the newest ATTACK_WINDOW
     /// samples. Absolute scale is arbitrary; only ratios over time mean
     /// something (a re-pluck of a ringing string shows up as a jump, see tracker.rs).
     pub attack_level: f32,
+    /// Fitted strength of the note ÷ that of the strongest note in the frame's
+    /// joint fit (0..=1). A wrong note can win its neighbour comparison with a
+    /// crumb of stray energy (an attack's noise); a played note is a real
+    /// share of what sounds.
+    pub share: f32,
+    /// How sure the evidence source is that the note sounds (0..=1): the
+    /// pitch network's activation (run_onnx.rs); 1 for this analyser.
+    pub confidence: f32,
 }
 
 /// Distance between two pitches in cents (100 cents = 1 semitone).
@@ -70,6 +103,39 @@ pub struct Analyzer {
     noise_floor: f32,
     min_peak: f32,
     short: ShortSpectrum,
+    /// Joint fit of the current frame, for the expected notes it was made for.
+    fit: RefCell<Option<JointFit>>,
+    /// Learned harmonic shapes of this instrument's notes, if calibrated.
+    templates: Option<NoteTemplates>,
+}
+
+/// Every expected note and its semitone neighbours, fitted together.
+struct JointFit {
+    /// The expected notes this fit was computed for (cache key).
+    expected: Vec<f64>,
+    notes: Vec<f64>,
+    /// Per note: fitted magnitude at each harmonic (index k; 0 unused).
+    contrib: Vec<Vec<f32>>,
+}
+
+impl JointFit {
+    fn index_of(&self, hz: f64) -> Option<usize> {
+        self.notes.iter().position(|&n| cents(n, hz).abs() < 50.0)
+    }
+
+    /// Fitted magnitude of `note` summed over all its modelled harmonics.
+    fn strength(&self, note: usize) -> f32 {
+        self.contrib[note].iter().sum()
+    }
+
+    /// Fitted energy of `note` at harmonic numbers `ks`.
+    fn energy(&self, note: usize, ks: &[usize]) -> f32 {
+        ks.iter().filter_map(|&k| self.contrib[note].get(k)).sum()
+    }
+}
+
+fn band(k: usize) -> usize {
+    FIT_BANDS.iter().rposition(|&first| k >= first).unwrap_or(0)
 }
 
 /// Magnitude spectrum of the newest ATTACK_WINDOW samples of each frame.
@@ -152,10 +218,18 @@ impl Analyzer {
             floor_scratch: Vec::with_capacity(FFT_SIZE / 2),
             noise_floor: 0.0,
             short: ShortSpectrum::new(sample_rate),
+            fit: RefCell::new(None),
+            templates: None,
             fft,
             window,
             min_peak,
         }
+    }
+
+    /// Uses learned note shapes in the joint fit (None = generic band model).
+    pub fn set_templates(&mut self, templates: Option<NoteTemplates>) {
+        self.templates = templates;
+        *self.fit.get_mut() = None;
     }
 
     /// Analyses one frame of exactly FFT_SIZE mono samples.
@@ -171,6 +245,7 @@ impl Analyzer {
             *m = c.norm();
         }
         self.short.analyze(&frame[FFT_SIZE - ATTACK_WINDOW..]);
+        *self.fit.get_mut() = None;
 
         // Noise floor = median magnitude across the musical band. Notes only
         // occupy a few bins, so the median tracks the room (hiss, hum, chatter)
@@ -195,29 +270,183 @@ impl Analyzer {
             .max_by(|a, b| a.1.total_cmp(&b.1))
     }
 
-    /// First harmonic of `hz` whose semitone neighbours sit at least
-    /// MIN_SEMITONE_GAP_BINS away. Below it, a note and its neighbour share the
-    /// same FFT peak and can't be told apart, so low notes are judged on their
-    /// upper harmonics (E2 from the 7th, C4 from the 3rd, at 44.1 kHz).
-    fn first_resolvable_harmonic(&self, hz: f64) -> usize {
-        let gap_hz_per_harmonic = hz * (2f64.powf(1.0 / 12.0) - 1.0);
-        ((MIN_SEMITONE_GAP_BINS * self.bin_hz / gap_hz_per_harmonic).ceil() as usize).max(1)
+    /// How far (in bins) harmonic `k` of each semitone neighbour of `hz` lands
+    /// from the nearest harmonic of `hz` itself, whichever neighbour is closer.
+    /// Not just from harmonic k: high up, the neighbour's k-th harmonic sits on
+    /// the note's (k±1)-th, and then the neighbour gets credit for the note.
+    fn neighbour_separation_bins(&self, hz: f64, k: usize) -> f64 {
+        [-1.0, 1.0]
+            .into_iter()
+            .map(|semitones| {
+                let x = k as f64 * 2f64.powf(semitones / 12.0); // in units of hz
+                (x - x.round()).abs() * hz / self.bin_hz
+            })
+            .fold(f64::INFINITY, f64::min)
     }
 
-    /// Resolvable harmonic peaks of a note judged at `note_hz`, evaluated at
-    /// `hz` (the note itself or a semitone neighbour, so both use the same
-    /// harmonic numbers): (harmonic number, bin, magnitude).
+    /// Harmonic numbers a note at `hz` is judged on: the first MAX_HARMONICS
+    /// (up to MAX_JUDGED_HARMONIC) whose neighbours' harmonics sit at least
+    /// MIN_SEMITONE_GAP_BINS from every harmonic of the note. Elsewhere a note
+    /// and its neighbour share FFT peaks and can't be told apart. Low notes
+    /// never reach that gap; they use their best-separated harmonics instead
+    /// (C2: 7th to 10th; C4: 3rd to 10th, at 44.1 kHz).
+    fn judged_harmonics(&self, hz: f64) -> impl Iterator<Item = usize> + '_ {
+        let nyquist = self.bin_hz * (self.mags.len() - 2) as f64;
+        let top = (1..=MAX_JUDGED_HARMONIC)
+            .take_while(|&k| k as f64 * hz <= MAX_HARMONIC_HZ.min(nyquist))
+            .last()
+            .unwrap_or(0);
+        let best = (1..=top).map(|k| self.neighbour_separation_bins(hz, k)).fold(0.0, f64::max);
+        let needed = MIN_SEMITONE_GAP_BINS.min(BEST_SEPARATION_SHARE * best);
+        (1..=top)
+            .filter(move |&k| self.neighbour_separation_bins(hz, k) >= needed)
+            .take(MAX_HARMONICS)
+    }
+
+    /// Harmonic peaks of a note judged at `note_hz`, evaluated at `hz` (the
+    /// note itself or a semitone neighbour, so both use the same harmonic
+    /// numbers): (harmonic number, bin, magnitude).
     fn harmonic_peaks(&self, note_hz: f64, hz: f64) -> impl Iterator<Item = (usize, usize, f32)> + '_ {
         let nyquist = self.bin_hz * (self.mags.len() - 2) as f64;
-        let first = self.first_resolvable_harmonic(note_hz);
-        (first..first + MAX_HARMONICS)
+        self.judged_harmonics(note_hz)
             .take_while(move |&k| k as f64 * hz <= MAX_HARMONIC_HZ.min(nyquist))
             .filter_map(move |k| self.peak_near(k as f64 * hz).map(|(b, m)| (k, b, m)))
     }
 
-    /// Sum of harmonic peaks: how strongly the harmonic series of `hz` is present.
-    fn salience(&self, note_hz: f64, hz: f64) -> f32 {
-        self.harmonic_peaks(note_hz, hz).map(|(_, _, m)| m).sum()
+    /// Magnitude observed at each slot (`slot_hz` sorted ascending). Only
+    /// true local maxima count (the flank of a louder peak next door is that
+    /// peak's energy), and each peak belongs to the ONE slot nearest its
+    /// interpolated frequency: E4's fundamental must not also be F4's.
+    fn observe_slots(&self, slot_hz: &[f64]) -> Vec<f32> {
+        let mut observed = vec![0.0f32; slot_hz.len()];
+        for (s, &hz) in slot_hz.iter().enumerate() {
+            let centre = hz / self.bin_hz;
+            let radius = (centre * (2f64.powf(SEARCH_CENTS / 1200.0) - 1.0)).max(1.0);
+            let lo = ((centre - radius).round() as usize).max(1);
+            let hi = ((centre + radius).round() as usize).min(self.mags.len() - 2);
+            for b in lo..=hi {
+                if self.mags[b] < self.mags[b - 1] || self.mags[b] < self.mags[b + 1] {
+                    continue;
+                }
+                let peak_hz = self.interpolated_hz(b);
+                let nearest = match slot_hz.binary_search_by(|x| x.total_cmp(&peak_hz)) {
+                    Ok(i) => i,
+                    Err(i) if i == 0 => 0,
+                    Err(i) if i == slot_hz.len() => i - 1,
+                    Err(i) => if peak_hz - slot_hz[i - 1] <= slot_hz[i] - peak_hz { i - 1 } else { i },
+                };
+                if nearest == s {
+                    observed[s] = observed[s].max(self.mags[b]);
+                }
+            }
+        }
+        observed
+    }
+
+    /// Frequency of the peak at bin `b`, refined by parabolic interpolation
+    /// on log magnitudes (accurate to a fraction of a bin with a Hann window).
+    fn interpolated_hz(&self, b: usize) -> f64 {
+        let ln = |i: usize| (self.mags[i].max(1e-12) as f64).ln();
+        let (a, m, c) = (ln(b - 1), ln(b), ln(b + 1));
+        let denom = a - 2.0 * m + c;
+        let offset = if denom.abs() > 1e-12 { (0.5 * (a - c) / denom).clamp(-0.5, 0.5) } else { 0.0 };
+        (b as f64 + offset) * self.bin_hz
+    }
+
+    /// Magnitude of harmonics 1..=n of `hz` in the last analysed frame: the
+    /// strongest true local peak within SEARCH_CENTS of each (0 if none, or
+    /// above MAX_HARMONIC_HZ). Used to learn note templates (templates.rs).
+    pub fn harmonic_amplitudes(&self, hz: f64, n: usize) -> Vec<f32> {
+        let top = self.top_hz();
+        (1..=n)
+            .map(|k| {
+                let f = k as f64 * hz;
+                if f > top {
+                    return 0.0;
+                }
+                let centre = f / self.bin_hz;
+                let radius = (centre * (2f64.powf(SEARCH_CENTS / 1200.0) - 1.0)).max(1.0);
+                let lo = ((centre - radius).round() as usize).max(1);
+                let hi = ((centre + radius).round() as usize).min(self.mags.len() - 2);
+                (lo..=hi)
+                    .filter(|&b| self.mags[b] >= self.mags[b - 1] && self.mags[b] >= self.mags[b + 1])
+                    .map(|b| self.mags[b])
+                    .fold(0.0, f32::max)
+            })
+            .collect()
+    }
+
+    fn top_hz(&self) -> f64 {
+        MAX_HARMONIC_HZ.min(self.bin_hz * (self.mags.len() - 2) as f64)
+    }
+
+    /// Fits this frame with every expected note plus each one's semitone
+    /// neighbours. Their harmonics become slots (harmonics of different notes
+    /// within SLOT_MERGE_BINS share one), each slot observes the peak there,
+    /// and each note-band is one atom of the fit.
+    fn joint_fit(&self, expected: &[f64]) -> JointFit {
+        let mut notes: Vec<f64> = Vec::new();
+        for &e in expected {
+            for semitones in [0.0, -1.0, 1.0] {
+                let hz = e * 2f64.powf(semitones / 12.0);
+                if !notes.iter().any(|&n| cents(n, hz).abs() < 50.0) {
+                    notes.push(hz);
+                }
+            }
+        }
+        let top = self.top_hz();
+        let mut harmonics: Vec<(f64, usize, usize)> = Vec::new(); // (hz, note, k)
+        for (n, &hz) in notes.iter().enumerate() {
+            for k in (1..=MAX_FIT_HARMONIC).take_while(|&k| k as f64 * hz <= top) {
+                harmonics.push((k as f64 * hz, n, k));
+            }
+        }
+        harmonics.sort_by(|a, b| a.0.total_cmp(&b.0));
+        let mut slot_hz: Vec<f64> = Vec::new();
+        let mut slot_of = vec![vec![None; MAX_FIT_HARMONIC + 1]; notes.len()];
+        for &(hz, n, k) in &harmonics {
+            if slot_hz.last().is_none_or(|&s| hz - s > SLOT_MERGE_BINS * self.bin_hz) {
+                slot_hz.push(hz);
+            }
+            slot_of[n][k] = Some(slot_hz.len() - 1);
+        }
+
+        // Atom shapes (note, weight per harmonic). A calibrated note is its
+        // learned shape plus a brighter variant (harder strikes are brighter);
+        // otherwise four free bands.
+        let mut shapes: Vec<(usize, Vec<f32>)> = Vec::new();
+        for (n, &hz) in notes.iter().enumerate() {
+            match self.templates.as_ref().and_then(|t| t.profile(hz)) {
+                Some(profile) => {
+                    let learned: Vec<f32> = (0..=MAX_FIT_HARMONIC)
+                        .map(|k| if k == 0 { 0.0 } else { profile.get(k - 1).copied().unwrap_or(0.0) })
+                        .collect();
+                    let brighter = learned.iter().enumerate().map(|(k, w)| w * k as f32 / MAX_FIT_HARMONIC as f32).collect();
+                    shapes.push((n, learned));
+                    shapes.push((n, brighter));
+                }
+                None => {
+                    for b in 0..FIT_BANDS.len() {
+                        shapes.push((n, (0..=MAX_FIT_HARMONIC).map(|k| if k > 0 && band(k) == b { 1.0 } else { 0.0 }).collect()));
+                    }
+                }
+            }
+        }
+        let atoms: Vec<Vec<(usize, f32)>> = shapes
+            .iter()
+            .map(|(n, w)| (1..=MAX_FIT_HARMONIC).filter_map(|k| slot_of[*n][k].filter(|_| w[k] > 0.0).map(|s| (s, w[k]))).collect())
+            .collect();
+        let observed = self.observe_slots(&slot_hz);
+        let h = joint::fit(&observed, &atoms, FIT_ITERATIONS);
+        let mut contrib = vec![vec![0.0f32; MAX_FIT_HARMONIC + 1]; notes.len()];
+        for ((n, w), &ha) in shapes.iter().zip(&h) {
+            for k in 1..=MAX_FIT_HARMONIC {
+                if slot_of[*n][k].is_some() {
+                    contrib[*n][k] += ha * w[k];
+                }
+            }
+        }
+        JointFit { expected: expected.to_vec(), notes, contrib }
     }
 
     /// Evidence that `target_hz` is sounding in the last analysed frame, or
@@ -237,19 +466,50 @@ impl Analyzer {
         if loudest < self.min_peak || loudest < FLOOR_RATIO * self.noise_floor {
             return None;
         }
-        let salience = self.salience(target_hz, target_hz);
+        // One fit per frame and expected set, shared by every candidate.
+        let mut key = expected_hz.to_vec();
+        if !key.iter().any(|&e| cents(e, target_hz).abs() < 50.0) {
+            key.push(target_hz);
+        }
+        let mut cache = self.fit.borrow_mut();
+        if cache.as_ref().is_none_or(|f| f.expected != key) {
+            *cache = Some(self.joint_fit(&key));
+        }
+        let fit = cache.as_ref().expect("just filled");
+        // Compared at the target's well-separated harmonics, as before.
+        let ks: Vec<usize> = self.judged_harmonics(target_hz).collect();
+        let own = fit.index_of(target_hz).map_or(0.0, |i| fit.energy(i, &ks));
         let strongest_rival = [-1.0, 1.0]
             .into_iter()
             .map(|semitones| target_hz * 2f64.powf(semitones / 12.0))
             .filter(|&n| !expected_hz.iter().any(|&e| cents(e, n).abs() < 50.0))
-            .map(|n| self.salience(target_hz, n))
+            .filter_map(|n| fit.index_of(n))
+            .map(|i| fit.energy(i, &ks))
             .fold(0.0, f32::max);
-        let dominance = if strongest_rival > 0.0 { salience / strongest_rival } else { f32::INFINITY };
+        let dominance = if strongest_rival > 0.0 { own / strongest_rival } else { f32::INFINITY };
+        let strongest = (0..fit.notes.len()).map(|i| fit.strength(i)).fold(0.0, f32::max);
+        let share = match fit.index_of(target_hz) {
+            Some(i) if strongest > 0.0 => fit.strength(i) / strongest,
+            _ => 0.0,
+        };
+        drop(cache);
         Some(Detection {
             pitch_hz: self.estimate_pitch(target_hz)?,
             dominance,
             attack_level: self.short.level(target_hz),
+            share,
+            confidence: 1.0,
         })
+    }
+
+    /// Refined pitch near `hz` in the last analysed frame, if it has a peak there.
+    pub fn measured_pitch(&self, hz: f64) -> Option<f64> {
+        self.estimate_pitch(hz)
+    }
+
+    /// Strength of `hz`'s harmonics in the newest ATTACK_WINDOW samples.
+    pub fn attack_level(&self, hz: f64) -> f32 {
+        self.short.level(hz)
     }
 
     /// Single-frame yes/no at NEIGHBOUR_RATIO: the measured pitch if
@@ -347,6 +607,80 @@ mod tests {
         }
     }
 
+    /// Piano-like string: 24 partials, amplitude 1/k, each sharpened by
+    /// stiffness (f_k = k·f0·√(1 + B·k²)). B = 1e-4 matches the bass notes of
+    /// the rendered piano set (+22 cents at partial 16).
+    fn piano_tone(f0: f64, amplitude: f32, b: f64) -> Vec<f32> {
+        (0..FFT_SIZE)
+            .map(|i| {
+                let t = i as f64 / SR as f64;
+                (1..=24)
+                    .map(|k| {
+                        let fk = k as f64 * f0 * (1.0 + b * (k * k) as f64).sqrt();
+                        amplitude / k as f32 * (2.0 * std::f64::consts::PI * fk * t).sin() as f32
+                    })
+                    .sum()
+            })
+            .collect()
+    }
+
+    #[test]
+    fn test_low_piano_notes_beat_their_neighbours_enough_to_start() {
+        use crate::tracker::START_DOMINANCE_SINGLE;
+        // C2 and E2 were missed in the rendered piano set; A#1 is the lowest
+        // note this window can separate (see BEST_SEPARATION_SHARE).
+        let mut failures = Vec::new();
+        for (name, f0) in [("A#1", 58.27), ("C2", 65.41), ("E2", 82.41)] {
+            let a = analyzed(&piano_tone(f0, 0.2, 1e-4));
+            let own = a.evidence(f0, &[f0]).map_or(0.0, |d| d.dominance);
+            if own < START_DOMINANCE_SINGLE {
+                failures.push(format!("{name}: dominance {own:.2} < {START_DOMINANCE_SINGLE}"));
+            }
+            for (n, label) in [(-1.0, "below"), (1.0, "above")] {
+                let rival = semitones(f0, n);
+                let d = a.evidence(rival, &[rival]).map_or(0.0, |d| d.dominance);
+                if d >= SUSTAIN_FOR_TEST {
+                    failures.push(format!("{name}: semitone {label} looks present (dominance {d:.2})"));
+                }
+            }
+        }
+        assert!(failures.is_empty(), "{failures:#?}");
+    }
+
+    #[test]
+    fn test_inner_note_of_a_piano_chord_starts_and_its_neighbour_does_not() {
+        use crate::tracker::START_DOMINANCE_CHORD;
+        // C3-E3-G3 under E4 (rendered piano set): an inner chord note must
+        // clear the chord start threshold, even with its piano-sharp partials.
+        let (c3, e3, f3, g3, e4) = (130.81, 164.81, 174.61, 196.0, 329.63);
+        let chord = mix(&[piano_tone(c3, 0.1, 1e-4), piano_tone(e3, 0.1, 1e-4), piano_tone(g3, 0.1, 1e-4), piano_tone(e4, 0.1, 1e-4)]);
+        let a = analyzed(&chord);
+        let played = a.evidence(e3, &[c3, e3, g3, e4]).map_or(0.0, |d| d.dominance);
+        assert!(played >= START_DOMINANCE_CHORD, "E3 in its chord: dominance {played:.2} < {START_DOMINANCE_CHORD}");
+        // Score wrongly expects F3 where E3 is played: still a wrong note.
+        let wrong = a.evidence(f3, &[c3, f3, g3, e4]).map_or(0.0, |d| d.dominance);
+        assert!(wrong < SUSTAIN_FOR_TEST, "F3 accepted in place of E3 (dominance {wrong:.2})");
+    }
+
+    #[test]
+    fn test_chord_played_a_semitone_below_the_score_is_rejected() {
+        // Played G2-B2-D3-F4, but the score has the whole chord a semitone up:
+        // every expected note is wrong and none may be accepted.
+        let (g2, b2, d3, f4) = (98.0, 123.47, 146.83, 349.23);
+        let chord = mix(&[piano_tone(g2, 0.1, 1e-4), piano_tone(b2, 0.1, 1e-4), piano_tone(d3, 0.1, 1e-4), piano_tone(f4, 0.1, 1e-4)]);
+        let a = analyzed(&chord);
+        let up = |hz: f64| semitones(hz, 1.0);
+        let score = [up(g2), up(b2), up(d3), up(f4)];
+        for (name, hz) in [("G#2", up(g2)), ("C3", up(b2)), ("D#3", up(d3)), ("F#4", up(f4))] {
+            let d = a.evidence(hz, &score).map_or(0.0, |d| d.dominance);
+            assert!(d < SUSTAIN_FOR_TEST, "{name} accepted from a chord played a semitone lower (dominance {d:.2})");
+        }
+    }
+
+    /// Below the tracker's lowest threshold: a neighbour that measures this
+    /// can neither start nor keep a note going.
+    const SUSTAIN_FOR_TEST: f32 = crate::tracker::SUSTAIN_DOMINANCE;
+
     #[test]
     fn test_low_e2_pitch_within_10_cents_and_f2_rejected() {
         const E2: f64 = 82.41;
@@ -399,3 +733,7 @@ mod tests {
         }
     }
 }
+
+
+
+
