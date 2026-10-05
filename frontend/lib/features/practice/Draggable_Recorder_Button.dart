@@ -29,11 +29,16 @@ class Draggable_Recorder_Button extends StatefulWidget {
   /// into Rust and count the player in.
   final Future<bool> Function()? onBeforeCapture;
 
+  /// Called with a message for the player when recording cannot start
+  /// (microphone permission, no microphone) or goes wrong while it runs.
+  final void Function(String message)? onError;
+
   const Draggable_Recorder_Button({
     super.key,
     required this.onToggle,
     this.onPhrase,
     this.onBeforeCapture,
+    this.onError,
     this.accent = const Color(0xFF9A7A2C),
   });
 
@@ -66,6 +71,9 @@ class _Draggable_Recorder_ButtonState extends State<Draggable_Recorder_Button>
   StreamSubscription<List<Notes>>? _phraseSubscription;
   int _phraseNumber = 0;
 
+  /// The last audio problem shown, so a persistent one is said once.
+  String? _lastProblem;
+
   // Approximate footprint of the whole draggable widget (label row +
   // spacing + the 100x100 icon stack) — used to keep it fully on-screen
   // when dragged, since Positioned won't clamp this for us.
@@ -89,6 +97,8 @@ class _Draggable_Recorder_ButtonState extends State<Draggable_Recorder_Button>
   @override
   void dispose() {
     _timer?.cancel();
+    // Leaving the screen mid-recording must not leave the microphone open.
+    if (_isRecording) AudioNative().end();
     _phraseSubscription?.cancel();
     _pulseCtrl.dispose();
     _elapsed.dispose();
@@ -96,8 +106,11 @@ class _Draggable_Recorder_ButtonState extends State<Draggable_Recorder_Button>
     super.dispose();
   }
 
-  Future<void> _startRecording() async {
+  /// Subscribes to Rust's notes and opens the microphone. Returns null when
+  /// recording, or a message for the player when it could not start.
+  Future<String?> _startRecording() async {
     _phraseNumber = 0;
+    _lastProblem = null;
 
     try {
       await RustBridge.ensureInitialized();
@@ -122,30 +135,47 @@ class _Draggable_Recorder_ButtonState extends State<Draggable_Recorder_Button>
       // initSession/getUserData/notesStream, because listen_audio and
       // stop_audio are `#[frb(ignore)]` in native_ffi/src/lib.rs and reach
       // Dart as C symbols instead (see Audio_Native.dart).
-      AudioNative().begin();
-      if (!AudioNative().isConnected) {
-        debugPrint(
-          '[Diagnostics] recording started with no native audio bridge — '
-          'notesStream is subscribed but Rust is not capturing, so no '
-          'phrases will arrive.',
-        );
+      final failure = AudioNative().begin();
+      if (failure != null) {
+        await _phraseSubscription?.cancel();
+        _phraseSubscription = null;
       }
+      return failure;
     } catch (error, stackTrace) {
       debugPrint('[Diagnostics] failed to start recording: $error');
       debugPrintStack(stackTrace: stackTrace);
+      await _phraseSubscription?.cancel();
+      _phraseSubscription = null;
+      return 'Could not start recording: $error';
     }
   }
 
+  /// Shows a problem Rust noticed while recording (a silent microphone, a
+  /// stream that stopped), once.
+  void _reportAudioProblem() {
+    final problem = AudioNative().problem();
+    if (problem == null || problem.message == _lastProblem) return;
+    _lastProblem = problem.message;
+    debugPrint('[Diagnostics] audio problem: $problem');
+    widget.onError?.call(problem.message);
+  }
+
   Future<void> _stopRecording() async {
-    // Stop the microphone first, then keep listening briefly before dropping
-    // the subscription: Rust only sends a note once it has ended, so the
-    // last one can still be on its way when the microphone stops.
+    // Stop the microphone first. Rust then finishes the audio it already
+    // captured and sends the note that was still sounding, so keep listening
+    // until it has: asking for the unsent notes waits for exactly that, and
+    // whatever Rust could not send ends up there instead.
     AudioNative().end();
-    await Future<void>.delayed(const Duration(milliseconds: 250));
+    try {
+      await getUserData();
+    } catch (error) {
+      debugPrint('[Diagnostics] waiting for the last notes failed: $error');
+    }
+    // Let the notes just sent reach the listener before it goes.
+    await Future<void>.delayed(const Duration(milliseconds: 50));
     await _phraseSubscription?.cancel();
     _phraseSubscription = null;
   }
-
 
   Future<void> _toggle() async {
     if (_starting) return;
@@ -164,17 +194,39 @@ class _Draggable_Recorder_ButtonState extends State<Draggable_Recorder_Button>
       return;
     }
 
+    // Permission and audio session first: the system prompt must not land
+    // in the middle of the count-in.
+    setState(() => _starting = true);
+    final blocked = await AudioNative().prepare();
+    if (!mounted) return;
+    if (blocked != null) {
+      setState(() => _starting = false);
+      widget.onError?.call(blocked);
+      return;
+    }
+
     final before = widget.onBeforeCapture;
     if (before != null) {
-      setState(() => _starting = true);
       final proceed = await before();
       if (!mounted) return;
-      setState(() => _starting = false);
-      if (!proceed) return;
+      if (!proceed) {
+        setState(() => _starting = false);
+        return;
+      }
     } else {
       // With a count-in the haptics already happened; a vibration now
       // could reach the microphone as it opens.
       HapticFeedback.mediumImpact();
+    }
+
+    // Open the microphone before showing "recording": if it cannot open the
+    // player must be told, not left talking to a dead button.
+    final failure = await _startRecording();
+    if (!mounted) return;
+    setState(() => _starting = false);
+    if (failure != null) {
+      widget.onError?.call(failure);
+      return;
     }
 
     setState(() => _isRecording = true);
@@ -183,8 +235,8 @@ class _Draggable_Recorder_ButtonState extends State<Draggable_Recorder_Button>
     _pulseCtrl.repeat();
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
       _elapsed.value += const Duration(seconds: 1);
+      _reportAudioProblem();
     });
-    _startRecording();
     widget.onToggle(true);
   }
 

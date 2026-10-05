@@ -634,6 +634,7 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
               onToggle: _onRecordingChanged,
               onPhrase: _onPhraseReceived,
               onBeforeCapture: _beforeCapture,
+              onError: _say,
               accent: PracticeSettingsDrawer.feedbackColor(_feedback),
             ),
 

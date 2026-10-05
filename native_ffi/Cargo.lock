@@ -1094,6 +1094,7 @@ dependencies = [
  "cpal",
  "flutter_rust_bridge",
  "hound",
+ "libc",
  "num-complex",
  "once_cell",
  "pitch-detection",

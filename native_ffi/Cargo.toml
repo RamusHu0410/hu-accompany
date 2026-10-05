@@ -22,6 +22,7 @@ tract-onnx = "0.23" # pure-Rust ONNX runtime for the bundled pitch model (no nat
 
 [dev-dependencies]
 hound = "3.5" # WAV read/write for the replay and live harnesses
+libc = "0.2" # per-thread CPU time for the realtime harness
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(frb_expand)'] }

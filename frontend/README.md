@@ -89,10 +89,12 @@ means updating the imports that name it.
 
 ```
 tap mic
+  └─ Audio_Native.prepare()          iOS: microphone permission + audio session (AppDelegate.swift)
   └─ Exercise_Session.prepare()
        ├─ Rust_Session.load()        initSession(): tells Rust which notes to expect
        └─ 4-beat count-in
-  └─ Audio_Native.begin()            start_recording() → Rust opens the mic
+  └─ Audio_Native.begin()            start_recording() → Rust opens the mic; a failure is shown, not recorded over
+       └─ every second: Audio_Native.problem()   a silent mic, a stalled stream, processing that fell behind
 
 Rust hears notes ──notesStream()──▶ Draggable_Recorder_Button
                                        └─ ExerciseSession.onRustBatch()
@@ -101,7 +103,7 @@ Rust hears notes ──notesStream()──▶ Draggable_Recorder_Button
                                                       └─ report ─▶ Phrase_Feedback_Pill + Practice_Companion
 
 tap mic again
-  └─ Audio_Native.end() + a short wait for the last note to arrive
+  └─ Audio_Native.end() + getUserData() (waits until Rust has sent the last note)
   └─ ExerciseSession.finish()        getUserData() recovers a note still sounding; remaining bars are sent
 ```
 
@@ -118,7 +120,7 @@ heard, and the unheard notes are reported as missed.
 | `features/practice/Phrase_Feedback.dart` | The good/fair/off mood bands (80+, 55+, below). The companion, recorder glow, drawer and card all use it. |
 | `integrations/audio/Rust_Bridge.dart` | Starts the flutter_rust_bridge runtime (see below). |
 | `integrations/audio/Rust_Session.dart` | `initSession` and `getUserData` wrappers. |
-| `integrations/audio/Audio_Native.dart` | Mic start/stop through `dart:ffi`. |
+| `integrations/audio/Audio_Native.dart` | Mic permission, start/stop and error status through `dart:ffi` and the `audio_session` channel. |
 | `integrations/feedback/Phrase_send2_server.dart` | Converts Rust notes into the backend's format and sends each phrase. |
 
 ## iOS native build setup — keep these
@@ -132,7 +134,8 @@ settings below. Each one breaks something specific if removed.
 | `OTHER_LDFLAGS[sdk=iphoneos*] = -force_load $(PROJECT_DIR)/libnative_ffi.a` and the `iphonesimulator` equivalent with `libnative_ffi_sim.a` | Runner target | Wrong library linked for the platform, or bridge functions left out of the app |
 | The `.a` files **not** in "Link Binary With Libraries" | Runner target | Phone build fails, because it links the simulator library |
 | `DEAD_CODE_STRIPPING = NO` | Runner Release and Profile | Release builds remove the Rust bridge: the app starts but Rust never loads |
-| `DART_EXPORT` on `start_recording` / `stop_recording` | `ios/recording_bridge.c` | Release builds hide the functions, and the mic never starts |
+| `DART_EXPORT` on `start_recording` / `stop_recording` / `recording_status` / `recording_message` | `ios/recording_bridge.c` | Release builds hide the functions, and the mic never starts |
+| `AVAudioSession` set to play-and-record, and the permission request | `ios/Runner/AppDelegate.swift`, called by `Audio_Native.prepare()` | The mic opens but delivers silence (the default session cannot record), or permission is never asked |
 | `ExternalLibrary.process()` on iOS | `Rust_Bridge.dart` | "Failed to load dynamic library native_ffi.framework" |
 
 Only `ios/recording_bridge.c` is compiled. The copy in `ios/Runner/` is

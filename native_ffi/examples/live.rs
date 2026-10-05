@@ -2,13 +2,14 @@
 //!
 //! cargo run --example live -- <piece.json> [--seconds N] [--save take.wav] [--offset-ms N]
 //!
-//! The score clock starts when recording starts. `--save` writes exactly what
+//! The score's clock starts at your first note of the piece, as in the app.
+//! `--save` writes exactly what
 //! the processing loop received (mono, device sample rate), so any take can be
 //! replayed later with `cargo run --example replay -- take.wav <piece.json>`.
 
 mod common;
 
-use native_ffi::audio::{create_stream, start_processing_loop};
+use native_ffi::audio::{start_processing_loop, Capture};
 use native_ffi::{ACTIVE_PIECE, USER_DATA};
 use std::time::Duration;
 
@@ -31,8 +32,10 @@ fn main() {
     *ACTIVE_PIECE.lock().unwrap() = Some(piece.clone());
 
     // mic -> tee thread (optionally saves WAV) -> processing loop
-    let (mic_tx, mic_rx) = std::sync::mpsc::channel::<Vec<f32>>();
-    let (stream, sample_rate) = create_stream(mic_tx).expect("could not open the microphone");
+    let Capture { stream, sample_rate, chunks: mic_rx, .. } = Capture::open().unwrap_or_else(|e| {
+        eprintln!("could not open the microphone: {e}");
+        std::process::exit(1);
+    });
     let (dsp_tx, dsp_rx) = std::sync::mpsc::channel::<Vec<f32>>();
     let worker = std::thread::spawn(move || start_processing_loop(dsp_rx, sample_rate));
 

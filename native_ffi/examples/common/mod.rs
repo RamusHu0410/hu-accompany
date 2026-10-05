@@ -37,6 +37,10 @@ pub fn run_pipeline(mono: &[f32], sample_rate: u32, piece: &PieceData) -> Vec<No
     // EVIDENCE=dsp: compare against the DSP-only pipeline.
     let neural = std::env::var("EVIDENCE").map_or(true, |v| v != "dsp");
     native_ffi::USE_NEURAL.store(neural, std::sync::atomic::Ordering::Relaxed);
+    // ANCHOR=off: the score's clock starts at sample 0, not at the first note.
+    if let Ok(v) = std::env::var("ANCHOR") {
+        native_ffi::ANCHOR_CLOCK.store(v != "off", std::sync::atomic::Ordering::Relaxed);
+    }
     *USER_DATA.lock().unwrap() = None;
     *ACTIVE_PIECE.lock().unwrap() = Some(piece.clone());
 
@@ -61,9 +65,9 @@ pub fn flag<'a>(args: &'a [String], name: &str) -> Option<&'a str> {
 }
 
 /// Loads a piece and shifts every note by `offset_ms`.
-/// Real recordings start with some silence before the first note, but the
-/// detector's clock starts at the first sample, so the score must be shifted
-/// to line up (there is no automatic alignment yet).
+/// The detector's clock starts at the first note it hears (the app counts the
+/// player in with the mic open), so recordings need no alignment; the shift
+/// only matters with ANCHOR_CLOCK off, or to test a late start.
 pub fn load_piece(path: &str, offset_ms: f32) -> PieceData {
     let json = std::fs::read_to_string(path)
         .unwrap_or_else(|e| panic!("could not read piece file {path}: {e}"));
