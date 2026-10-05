@@ -32,7 +32,7 @@ pub fn create_stream(
     let host = cpal::default_host();
     let device = host
         .default_input_device()
-        .expect("No Input Devices Found!!");
+        .ok_or("no input device found")?;
     let config = device.default_input_config()?;
     let sample_rate = config.sample_rate().0;
     let channels = config.channels() as usize;
@@ -48,7 +48,7 @@ pub fn create_stream(
             err_fn,
             None,
         )?,
-        _ => panic!("Unsupported sample format! (Expected f32)"),
+        other => return Err(format!("unsupported sample format {other:?} (expected f32)").into()),
     };
     stream.play()?;
     Ok((stream, sample_rate))

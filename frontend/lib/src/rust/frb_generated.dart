@@ -65,7 +65,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.13.0';
 
   @override
-  int get rustContentHash => 407427423;
+  int get rustContentHash => -2074753039;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -80,8 +80,6 @@ abstract class RustLibApi extends BaseApi {
   Future<String> crateApiGetUserData();
 
   Future<void> crateApiInitSession({required String jsonData});
-
-  Future<String> crateApiInjectTestPhrase({required String jsonData});
 
   Stream<List<Notes>> crateApiNotesStream();
 }
@@ -150,36 +148,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       const TaskConstMeta(debugName: "init_session", argNames: ["jsonData"]);
 
   @override
-  Future<String> crateApiInjectTestPhrase({required String jsonData}) {
-    return handler.executeNormal(
-      NormalTask(
-        callFfi: (port_) {
-          final serializer = SseSerializer(generalizedFrbRustBinding);
-          sse_encode_String(jsonData, serializer);
-          pdeCallFfi(
-            generalizedFrbRustBinding,
-            serializer,
-            funcId: 3,
-            port: port_,
-          );
-        },
-        codec: SseCodec(
-          decodeSuccessData: sse_decode_String,
-          decodeErrorData: null,
-        ),
-        constMeta: kCrateApiInjectTestPhraseConstMeta,
-        argValues: [jsonData],
-        apiImpl: this,
-      ),
-    );
-  }
-
-  TaskConstMeta get kCrateApiInjectTestPhraseConstMeta => const TaskConstMeta(
-    debugName: "inject_test_phrase",
-    argNames: ["jsonData"],
-  );
-
-  @override
   Stream<List<Notes>> crateApiNotesStream() {
     final s = RustStreamSink<List<Notes>>();
     unawaited(
@@ -191,7 +159,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             pdeCallFfi(
               generalizedFrbRustBinding,
               serializer,
-              funcId: 4,
+              funcId: 3,
               port: port_,
             );
           },

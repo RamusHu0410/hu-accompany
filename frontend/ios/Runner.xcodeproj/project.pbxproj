@@ -9,8 +9,6 @@
 /* Begin PBXBuildFile section */
 		1498D2341E8E89220040F4C2 /* GeneratedPluginRegistrant.m in Sources */ = {isa = PBXBuildFile; fileRef = 1498D2331E8E89220040F4C2 /* GeneratedPluginRegistrant.m */; };
 		1D70D9540286C1A39A6E8701 /* Pods_Runner.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 09E39CEFD5663CB4CD459B13 /* Pods_Runner.framework */; };
-		2D285BFB3043216C00A7ADBE /* libnative_ffi_sim.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 2D285BFA3043216C00A7ADBE /* libnative_ffi_sim.a */; };
-		2D285BFC3043218E00A7ADBE /* libnative_ffi_sim.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 2D285BFA3043216C00A7ADBE /* libnative_ffi_sim.a */; };
 		2D52E1B72FF01479004C5BAD /* recording_bridge.c in Sources */ = {isa = PBXBuildFile; fileRef = 2D52E1B62FF01479004C5BAD /* recording_bridge.c */; };
 		2DF755B5305203CE0083F04D /* AudioToolbox.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 2DF755B4305203CE0083F04D /* AudioToolbox.framework */; };
 		2DF755B7305204030083F04D /* AVFoundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 2DF755B6305204030083F04D /* AVFoundation.framework */; };
@@ -86,7 +84,6 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				2D285BFB3043216C00A7ADBE /* libnative_ffi_sim.a in Frameworks */,
 				B0B55CE6408977C3A030DD48 /* Pods_RunnerTests.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -97,7 +94,6 @@
 			files = (
 				2DF755B7305204030083F04D /* AVFoundation.framework in Frameworks */,
 				2DF755B5305203CE0083F04D /* AudioToolbox.framework in Frameworks */,
-				2D285BFC3043218E00A7ADBE /* libnative_ffi_sim.a in Frameworks */,
 				78A318202AECB46A00862997 /* FlutterGeneratedPluginSwiftPackage in Frameworks */,
 				1D70D9540286C1A39A6E8701 /* Pods_Runner.framework in Frameworks */,
 			);
@@ -484,6 +480,17 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 7AFA3C8E1D35360C0083082E /* Release.xcconfig */;
 			buildSettings = {
+				DEAD_CODE_STRIPPING = NO;
+				"OTHER_LDFLAGS[sdk=iphoneos*]" = (
+					"$(inherited)",
+					"-force_load",
+					"$(PROJECT_DIR)/libnative_ffi.a",
+				);
+				"OTHER_LDFLAGS[sdk=iphonesimulator*]" = (
+					"$(inherited)",
+					"-force_load",
+					"$(PROJECT_DIR)/libnative_ffi_sim.a",
+				);
 				"EXCLUDED_ARCHS[sdk=iphonesimulator*]" = x86_64;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
@@ -689,6 +696,16 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 9740EEB21CF90195004384FC /* Debug.xcconfig */;
 			buildSettings = {
+				"OTHER_LDFLAGS[sdk=iphoneos*]" = (
+					"$(inherited)",
+					"-force_load",
+					"$(PROJECT_DIR)/libnative_ffi.a",
+				);
+				"OTHER_LDFLAGS[sdk=iphonesimulator*]" = (
+					"$(inherited)",
+					"-force_load",
+					"$(PROJECT_DIR)/libnative_ffi_sim.a",
+				);
 				"EXCLUDED_ARCHS[sdk=iphonesimulator*]" = x86_64;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
@@ -717,6 +734,17 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 7AFA3C8E1D35360C0083082E /* Release.xcconfig */;
 			buildSettings = {
+				DEAD_CODE_STRIPPING = NO;
+				"OTHER_LDFLAGS[sdk=iphoneos*]" = (
+					"$(inherited)",
+					"-force_load",
+					"$(PROJECT_DIR)/libnative_ffi.a",
+				);
+				"OTHER_LDFLAGS[sdk=iphonesimulator*]" = (
+					"$(inherited)",
+					"-force_load",
+					"$(PROJECT_DIR)/libnative_ffi_sim.a",
+				);
 				"EXCLUDED_ARCHS[sdk=iphonesimulator*]" = x86_64;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;

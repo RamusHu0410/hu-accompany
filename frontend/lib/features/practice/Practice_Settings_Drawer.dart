@@ -12,6 +12,7 @@ class PracticeSettingsDrawer extends StatelessWidget {
   final PhraseFeedback feedback;
   final VoidCallback onOpenLibrary;
   final VoidCallback onClearAnnotations;
+  final VoidCallback onOpenExercises;
 
   const PracticeSettingsDrawer({
     super.key,
@@ -20,6 +21,7 @@ class PracticeSettingsDrawer extends StatelessWidget {
     required this.feedback,
     required this.onOpenLibrary,
     required this.onClearAnnotations,
+    required this.onOpenExercises,
   });
 
   static Color feedbackColor(PhraseFeedback feedback) => switch (feedback) {
@@ -87,6 +89,11 @@ class PracticeSettingsDrawer extends StatelessWidget {
               icon: Icons.library_music_outlined,
               label: hasScore ? 'Change score' : 'Open the library',
               onTap: onOpenLibrary,
+            ),
+            _DrawerAction(
+              icon: Icons.music_note_rounded,
+              label: 'Practise an exercise',
+              onTap: onOpenExercises,
             ),
             _DrawerAction(
               icon: Icons.layers_clear_outlined,

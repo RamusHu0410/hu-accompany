@@ -31,7 +31,6 @@ flutter:
   uses-material-design: true
 
   assets:
-    - assets/sample/phrase_imperfect.json
     - assets/images/wave.png
     - assets/images/Tsundere_Music.png
     - assets/images/Tsundere_Music_Listen.png

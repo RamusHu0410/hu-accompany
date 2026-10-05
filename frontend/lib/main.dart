@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:hu_accomponist/features/practice/Draggable_Recorder_Button.dart';
 import 'package:hu_accomponist/features/practice/Drawing_Overlay.dart';
@@ -18,7 +17,9 @@ import 'package:hu_accomponist/features/practice/Practice_Tool_Buttons.dart';
 import 'package:hu_accomponist/features/practice/Practice_Pen_Panel.dart';
 import 'package:hu_accomponist/features/practice/Practice_Settings_Drawer.dart';
 import 'package:hu_accomponist/features/practice/Practice_Companion.dart';
-import 'package:hu_accomponist/integrations/audio/Test_Phrase_Injector.dart';
+import 'package:hu_accomponist/features/practice/Exercise_Display.dart';
+import 'package:hu_accomponist/features/practice/Exercise_Picker.dart';
+import 'package:hu_accomponist/features/practice/Exercise_Session.dart';
 import 'package:hu_accomponist/integrations/audio/Rust_Bridge.dart';
 
 
@@ -100,6 +101,10 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
   /// Purely presentational -- [_feedback] still drives the recorder halo,
   /// exactly as before.
   PhraseReport? _latestReport;
+
+  /// The exercise being practised, if any. While set it replaces the PDF,
+  /// and it is what Rust listens for and the backend judges against.
+  ExerciseSession? _exercise;
   final DrawingController _drawing = DrawingController();
 
   /// Call this from the Flutter-Rust-Bridge performance-result callback.
@@ -121,6 +126,9 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
     if (mounted) {
       setState(() => _isRecording = isRecording);
     }
+    if (!isRecording) {
+      _exercise?.finish();
+    }
     if (isRecording) {
       // A fresh recording gets a fresh session — the backend assigns the
       // real session id on phrase 1's response (see below).
@@ -141,11 +149,6 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
   /// visible rather than sitting as two literals inside the request.
   static const double _assumedBpm = 96;
   static const String _assumedTimeSignature = '4/4';
-
-  /// Overridden only by the debug sample injector, which knows the real
-  /// tempo and metre for its fixture.
-  double? _sampleBpm;
-  String? _sampleTimeSignature;
 
   /// Ground-truth notes for the loaded piece, in the backend's
   /// expected_notes shape. Empty until something populates it: the OMR
@@ -178,6 +181,12 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
   ///     the diagnostics line below, which says so explicitly in the
   ///     terminal instead of failing silently.
   Future<void> _onPhraseReceived(int phraseNumber, List<Notes> notes) async {
+    final exercise = _exercise;
+    if (exercise != null) {
+      exercise.onRustBatch(notes);
+      return;
+    }
+
     if (_expectedNotes.isEmpty) {
       debugPrint(
         '[Diagnostics] phrase $phraseNumber: no expected_notes for '
@@ -190,8 +199,8 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
     final report = await PhraseUploadService.sendPhrase(
       sessionId: _feedbackSessionId,
       phraseNumber: phraseNumber,
-      bpm: _sampleBpm ?? _assumedBpm,
-      timeSignature: _sampleTimeSignature ?? _assumedTimeSignature,
+      bpm: _assumedBpm,
+      timeSignature: _assumedTimeSignature,
       piece: _piece,
       expectedNotes: _expectedNotes,
       userNotes: notes,
@@ -232,6 +241,7 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
 
   // Swaps in a new score, or clears it if [selected] is null.
   void _setScore(SelectedSheet? selected) {
+    if (selected != null) _endExercise();
     final pdfBytes = selected?.pdfBytes;
     _piece = selected == null
         ? const PieceInfo(title: '', composer: '', composedDate: '')
@@ -248,8 +258,63 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
     previousController?.dispose();
   }
 
+  // ── Exercises ──────────────────────────────────────────────────────
+
+  Future<void> _openExercisePicker() async {
+    final choice = await ExercisePicker.show(context);
+    if (choice == null || !mounted) return;
+    setState(() {
+      _endExercise();
+      _exercise = ExerciseSession(
+        exercise: choice.exercise,
+        bpm: choice.bpm,
+        octave: choice.octave,
+        onReport: _onExerciseReport,
+      );
+      _latestReport = null;
+      _feedback = PhraseFeedback.none;
+    });
+  }
+
+  void _endExercise() {
+    _exercise?.dispose();
+    _exercise = null;
+  }
+
+  void _onExerciseReport(PhraseReport report) {
+    if (!mounted) return;
+    setState(() => _latestReport = report);
+    setPhraseFeedback(PhraseFeedback.forScore(report.scores.overall));
+  }
+
+  /// Runs between the mic tap and the microphone opening. Recording is
+  /// refused without an exercise: Rust only listens for the notes of a
+  /// loaded piece, and reading notes off a PDF (/api/score/process) does
+  /// not work yet, so a score alone gives Rust nothing to listen for.
+  Future<bool> _beforeCapture() async {
+    final exercise = _exercise;
+    if (exercise == null) {
+      _say(
+        'Pick an exercise first. Following a PDF score needs note '
+        'recognition, which is not working yet.',
+      );
+      return false;
+    }
+    final error = await exercise.prepare();
+    if (error != null && error != 'cancelled') _say(error);
+    return error == null;
+  }
+
+  void _say(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), duration: const Duration(seconds: 4)),
+    );
+  }
+
   @override
   void dispose() {
+    _exercise?.dispose();
     _pageController?.dispose();
     _drawing.dispose();
     super.dispose();
@@ -270,37 +335,6 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
   bool _showPenSettings = false;
   Color _penColor = PracticePalette.gold;
   double _penSize = 3.0;
-
-  /// Debug only. Pushes the canned sample phrase through Rust so the full
-  /// Rust -> Dart -> Python -> Dart chain can be exercised without working
-  /// audio capture. Rust's own status string is surfaced, because the most
-  /// common outcome is "no listener" — nothing has subscribed to
-  /// notesStream() until recording has been started at least once.
-  Future<void> _injectSamplePhrase() async {
-    // Stand in for the missing OMR pipeline: without ground truth the
-    // backend has nothing to judge against and rejects the phrase, so the
-    // fixture's own expected_notes/piece/timing are loaded into the session
-    // first. This is exactly the state the app would be in if
-    // /api/score/process were ever called for the loaded score.
-    final sample = await TestPhraseInjector.loadSample();
-    if (sample != null && mounted) {
-      setState(() {
-        _expectedNotes = sample.expectedNotes;
-        _piece = sample.piece;
-        _sampleBpm = sample.bpm;
-        _sampleTimeSignature = sample.timeSignature;
-      });
-    }
-
-    final status = await TestPhraseInjector.injectSample();
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(status),
-        duration: const Duration(seconds: 3),
-      ),
-    );
-  }
 
   void _goToNavPage() async {
     final selected = await Navigator.of(context).push<SelectedSheet>(
@@ -344,6 +378,10 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
           _goToNavPage();
         },
         onClearAnnotations: _drawing.clear,
+        onOpenExercises: () {
+          Navigator.pop(context);
+          _openExercisePicker();
+        },
       ),
       body: SafeArea(
         child: Stack(
@@ -392,22 +430,40 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
                   clipBehavior: Clip.antiAlias,
                   child: Stack(
                     children: [
-                      if (_hasScore)
+                      if (_exercise != null)
+                        Positioned.fill(
+                          child: ExerciseDisplay(session: _exercise!),
+                        )
+                      else if (_hasScore)
                         Positioned.fill(
                           child: Score_Pages_View(controller: _pageController!),
                         )
                       else
-                        const Center(
+                        Center(
                           child: Padding(
-                            padding: EdgeInsets.all(Space.xxl),
-                            child: Text(
-                              'Select a score from the library',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                color: PracticePalette.mutedBrown,
-                                fontSize: 15,
-                                letterSpacing: 0.4,
-                              ),
+                            padding: const EdgeInsets.all(Space.xxl),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Text(
+                                  'Select a score from the library',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    color: PracticePalette.mutedBrown,
+                                    fontSize: 15,
+                                    letterSpacing: 0.4,
+                                  ),
+                                ),
+                                const SizedBox(height: Space.md),
+                                TextButton.icon(
+                                  onPressed: _openExercisePicker,
+                                  icon: const Icon(Icons.music_note_rounded),
+                                  label: const Text('or practise an exercise'),
+                                  style: TextButton.styleFrom(
+                                    foregroundColor: PracticePalette.gold,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ),
@@ -577,22 +633,9 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
             Draggable_Recorder_Button(
               onToggle: _onRecordingChanged,
               onPhrase: _onPhraseReceived,
+              onBeforeCapture: _beforeCapture,
               accent: PracticeSettingsDrawer.feedbackColor(_feedback),
             ),
-
-            // ─────────────────────────────────────────────
-            // DEBUG: inject the sample phrase through Rust
-            // ─────────────────────────────────────────────
-            if (kDebugMode)
-              Positioned(
-                left: Space.lg,
-                bottom: 76,
-                child: PracticeBottomButton(
-                  icon: Icons.science_outlined,
-                  color: PracticePalette.mutedBrown,
-                  onTap: _injectSamplePhrase,
-                ),
-              ),
 
             // ─────────────────────────────────────────────
             // PHRASE FEEDBACK + COMPANION

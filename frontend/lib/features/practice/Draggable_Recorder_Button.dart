@@ -24,10 +24,16 @@ class Draggable_Recorder_Button extends StatefulWidget {
   /// longer invents a client-side session id.
   final void Function(int phraseNumber, List<Notes> notes)? onPhrase;
 
+  /// Runs after the tap and before the microphone starts; return false to
+  /// cancel the recording. The practice screen uses it to load the piece
+  /// into Rust and count the player in.
+  final Future<bool> Function()? onBeforeCapture;
+
   const Draggable_Recorder_Button({
     super.key,
     required this.onToggle,
     this.onPhrase,
+    this.onBeforeCapture,
     this.accent = const Color(0xFF9A7A2C),
   });
 
@@ -39,6 +45,10 @@ class Draggable_Recorder_Button extends StatefulWidget {
 class _Draggable_Recorder_ButtonState extends State<Draggable_Recorder_Button>
     with SingleTickerProviderStateMixin {
   bool _isRecording = false;
+
+  /// True while [Draggable_Recorder_Button.onBeforeCapture] runs, so a
+  /// second tap during the count-in is ignored.
+  bool _starting = false;
   Timer? _timer;
 
   /// Both tick far more often than the rest of the button changes — the
@@ -127,14 +137,19 @@ class _Draggable_Recorder_ButtonState extends State<Draggable_Recorder_Button>
   }
 
   Future<void> _stopRecording() async {
-    // Stop the microphone first, then drop the subscription, so the last
-    // phrase Rust emits still has a listener to arrive at.
+    // Stop the microphone first, then keep listening briefly before dropping
+    // the subscription: Rust only sends a note once it has ended, so the
+    // last one can still be on its way when the microphone stops.
     AudioNative().end();
+    await Future<void>.delayed(const Duration(milliseconds: 250));
     await _phraseSubscription?.cancel();
     _phraseSubscription = null;
   }
 
-  void _toggle() {
+
+  Future<void> _toggle() async {
+    if (_starting) return;
+
     if (_isRecording) {
       // Lighter than the start tick: stopping is a release, and the two
       // being distinguishable by feel means the button can be operated
@@ -144,19 +159,33 @@ class _Draggable_Recorder_ButtonState extends State<Draggable_Recorder_Button>
       setState(() => _isRecording = false);
       _pulseCtrl.duration = _idlePeriod;
       _pulseCtrl.repeat();
-      _stopRecording();
-    } else {
-      HapticFeedback.mediumImpact();
-      setState(() => _isRecording = true);
-      _elapsed.value = Duration.zero;
-      _pulseCtrl.duration = _recordingPeriod;
-      _pulseCtrl.repeat();
-      _timer = Timer.periodic(const Duration(seconds: 1), (_) {
-        _elapsed.value += const Duration(seconds: 1);
-      });
-      _startRecording();
+      await _stopRecording();
+      widget.onToggle(false);
+      return;
     }
-    widget.onToggle(_isRecording);
+
+    final before = widget.onBeforeCapture;
+    if (before != null) {
+      setState(() => _starting = true);
+      final proceed = await before();
+      if (!mounted) return;
+      setState(() => _starting = false);
+      if (!proceed) return;
+    } else {
+      // With a count-in the haptics already happened; a vibration now
+      // could reach the microphone as it opens.
+      HapticFeedback.mediumImpact();
+    }
+
+    setState(() => _isRecording = true);
+    _elapsed.value = Duration.zero;
+    _pulseCtrl.duration = _recordingPeriod;
+    _pulseCtrl.repeat();
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+      _elapsed.value += const Duration(seconds: 1);
+    });
+    _startRecording();
+    widget.onToggle(true);
   }
 
   static String _format(Duration elapsed) {
