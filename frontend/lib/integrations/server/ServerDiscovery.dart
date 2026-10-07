@@ -10,6 +10,10 @@ class ServerDiscovery {
 
   static String? _cachedBaseUrl;
 
+  /// Skips discovery and uses [baseUrl], for tests that talk to a server they started.
+  @visibleForTesting
+  static void useBaseUrl(String baseUrl) => _cachedBaseUrl = baseUrl;
+
   /// Cleans up the hostname mDNS hands back before it is used in a URL.
   ///
   /// Two things need fixing. A Bonjour hostname is fully qualified and ends

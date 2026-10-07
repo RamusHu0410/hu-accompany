@@ -17,6 +17,9 @@ dependencies:
   nsd: ^5.0.1
   flutter_rust_bridge: 2.13.0
   shared_preferences: ^2.5.4
+  record: ^7.1.1
+  just_audio: ^0.10.6
+  path_provider: ^2.1.6
 
 dev_dependencies:
   flutter_test:

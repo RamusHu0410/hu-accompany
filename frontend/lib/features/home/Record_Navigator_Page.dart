@@ -11,6 +11,7 @@ import 'package:hu_accomponist/features/search/Music_Library_Page.dart';
 import 'package:hu_accomponist/features/practice/Open_Practice.dart';
 import 'package:hu_accomponist/integrations/scores/score_models.dart';
 import 'package:hu_accomponist/features/quiz/Quiz_Home_Page.dart';
+import 'package:hu_accomponist/features/hum/hum_page.dart';
 import 'package:hu_accomponist/main.dart';
 
 /// One destination in the record crate — everything needed to draw its
@@ -69,6 +70,12 @@ class _Record_Navigator_PageState extends State<Record_Navigator_Page>
       sublabel: 'theory & history',
       diskColor: TurntablePalette.diskQuiz,
       pageBuilder: (_) => const Quiz_Home_Page(),
+    ),
+    _RecordEntry(
+      title: 'HUM',
+      sublabel: 'make a song',
+      diskColor: TurntablePalette.diskHum,
+      pageBuilder: (_) => const HumPage(),
     ),
   ];
 

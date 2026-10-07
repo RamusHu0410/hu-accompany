@@ -1,0 +1,129 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+import 'package:hu_accomponist/features/hum/hum_controller.dart';
+import 'package:hu_accomponist/features/hum/hum_page.dart';
+
+import 'support/hum_fakes.dart';
+
+void main() {
+  late FakeRecorder recorder;
+  late FakeHumRepository repository;
+  late HumController controller;
+
+  setUp(() {
+    recorder = FakeRecorder();
+    repository = FakeHumRepository();
+    controller = HumController(
+      repository: repository,
+      recorder: recorder,
+      player: FakePlayer(),
+    );
+  });
+
+  tearDown(() => controller.dispose());
+
+  Future<void> show(WidgetTester tester) async {
+    tester.view.physicalSize = const Size(900, 2200);
+    tester.view.devicePixelRatio = 2;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(MaterialApp(home: HumPage(controller: controller)));
+  }
+
+  Future<void> hum(WidgetTester tester) async {
+    await tester.runAsync(() async {
+      await controller.startHum();
+      await controller.stopHum();
+    });
+    await tester.pump();
+  }
+
+  testWidgets('starts with just the hum button', (tester) async {
+    await show(tester);
+
+    expect(find.text('Hold to hum'), findsOneWidget);
+    expect(find.text('Your notes will show up here'), findsOneWidget);
+    expect(find.text('YOUR SONG'), findsNothing);
+    expect(find.text('CHANGE IT WITH WORDS'), findsNothing);
+  });
+
+  testWidgets('shows the song, its controls and the chat once there is a hum', (
+    tester,
+  ) async {
+    await show(tester);
+    await hum(tester);
+
+    expect(find.text('G major  ·  97 bpm  ·  9 notes'), findsOneWidget);
+    expect(find.text('YOUR SONG'), findsOneWidget);
+    expect(find.text('Epic'), findsOneWidget);
+    expect(find.text('Simple'), findsOneWidget);
+    expect(find.text('Mood'), findsOneWidget);
+    expect(find.text('CHANGE IT WITH WORDS'), findsOneWidget);
+    expect(find.text('Your notes will show up here'), findsNothing);
+  });
+
+  testWidgets('picking Simple makes the song with the simple engine', (
+    tester,
+  ) async {
+    await show(tester);
+    await hum(tester);
+
+    await tester.tap(find.text('Simple'));
+    await tester.pump();
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 50)),
+    );
+    await tester.pump();
+
+    expect(repository.songCalls.last.$1.apiName, 'simple');
+  });
+
+  testWidgets('a suggestion chip talks to the song and shows the reply', (
+    tester,
+  ) async {
+    await show(tester);
+    await hum(tester);
+
+    await tester.tap(find.text('Make it faster'));
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 50)),
+    );
+    await tester.pump();
+
+    expect(repository.talkTexts, ['Make it faster']);
+    expect(find.text('A little quicker now!'), findsOneWidget);
+  });
+
+  testWidgets('a hum the server refuses shows why', (tester) async {
+    repository.uploadError = silentHum;
+    await show(tester);
+    await hum(tester);
+
+    expect(find.text(silentHum.message), findsOneWidget);
+    expect(find.text('YOUR SONG'), findsNothing);
+  });
+
+  testWidgets('holding the button hums, and letting go finishes it', (
+    tester,
+  ) async {
+    await show(tester);
+
+    final hold = await tester.startGesture(
+      tester.getCenter(find.byIcon(Icons.mic_rounded)),
+    );
+    await tester.pump(
+      const Duration(milliseconds: 700),
+    ); // past the long-press delay
+    expect(find.text('Listening... let go when you are done'), findsOneWidget);
+
+    await hold.up();
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 50)),
+    );
+    await tester.pump();
+
+    expect(recorder.starts, 1);
+    expect(repository.uploads, 1);
+    expect(find.text('YOUR SONG'), findsOneWidget);
+  });
+}
