@@ -6,6 +6,34 @@ django
 # libpq/pg_config is needed to install.
 psycopg[binary]
 
+# Hum -> song (the hum app: hum/engine). FluidSynth, the program that turns MIDI into sound, is
+# separate: `brew install fluid-synth` on macOS, `apt install fluidsynth` on Debian/Ubuntu.
+numpy
+scipy
+music21
+pydantic
+librosa
+soundfile
+pretty-midi
+mido
+pedalboard
+av
+arvo
+# Talk mode: Gemini works out what was asked, ElevenLabs hears and speaks it.
+google-genai
+elevenlabs
+# basic-pitch finds the notes in a hum. Its normal install pulls in TensorFlow, which this app
+# doesn't use (it runs basic-pitch's ONNX model with onnxruntime), so install it without its
+# dependencies after the lines above:
+#   pip install --no-deps basic-pitch
+# These are the ones basic-pitch does need from that list:
+mir-eval
+resampy
+scikit-learn
+onnxruntime
+# Tests for the hum engine (`python -m pytest`, see pytest.ini)
+pytest
+
 # Config / environment
 python-dotenv
 

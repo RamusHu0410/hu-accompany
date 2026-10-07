@@ -11,6 +11,7 @@ from django.views.static import serve
 urlpatterns = [
     path("", include("api.urls")),
     path("", include("scores.urls")),
+    path("", include("hum.urls")),
     re_path(r'^storage/(?P<path>.*)$', serve, {
         'document_root': settings.BASE_DIR / 'storage',
     }),

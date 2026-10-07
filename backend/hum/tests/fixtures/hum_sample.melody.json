@@ -1,0 +1,74 @@
+{
+  "tempo_bpm": 92.2,
+  "key": "D minor",
+  "time_signature": "4/4",
+  "tuning_offset_cents": 16,
+  "notes": [
+    {
+      "pitch": 50,
+      "start_beats": 0.0,
+      "duration_beats": 1.0,
+      "velocity": 110
+    },
+    {
+      "pitch": 52,
+      "start_beats": 1.0,
+      "duration_beats": 1.0,
+      "velocity": 109
+    },
+    {
+      "pitch": 53,
+      "start_beats": 2.0,
+      "duration_beats": 2.0,
+      "velocity": 110
+    },
+    {
+      "pitch": 52,
+      "start_beats": 4.0,
+      "duration_beats": 0.333333,
+      "velocity": 108
+    },
+    {
+      "pitch": 53,
+      "start_beats": 4.333333,
+      "duration_beats": 0.333333,
+      "velocity": 108
+    },
+    {
+      "pitch": 52,
+      "start_beats": 4.666667,
+      "duration_beats": 0.333333,
+      "velocity": 95
+    },
+    {
+      "pitch": 50,
+      "start_beats": 5.0,
+      "duration_beats": 1.0,
+      "velocity": 109
+    },
+    {
+      "pitch": 50,
+      "start_beats": 6.0,
+      "duration_beats": 1.0,
+      "velocity": 109
+    },
+    {
+      "pitch": 52,
+      "start_beats": 7.0,
+      "duration_beats": 1.5,
+      "velocity": 111
+    },
+    {
+      "pitch": 50,
+      "start_beats": 8.5,
+      "duration_beats": 0.5,
+      "velocity": 111
+    },
+    {
+      "pitch": 50,
+      "start_beats": 9.0,
+      "duration_beats": 2.0,
+      "velocity": 110
+    }
+  ]
+}

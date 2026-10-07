@@ -17,11 +17,16 @@ INSTALLED_APPS = [
     "django.contrib.auth",
     "api",
     "scores",
+    "hum",
 ]
 
 # Root directory score files are stored under; the DB stores paths
 # relative to this (e.g. "musicxml/Qm....musicxml").
 STORAGE_ROOT = BASE_DIR / "storage"
+
+# Hummed recordings and the songs made from them (hum app). Kept out of STORAGE_ROOT, which
+# server/urls.py serves publicly.
+HUM_DATA_DIR = Path(os.environ.get("HUM_DATA_DIR", BASE_DIR / "hum_data"))
 
 MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
