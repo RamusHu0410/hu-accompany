@@ -4,7 +4,7 @@
 /// between recordings.
 ///
 /// The three graded bands exist because a single pass/fail cutoff made the
-/// companion swing between delighted and annoyed over a couple of points
+/// feedback flip between good and off over a couple of points
 /// either side of 80, which read as erratic rather than responsive. [fair]
 /// is the middle band: played, not clean, nothing to celebrate or sulk about.
 enum PhraseFeedback {
@@ -14,7 +14,7 @@ enum PhraseFeedback {
   off;
 
   /// The one place these thresholds live. Everything that reacts to a
-  /// phrase score — the companion's sprite, the recorder halo tint, the
+  /// phrase score — the recorder halo tint, the
   /// drawer status row, the feedback card's accent — goes through here, so
   /// they cannot drift apart or disagree about the same number.
   static const int goodAtOrAbove = 80;

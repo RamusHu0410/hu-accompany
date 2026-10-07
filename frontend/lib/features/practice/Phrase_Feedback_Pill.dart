@@ -32,7 +32,7 @@ class PhraseFeedbackPill extends StatelessWidget {
 
   bool get _isGood => _band == PhraseFeedback.good;
 
-  /// Same source of truth as the companion and the recorder halo.
+  /// Same source of truth as the recorder halo.
   Color get _accent => PracticeSettingsDrawer.feedbackColor(_band);
 
   /// How many findings a card this size can carry without covering the
