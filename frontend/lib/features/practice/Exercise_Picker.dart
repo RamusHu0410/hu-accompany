@@ -20,6 +20,8 @@ class ExercisePicker extends StatefulWidget {
   static Future<ExerciseChoice?> show(BuildContext context) {
     return showModalBottomSheet<ExerciseChoice>(
       context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
       backgroundColor: PracticePalette.paper,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(Radii.modal)),
@@ -49,68 +51,79 @@ class _ExercisePickerState extends State<ExercisePicker> {
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Text(
-              'EXERCISE',
-              style: TextStyle(
-                color: PracticePalette.gold,
-                fontSize: 11,
-                letterSpacing: 2.4,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            const SizedBox(height: Space.sm),
-            for (final e in Exercise.all) _exerciseRow(e),
+            Flexible(child: SingleChildScrollView(child: _options())),
             const SizedBox(height: Space.md),
-            _label('Tempo'),
-            _chips<int>(
-              Exercise.tempos,
-              _bpm,
-              (v) => '$v bpm',
-              (v) => setState(() => _bpm = v),
-            ),
-            const SizedBox(height: Space.md),
-            _label('Starting octave'),
-            _chips<int>(
-              Exercise.octaves,
-              _octave,
-              (v) => 'C$v',
-              (v) => setState(() => _octave = v),
-            ),
-            const SizedBox(height: Space.xs),
-            Text(
-              'Higher octaves are detected more accurately.',
-              style: TextStyle(
-                color: PracticePalette.mutedBrown.withValues(alpha: 0.8),
-                fontSize: 12,
-              ),
-            ),
-            const SizedBox(height: Space.lg),
-            PressScale(
-              onTap: () => Navigator.pop(
-                context,
-                ExerciseChoice(_exercise, _bpm, _octave),
-              ),
-              borderRadius: Radii.pillRadius,
-              child: Container(
-                height: 48,
-                alignment: Alignment.center,
-                decoration: const BoxDecoration(
-                  color: PracticePalette.gold,
-                  borderRadius: Radii.pillRadius,
-                ),
-                child: const Text(
-                  'Use this exercise',
-                  style: TextStyle(
-                    color: PracticePalette.paper,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-            ),
+            _confirmButton(),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _options() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'EXERCISE',
+          style: TextStyle(
+            color: PracticePalette.gold,
+            fontSize: 11,
+            letterSpacing: 2.4,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(height: Space.sm),
+        for (final e in Exercise.all) _exerciseRow(e),
+        const SizedBox(height: Space.md),
+        _label('Tempo'),
+        _chips<int>(
+          Exercise.tempos,
+          _bpm,
+          (v) => '$v bpm',
+          (v) => setState(() => _bpm = v),
+        ),
+        const SizedBox(height: Space.md),
+        _label('Starting octave'),
+        _chips<int>(
+          Exercise.octaves,
+          _octave,
+          (v) => 'C$v',
+          (v) => setState(() => _octave = v),
+        ),
+        const SizedBox(height: Space.xs),
+        Text(
+          'Higher octaves are detected more accurately.',
+          style: TextStyle(
+            color: PracticePalette.mutedBrown.withValues(alpha: 0.8),
+            fontSize: 12,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _confirmButton() {
+    return PressScale(
+      onTap: () =>
+          Navigator.pop(context, ExerciseChoice(_exercise, _bpm, _octave)),
+      borderRadius: Radii.pillRadius,
+      child: Container(
+        height: 48,
+        alignment: Alignment.center,
+        decoration: const BoxDecoration(
+          color: PracticePalette.gold,
+          borderRadius: Radii.pillRadius,
+        ),
+        child: const Text(
+          'Use this exercise',
+          style: TextStyle(
+            color: PracticePalette.paper,
+            fontSize: 15,
+            fontWeight: FontWeight.w700,
+          ),
         ),
       ),
     );
