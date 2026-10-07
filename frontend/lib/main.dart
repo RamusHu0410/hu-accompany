@@ -16,9 +16,9 @@ import 'package:hu_accomponist/shared/theme/Design_Tokens.dart';
 import 'package:hu_accomponist/features/practice/Practice_Tool_Buttons.dart';
 import 'package:hu_accomponist/features/practice/Practice_Pen_Panel.dart';
 import 'package:hu_accomponist/features/practice/Practice_Settings_Drawer.dart';
-import 'package:hu_accomponist/features/practice/Practice_Companion.dart';
+import 'package:hu_accomponist/features/practice/phrase_feedback_overlay.dart';
 import 'package:hu_accomponist/features/practice/Exercise_Display.dart';
-import 'package:hu_accomponist/features/practice/Exercise_Picker.dart';
+import 'package:hu_accomponist/features/practice/exercise_picker.dart';
 import 'package:hu_accomponist/features/practice/Exercise_Session.dart';
 import 'package:hu_accomponist/integrations/audio/Rust_Bridge.dart';
 
@@ -97,7 +97,7 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
 
   PhraseFeedback _feedback = PhraseFeedback.none;
 
-  /// The most recent analyzed phrase, handed to the companion for display.
+  /// The most recent analyzed phrase, handed to the feedback overlay for display.
   /// Purely presentational -- [_feedback] still drives the recorder halo,
   /// exactly as before.
   PhraseReport? _latestReport;
@@ -158,7 +158,7 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
   /// Fired by Draggable_Recorder_Button once per phrase, as soon as Rust
   /// finishes analyzing it. Sends it to /api/feedback/phrase, which
   /// judges and returns the phrase's report in the same response, then
-  /// reflects the result in the companion's mood.
+  /// shows the result in the feedback card.
   ///
   /// `piece` now carries the real title and composer captured when the
   /// score was picked from the library (see [_piece]).
@@ -639,15 +639,12 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
             ),
 
             // ─────────────────────────────────────────────
-            // PHRASE FEEDBACK + COMPANION
+            // PHRASE FEEDBACK
             // ─────────────────────────────────────────────
             Positioned(
               right: Space.lg,
               bottom: 76,
-              child: PracticeCompanion(
-                report: _latestReport,
-                isRecording: _isRecording,
-              ),
+              child: PhraseFeedbackOverlay(report: _latestReport),
             ),
 
             // ─────────────────────────────────────────────
