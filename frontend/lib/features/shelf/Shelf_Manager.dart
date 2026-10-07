@@ -39,7 +39,9 @@ class ShelfEntry {
 class ShelfManager {
   ShelfManager._();
 
-  static const String _prefsKey = 'shelf_played_sheets';
+  // Renamed when scores moved from IMSLP to MusicXML: the old key holds
+  // IMSLP edition ids, which would now open the wrong score.
+  static const String _prefsKey = 'shelf_played_scores';
   static const int _maxEntries = 60;
 
   /// Records a play, moving the sheet to the front if it was already on

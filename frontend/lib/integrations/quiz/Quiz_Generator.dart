@@ -7,7 +7,7 @@ import 'package:hu_accomponist/integrations/server/ServerDiscovery.dart';
 
 /// Thin client for the backend's quiz package (backend/quiz).
 ///
-/// Follows the same shape as MusicSheetService: the address is discovered
+/// Follows the same shape as ScoreRepository: the address is discovered
 /// over mDNS rather than hardcoded, and a network-level failure retries
 /// once against a freshly discovered address before giving up, since dev
 /// machines move between networks.
@@ -17,7 +17,7 @@ class QuizGenerator {
   static const String _generatePath = '/api/quiz/generate';
 
   /// Generation is pure CPU on the server — no scraping, no model call — so
-  /// this can be far tighter than the IMSLP search timeout.
+  /// this can be far tighter than the score download timeout.
   static const Duration _timeout = Duration(seconds: 8);
 
   /// Builds a quiz for a typed topic heading, e.g.
@@ -94,7 +94,7 @@ class QuizGenerator {
   }
 
   /// Returns null on a network-level failure so the caller can retry
-  /// against a re-discovered address, matching MusicSheetService._post.
+  /// against a re-discovered address, matching ScoreRepository._get.
   static Future<http.Response?> _post(
     String baseUrl,
     Map<String, dynamic> body,

@@ -7,9 +7,9 @@ the way music of this era is played".
 
 Phase 2 only, because a style period is a property of the piece, not of any
 one phrase, and the traits below only mean something across a whole
-performance. Nothing upstream carries a composition date (imslp_search's
-WorkResult/Choice and pdf_processor's piece_data have title/composer but no
-date), so the caller supplies it as piece["composed_date"].
+performance. Nothing upstream carries a composition date (the score
+catalog and pdf_processor's piece_data have title/composer but no date), so
+the caller supplies it as piece["composed_date"].
 
 Status: structure only. Era detection and the per-era trait data are
 implemented; the prose in each `_<era>_feedback` builder is deliberately

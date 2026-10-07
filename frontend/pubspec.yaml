@@ -15,7 +15,6 @@ dependencies:
   http: ^1.6.0
   webview_flutter: ^4.14.1
   nsd: ^5.0.1
-  pdfx: ^2.9.2
   flutter_rust_bridge: 2.13.0
   shared_preferences: ^2.5.4
 
@@ -32,3 +31,4 @@ flutter:
 
   assets:
     - assets/images/wave.png
+    - assets/osmd/

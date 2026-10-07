@@ -1,15 +1,15 @@
 import 'package:flutter/material.dart';
 
-import 'package:hu_accomponist/features/search/Music_Library_Page.dart';
 import 'package:hu_accomponist/features/shelf/Shelf_Manager.dart';
-import 'package:hu_accomponist/integrations/scores/Pulling_Back_Data.dart';
+import 'package:hu_accomponist/integrations/scores/score_models.dart';
+import 'package:hu_accomponist/integrations/scores/score_repository.dart';
 import 'package:hu_accomponist/main.dart' show ScoreViewerPage;
 import 'package:hu_accomponist/shared/theme/Design_Tokens.dart';
 
 /// Opening a score for practice, from wherever it was chosen.
 ///
 /// Both the library and the shelf need to land the user on the score, and
-/// previously neither did: the library popped a [SelectedSheet] that only
+/// previously neither did: the library popped a [LoadedScore] that only
 /// the practice screen knew how to consume, so choosing a sheet from the
 /// turntable dropped the user back at home, and the shelf only showed a
 /// snackbar. Keeping the transition in one place means a new entry point
@@ -19,9 +19,9 @@ abstract final class OpenPractice {
   ///
   /// `pushReplacement` rather than `push` so Back from the score returns to
   /// the turntable rather than to the picker the user already finished with.
-  static Future<void> withSheet(
+  static Future<void> withScore(
     BuildContext context,
-    SelectedSheet selected,
+    LoadedScore selected,
   ) {
     return Navigator.of(context).pushReplacement(
       MaterialPageRoute(
@@ -32,7 +32,7 @@ abstract final class OpenPractice {
 
   /// Opens a score the user previously played, from the shelf.
   ///
-  /// The shelf stores only id/title/composer, so the PDF has to be fetched
+  /// The shelf stores only id/title/composer, so the MusicXML has to be fetched
   /// before the viewer can show anything. That is a network round trip, so
   /// the caller gets a blocking progress dialog rather than an unexplained
   /// pause on a tapped tile.
@@ -52,25 +52,13 @@ abstract final class OpenPractice {
     );
 
     try {
-      final pdfBytes = await ApiService().fetchScorePdf(entry.id);
+      final loaded = await const ScoreRepository().load(
+        ScoreSummary(id: entry.id, title: entry.title, composer: entry.composer),
+      );
       // Dismiss the progress dialog before routing onward.
       navigator.pop();
       await navigator.pushReplacement(
-        MaterialPageRoute(
-          builder: (_) => ScoreViewerPage(
-            selected: SelectedSheet(
-              sheet: MusicSheet(
-                id: entry.id,
-                title: entry.title,
-                // The shelf never recorded the source URL, and nothing
-                // downstream reads it — the bytes are already in hand.
-                pdfUrl: '',
-              ),
-              pdfBytes: pdfBytes,
-              composer: entry.composer,
-            ),
-          ),
-        ),
+        MaterialPageRoute(builder: (_) => ScoreViewerPage(selected: loaded)),
       );
     } catch (e) {
       navigator.pop();

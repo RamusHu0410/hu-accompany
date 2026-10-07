@@ -14,10 +14,6 @@ python-dotenv
 requests
 zeroconf
 
-# IMSLP score download (imslp_downloader app drives a real browser
-# through IMSLP's disclaimer/subscribe flow)
-playwright
-
 # PDF -> image extraction (image_processor phase1_prepare, scripts/pdf_processor.py)
 PyMuPDF
 # image_enhancer/enhancer_script.py's scan cleanup. Needs the libvips system
@@ -49,10 +45,6 @@ music21
 pdfplumber
 pytesseract
 
-# LLM client -- currently unused (imslp_search/main.py has a Gemini
-# integration commented out); keep or drop depending on whether that
-# code path is coming back
-google-genai
 alembic==1.19.1
 annotated-doc==0.0.5
 annotated-types==0.8.0

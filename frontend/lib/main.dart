@@ -2,9 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:hu_accomponist/features/practice/Draggable_Recorder_Button.dart';
 import 'package:hu_accomponist/features/practice/Drawing_Overlay.dart';
 import 'package:hu_accomponist/features/search/Music_Library_Page.dart';
-import 'package:hu_accomponist/features/practice/Score_Page_Controller.dart';
-import 'package:hu_accomponist/features/practice/Score_Pages_View.dart';
-import 'dart:typed_data';
+import 'package:hu_accomponist/features/practice/score_osmd_view.dart';
+import 'package:hu_accomponist/integrations/scores/score_models.dart';
 import 'package:hu_accomponist/features/home/Vinyl_Loading_Screen.dart';
 import 'package:hu_accomponist/features/home/Record_Navigator_Page.dart';
 import 'package:hu_accomponist/src/rust/models.dart';
@@ -81,7 +80,7 @@ class HuAccumponistApp extends StatelessWidget {
 }
 
 class ScoreViewerPage extends StatefulWidget {
-  final SelectedSheet? selected;
+  final LoadedScore? selected;
   const ScoreViewerPage({super.key, this.selected});
 
   @override
@@ -102,7 +101,7 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
   /// exactly as before.
   PhraseReport? _latestReport;
 
-  /// The exercise being practised, if any. While set it replaces the PDF,
+  /// The exercise being practised, if any. While set it replaces the score,
   /// and it is what Rust listens for and the backend judges against.
   ExerciseSession? _exercise;
   final DrawingController _drawing = DrawingController();
@@ -144,11 +143,17 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
   // phrase 1 comes back.
   String? _feedbackSessionId;
 
-  /// Tempo and metre assumed for bar numbering. Nothing in the app knows
-  /// the real values for a loaded score; named here so the assumption is
-  /// visible rather than sitting as two literals inside the request.
+  /// Tempo and metre assumed for bar numbering when the loaded score's
+  /// MusicXML does not state them; named here so the assumption is visible
+  /// rather than sitting as two literals inside the request.
   static const double _assumedBpm = 96;
   static const String _assumedTimeSignature = '4/4';
+
+  double get _bpm => _score?.summary.tempoBpm ?? _assumedBpm;
+  String get _timeSignature {
+    final fromScore = _score?.summary.timeSignature ?? '';
+    return fromScore.isEmpty ? _assumedTimeSignature : fromScore;
+  }
 
   /// Ground-truth notes for the loaded piece, in the backend's
   /// expected_notes shape. Empty until something populates it: the OMR
@@ -166,20 +171,16 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
   /// Two inputs still have no source anywhere in the app, and are sent as
   /// documented defaults rather than invented values:
   ///
-  ///   - `bpm` / `timeSignature`: nothing tracks the loaded score's tempo
-  ///     or metre. /api/score/process takes bpm as an *input*, so it
-  ///     cannot supply one either. [_assumedBpm] and [_assumedTimeSignature]
-  ///     name that assumption instead of burying two literals in the call;
-  ///     the backend uses them only to number bars, so a wrong tempo
+  ///   - `bpm` / `timeSignature`: taken from the score's MusicXML when it
+  ///     states them, otherwise [_assumedBpm] and [_assumedTimeSignature].
+  ///     The backend uses them only to number bars, so a wrong tempo
   ///     mislabels bar numbers but does not invalidate pitch scoring.
   ///
-  ///   - `expectedNotes`: the app never calls /api/score/process or
-  ///     /api/score/process-omr, so no OMR note data exists on the device
-  ///     for any piece. Sent empty. The backend requires a non-empty
-  ///     `expected_notes` to judge against, so until that pipeline is
-  ///     called, phrases will come back rejected rather than scored — see
-  ///     the diagnostics line below, which says so explicitly in the
-  ///     terminal instead of failing silently.
+  ///   - `expectedNotes`: nothing turns the loaded MusicXML into expected
+  ///     notes yet, so it is sent empty. The backend requires a non-empty
+  ///     `expected_notes` to judge against, so phrases come back rejected
+  ///     rather than scored — see the diagnostics line below, which says
+  ///     so explicitly in the terminal instead of failing silently.
   Future<void> _onPhraseReceived(int phraseNumber, List<Notes> notes) async {
     final exercise = _exercise;
     if (exercise != null) {
@@ -190,17 +191,17 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
     if (_expectedNotes.isEmpty) {
       debugPrint(
         '[Diagnostics] phrase $phraseNumber: no expected_notes for '
-        '"${_piece.title}" — the OMR pipeline (/api/score/process) is never '
-        'called by this app, so the backend has nothing to judge against '
-        'and will reject this phrase.',
+        '"${_piece.title}" — nothing derives expected notes from the '
+        'MusicXML yet, so the backend has nothing to judge against and '
+        'will reject this phrase.',
       );
     }
 
     final report = await PhraseUploadService.sendPhrase(
       sessionId: _feedbackSessionId,
       phraseNumber: phraseNumber,
-      bpm: _assumedBpm,
-      timeSignature: _assumedTimeSignature,
+      bpm: _bpm,
+      timeSignature: _timeSignature,
       piece: _piece,
       expectedNotes: _expectedNotes,
       userNotes: notes,
@@ -220,8 +221,8 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
   /// library and sent with every phrase.
   ///
   /// `composedDate` is empty because nothing in the app knows it: the
-  /// library's MusicSheet/WorkSummary carry title, composer and IMSLP url
-  /// only. The backend treats `piece` as optional metadata and stores it
+  /// score catalog carries title and composer only. The backend treats
+  /// `piece` as optional metadata and stores it
   /// as-is, so an empty date is honest; a fabricated one would be written
   /// into every stored phrase file.
   PieceInfo _piece = const PieceInfo(
@@ -230,32 +231,25 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
     composedDate: '',
   );
 
-  // Null until a sheet has been picked from the library.
-  Uint8List? _pdfBytes;
-  bool get _hasScore => _pdfBytes != null;
+  // Null until a score has been picked from the library.
+  LoadedScore? _score;
+  bool get _hasScore => _score != null;
 
-  // Owns the fetched-and-parsed pages for whatever score is currently
-  // loaded — kept as a stable field (not rebuilt in build()) so it isn't
-  // torn down and its cache/prefetch thrown away on every setState.
-  ScorePageController? _pageController;
+  // Kept as a stable field so picking another score reloads the same
+  // WebView instead of rebuilding it.
+  final ScoreOsmdController _osmd = ScoreOsmdController();
 
   // Swaps in a new score, or clears it if [selected] is null.
-  void _setScore(SelectedSheet? selected) {
+  void _setScore(LoadedScore? selected) {
     if (selected != null) _endExercise();
-    final pdfBytes = selected?.pdfBytes;
+    _score = selected;
     _piece = selected == null
         ? const PieceInfo(title: '', composer: '', composedDate: '')
         : PieceInfo(
-            title: selected.sheet.title,
-            composer: selected.composer,
+            title: selected.summary.title,
+            composer: selected.summary.composer,
             composedDate: '',
           );
-    final previousController = _pageController;
-    _pdfBytes = pdfBytes;
-    _pageController = pdfBytes != null ? ScorePageController(pdfBytes) : null;
-    // Close only after the controller's queued renders finish. This prevents
-    // a newly selected score from closing a document still used by old pages.
-    previousController?.dispose();
   }
 
   // ── Exercises ──────────────────────────────────────────────────────
@@ -289,14 +283,14 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
 
   /// Runs between the mic tap and the microphone opening. Recording is
   /// refused without an exercise: Rust only listens for the notes of a
-  /// loaded piece, and reading notes off a PDF (/api/score/process) does
-  /// not work yet, so a score alone gives Rust nothing to listen for.
+  /// loaded piece, and nothing derives those notes from a score's MusicXML
+  /// yet, so a score alone gives Rust nothing to listen for.
   Future<bool> _beforeCapture() async {
     final exercise = _exercise;
     if (exercise == null) {
       _say(
-        'Pick an exercise first. Following a PDF score needs note '
-        'recognition, which is not working yet.',
+        'Pick an exercise first. Following along with a score is not '
+        'supported yet.',
       );
       return false;
     }
@@ -315,7 +309,6 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
   @override
   void dispose() {
     _exercise?.dispose();
-    _pageController?.dispose();
     _drawing.dispose();
     super.dispose();
   }
@@ -324,10 +317,6 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
   void initState() {
     super.initState();
 
-    // ASSUMPTION: SelectedSheet (defined in Music_Library_Page.dart) needs
-    // a pdfBytes field now instead of musicXml, and whatever populates it
-    // needs to call ApiService.fetchScorePdf() instead of the old
-    // fetchMusicSheet().
     _setScore(widget.selected);
   }
 
@@ -337,8 +326,8 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
   double _penSize = 3.0;
 
   void _goToNavPage() async {
-    final selected = await Navigator.of(context).push<SelectedSheet>(
-      PageRouteBuilder<SelectedSheet>(
+    final selected = await Navigator.of(context).push<LoadedScore>(
+      PageRouteBuilder<LoadedScore>(
         transitionDuration: Motion.page,
         reverseTransitionDuration: Motion.base,
         pageBuilder: (context, animation, secondaryAnimation) =>
@@ -436,7 +425,10 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
                         )
                       else if (_hasScore)
                         Positioned.fill(
-                          child: Score_Pages_View(controller: _pageController!),
+                          child: ScoreOsmdView(
+                            musicXml: _score!.musicXml,
+                            controller: _osmd,
+                          ),
                         )
                       else
                         Center(

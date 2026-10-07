@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+  <style>
+    html, body { margin: 0; padding: 0; background: transparent; }
+    #score { padding: 8px 4px 24px; }
+  </style>
+  <!-- Bundled locally (OSMD 2.2.0, BSD-3-Clause, see LICENSE.txt) so the
+       score renders without network access. -->
+  <script src="opensheetmusicdisplay.min.js"></script>
+</head>
+<body>
+  <div id="score"></div>
+  <script>
+    // Bridge between Flutter (score_osmd_view.dart) and OSMD. Every message
+    // back to Flutter is JSON: {type: 'bridgeReady' | 'loaded' | 'error',
+    // payload?: {...}}.
+    (function () {
+      function post(type, payload) {
+        FlutterBridge.postMessage(JSON.stringify({ type: type, payload: payload }));
+      }
+
+      var osmd = new opensheetmusicdisplay.OpenSheetMusicDisplay('score', {
+        // Resizing is handled below so the zoom is refitted first.
+        autoResize: false,
+        backend: 'svg',
+        drawTitle: true,
+        drawPartNames: false,
+      });
+      var colored = [];
+      var loaded = false;
+
+      // OSMD's zoom 1.0 is sized for a desktop page; on a phone that makes
+      // glyphs and titles roughly twice too big, with one bar per line.
+      // Scale so a line of music is laid out as if on a page this wide.
+      var PAGE_WIDTH_PX = 720;
+      function fitZoom() {
+        var width = document.getElementById('score').clientWidth || window.innerWidth;
+        osmd.zoom = Math.max(0.4, Math.min(1, width / PAGE_WIDTH_PX));
+      }
+
+      var resizeTimer;
+      window.addEventListener('resize', function () {
+        clearTimeout(resizeTimer);
+        resizeTimer = setTimeout(function () {
+          if (!loaded) return;
+          fitZoom();
+          osmd.render();
+        }, 150);
+      });
+
+      // Notes of one measure, flattened across staves, in the order
+      // NoteRef(measure, voiceEntry, noteIndex) addresses them.
+      function voiceEntriesOf(measureIndex) {
+        var staves = osmd.GraphicSheet.MeasureList[measureIndex] || [];
+        var entries = [];
+        staves.forEach(function (measure) {
+          if (!measure) return;
+          measure.staffEntries.forEach(function (staffEntry) {
+            staffEntry.graphicalVoiceEntries.forEach(function (ve) { entries.push(ve); });
+          });
+        });
+        return entries;
+      }
+
+      window.OSMDBridge = {
+        loadScore: function (xml) {
+          colored = [];
+          loaded = false;
+          osmd.load(xml)
+            .then(function () {
+              fitZoom();
+              osmd.render();
+              loaded = true;
+              post('loaded');
+            })
+            .catch(function (e) { post('error', { message: String(e && e.message || e) }); });
+        },
+
+        colorNotes: function (refs, hex) {
+          refs.forEach(function (ref) {
+            var ve = voiceEntriesOf(ref.measure)[ref.voiceEntry];
+            var note = ve && ve.notes[ref.noteIndex];
+            if (!note) return;
+            note.sourceNote.NoteheadColor = hex;
+            colored.push(note.sourceNote);
+          });
+          osmd.render();
+        },
+
+        resetColors: function () {
+          colored.forEach(function (sourceNote) { sourceNote.NoteheadColor = undefined; });
+          colored = [];
+          osmd.render();
+        },
+      };
+
+      post('bridgeReady');
+    })();
+  </script>
+</body>
+</html>

@@ -1,6 +1,6 @@
 from django.apps import AppConfig
 
 
-class ImslpDownloaderConfig(AppConfig):
+class ScoresConfig(AppConfig):
     default_auto_field = "django.db.models.BigAutoField"
-    name = "imslp_downloader"
+    name = "scores"

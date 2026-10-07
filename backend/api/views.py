@@ -2,16 +2,9 @@ import json
 from pathlib import Path
 
 from django.conf import settings
-from django.db import transaction
 from django.http import JsonResponse, HttpRequest
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
-from api.models import ProcessedScore, ProcessedPage
-from imslp_downloader import storage as score_storage
-from imslp_search.main import search_imslp
-from imslp_search.errors import IMSLPNetworkError, WorkNotFoundError
-from imslp_search.services import imslp_service
-import pdf_processor
 from feedback_generator import judge_phrase, judge_piece
 from feedback_generator import store as feedback_store
 from feedback_generator.errors import InvalidNoteData, InvalidSessionId, StorageFailed
@@ -30,138 +23,6 @@ def chat_view(request: HttpRequest):
         return JsonResponse({"error": "invalid JSON"}, status=400)
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=500)
-
-
-@csrf_exempt
-@require_http_methods(["POST"])
-def search_view(request: HttpRequest):
-    client_ip = request.META.get("REMOTE_ADDR")
-    try:
-        body = json.loads(request.body)
-        query = body.get("query", "").strip()
-        print(f"[search] request from {client_ip} -> query={query!r}")
-        if not query:
-            return JsonResponse({"error": "query is required"}, status=400)
-        results = search_imslp(query)
-        print(f"[search] sending {len(results)} result(s) to {client_ip}: {results}")
-        return JsonResponse({"query": query, "results": results})
-    except json.JSONDecodeError:
-        print(f"[search] invalid JSON from {client_ip}")
-        return JsonResponse({"error": "invalid JSON"}, status=400)
-    except Exception as e:
-        print(f"[search] error for {client_ip}: {e}")
-        return JsonResponse({"error": str(e)}, status=500)
-
-
-@csrf_exempt
-@require_http_methods(["POST"])
-def process_score_view(request: HttpRequest):
-    """POST /api/score/process — run the oemer-based OMR pipeline
-    (backend/pdf_processor) on a stored score PDF: clean up scan noise with
-    adaptive thresholding + morphology (backend/image_enhancer), split into
-    page PNGs, run OMR to MusicXML with a debug PNG per page (every detected
-    notehead/clef/barline/accidental/marking/etc. boxed and labeled), then
-    parse timed note events into a notes JSON per page (part1_notes) and OCR
-    composer markings -- dynamics/tempo/expression/technique/time signature
-    -- into a markings JSON per page (part2_markings).
-
-    All of the structured output is persisted to Postgres: a ProcessedScore
-    row holds the whole-piece piece_data, bar_boxes (where each bar sits on
-    the page in pixels -- what /api/feedback/phrase's `bar_boxes` takes, so
-    feedback can be drawn onto the score), bpm and time signature; a
-    ProcessedPage row per page holds that page's MusicXML, notes JSON and
-    markings JSON. Only the binary artifacts stay on disk under
-    STORAGE_ROOT -- the source and enhanced PDFs and the rendered page /
-    debug / markings-debug PNGs -- and the DB keeps just their
-    "storage/..." paths. Re-processing the same PDF replaces its rows.
-
-    Body: {"file_path": "storage/scores/<Composer>/<Work>/<file>.pdf"}
-    `file_path` matches the format returned by /api/imslp/download's file_path.
-    """
-    try:
-        body = json.loads(request.body)
-    except json.JSONDecodeError:
-        return JsonResponse({"error": "invalid JSON"}, status=400)
-
-    file_path = (body.get("file_path") or "").strip()
-    if not file_path:
-        return JsonResponse({"error": "file_path is required"}, status=400)
-
-    if not score_storage.exists(file_path):
-        return JsonResponse({"error": f"file not found: {file_path}"}, status=404)
-
-    pdf_path = score_storage.db_path_to_absolute(file_path)
-
-    try:
-        result = pdf_processor.process(str(pdf_path))
-    except Exception as e:
-        return JsonResponse({"error": str(e)}, status=500)
-
-    def to_db_paths(paths):
-        return [
-            score_storage.to_db_path(Path(p).relative_to(settings.STORAGE_ROOT))
-            for p in paths
-        ]
-
-    def to_db_path(path):
-        if not path:
-            return ""
-        return score_storage.to_db_path(Path(path).relative_to(settings.STORAGE_ROOT))
-
-    # Persist the pipeline's structured output to Postgres. The PDFs and
-    # rendered PNGs stay on disk; only their storage-relative paths are
-    # stored. Re-processing the same PDF replaces the previous row (and its
-    # pages, via cascade) rather than accumulating duplicates.
-    page_pngs = to_db_paths(result["pages"])
-    debug_pngs = to_db_paths(result["debug_png"])
-    markings_debug_pngs = to_db_paths(result["markings_debug_png"])
-
-    with transaction.atomic():
-        ProcessedScore.objects.filter(source_pdf_path=file_path).delete()
-        score = ProcessedScore.objects.create(
-            source_pdf_path=file_path,
-            enhanced_pdf_path=to_db_path(result["enhanced_pdf"]),
-            bpm=result["bpm"],
-            time_signature=result["time_signature"] or "",
-            piece_data=result["piece_data"],
-            bar_boxes=result["bar_boxes"],
-            timing=result["timing"],
-        )
-        pages = [
-            ProcessedPage(
-                score=score,
-                page_number=i + 1,
-                page_png_path=page_pngs[i] if i < len(page_pngs) else "",
-                debug_png_path=debug_pngs[i] if i < len(debug_pngs) else "",
-                markings_debug_png_path=(
-                    markings_debug_pngs[i] if i < len(markings_debug_pngs) else ""
-                ),
-                musicxml=result["musicxml"][i] if i < len(result["musicxml"]) else "",
-                notes_json=result["notes_json"][i] if i < len(result["notes_json"]) else {},
-                markings_json=(
-                    result["markings_json"][i] if i < len(result["markings_json"]) else []
-                ),
-            )
-            for i in range(len(result["pages"]))
-        ]
-        ProcessedPage.objects.bulk_create(pages)
-
-    return JsonResponse({
-        "file_path": file_path,
-        "score_id": score.id,
-        "enhanced_pdf": score.enhanced_pdf_path,
-        "pages": page_pngs,
-        "debug_png": debug_pngs,
-        "markings_debug_png": markings_debug_pngs,
-        "piece_data": result["piece_data"],
-        "bar_boxes": result["bar_boxes"],
-        "bpm": result["bpm"],
-        "time_signature": result["time_signature"],
-        "page_count": len(result["pages"]),
-        "note_count": len(result["notes"]),
-        "marking_count": len(result["markings"]),
-        "timing": result["timing"],
-    })
 
 
 @csrf_exempt
@@ -291,7 +152,7 @@ def phrase_feedback_view(request):
 
 
 def _storage_path(path) -> str:
-    return score_storage.to_db_path(Path(path).relative_to(settings.STORAGE_ROOT))
+    return str(Path("storage") / Path(path).relative_to(settings.STORAGE_ROOT))
 
 
 @csrf_exempt
@@ -355,40 +216,3 @@ def summary_feedback_view(request):
         response["storage_error"] = str(e)
 
     return JsonResponse(response)
-
-
-@csrf_exempt
-@require_http_methods(["POST"])
-def pdmx_search_view(request: HttpRequest):
-    client_ip = request.META.get("REMOTE_ADDR")
-    try:
-        body = json.loads(request.body)
-        url = (body.get("url") or "").strip()
-        query = (body.get("query") or "").strip()
-        return
-    except Exception as e:
-        ...
-
-
-@csrf_exempt
-@require_http_methods(["POST"])
-def imslp_search_view(request: HttpRequest):
-    client_ip = request.META.get("REMOTE_ADDR")
-    try:
-        body = json.loads(request.body)
-        query = (body.get("query") or "").strip()
-        url = (body.get("url") or "").strip() or None
-        if not query and not url:
-            return JsonResponse({"error": "query is required"}, status=400)
-        print(f"[imslp/search] request from {client_ip} -> query={query!r} url={url!r}")
-        result = imslp_service.search(query, url=url)
-        return JsonResponse(result)
-    except json.JSONDecodeError:
-        return JsonResponse({"error": "invalid JSON"}, status=400)
-    except WorkNotFoundError as e:
-        return JsonResponse({"error": str(e)}, status=404)
-    except IMSLPNetworkError as e:
-        return JsonResponse({"error": str(e)}, status=502)
-    except Exception as e:
-        print(f"[imslp/search] error for {client_ip}: {e}")
-        return JsonResponse({"error": str(e)}, status=500)

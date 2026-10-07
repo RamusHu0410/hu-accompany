@@ -9,6 +9,7 @@ import 'package:hu_accomponist/features/home/Vinyl_Disk_Painter.dart';
 import 'package:hu_accomponist/features/shelf/Shelf_Page.dart';
 import 'package:hu_accomponist/features/search/Music_Library_Page.dart';
 import 'package:hu_accomponist/features/practice/Open_Practice.dart';
+import 'package:hu_accomponist/integrations/scores/score_models.dart';
 import 'package:hu_accomponist/features/quiz/Quiz_Home_Page.dart';
 import 'package:hu_accomponist/main.dart';
 
@@ -194,7 +195,7 @@ class _Record_Navigator_PageState extends State<Record_Navigator_Page>
     if (!mounted) return;
 
     final entry = _records[_activeIndex];
-    // The library pops a SelectedSheet when the user picks a sheet. Opened
+    // The library pops a LoadedScore when the user picks a score. Opened
     // straight from the turntable there was nothing to receive it, so the
     // pick silently dropped the user back here instead of into practice.
     final result = await Navigator.of(context).push(
@@ -219,11 +220,11 @@ class _Record_Navigator_PageState extends State<Record_Navigator_Page>
 
     if (!mounted) return;
 
-    if (result is SelectedSheet) {
+    if (result is LoadedScore) {
       await _zoomController.reverse();
       _launching = false;
       if (!mounted) return;
-      await OpenPractice.withSheet(context, result);
+      await OpenPractice.withScore(context, result);
       return;
     }
 

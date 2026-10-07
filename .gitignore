@@ -110,3 +110,8 @@ app.*.map.json
 /android/app/profile
 /android/app/release
 .aider*
+
+# Score MusicXML extracted by `manage.py import_pdmx` (regenerable from PDMX)
+backend/storage/musicxml/
+# PDMX score archive (shared locally, too large for git)
+backend/mxl.tar

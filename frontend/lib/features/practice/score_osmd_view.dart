@@ -27,14 +27,19 @@ class NoteRef {
 /// notes without re-fetching or re-navigating anything. Calls made before
 /// the page's JS bridge (`window.OSMDBridge`) has announced itself ready
 /// are queued and flushed once the 'bridgeReady' message arrives — NOT
-/// just once WebView's onPageFinished fires, since the CDN-hosted OSMD
-/// script may still be loading/executing at that point.
+/// just once WebView's onPageFinished fires, since the OSMD script may
+/// still be executing at that point.
 class ScoreOsmdController {
   WebViewController? _web;
   bool _bridgeReady = false;
   final List<String> _pendingCalls = [];
 
-  void attach(WebViewController controller) => _web = controller;
+  /// A freshly attached WebView has not loaded the bridge yet, so calls
+  /// queue until its own 'bridgeReady' arrives.
+  void attach(WebViewController controller) {
+    _web = controller;
+    _bridgeReady = false;
+  }
 
   void onBridgeReady() {
     _bridgeReady = true;
@@ -82,25 +87,24 @@ class ScoreOsmdController {
   }
 }
 
-/// Renders a score by loading OpenSheetMusicDisplay inside a WebView. OSMD
-/// owns its own internal layout/scrolling — this is a single continuous
-/// view rather than the old discrete-page setup, since real engraving
-/// doesn't paginate the same way the placeholder did.
-class Score_Osmd_View extends StatefulWidget {
+/// Renders MusicXML with OpenSheetMusicDisplay inside a WebView. OSMD owns
+/// its own layout and scrolling, so this is one continuous view rather than
+/// discrete pages. OSMD is bundled under assets/osmd/, so it works offline.
+class ScoreOsmdView extends StatefulWidget {
   final String musicXml;
   final ScoreOsmdController controller;
 
-  const Score_Osmd_View({
+  const ScoreOsmdView({
     super.key,
     required this.musicXml,
     required this.controller,
   });
 
   @override
-  State<Score_Osmd_View> createState() => _Score_Osmd_ViewState();
+  State<ScoreOsmdView> createState() => _ScoreOsmdViewState();
 }
 
-class _Score_Osmd_ViewState extends State<Score_Osmd_View> {
+class _ScoreOsmdViewState extends State<ScoreOsmdView> {
   late final WebViewController _web;
   bool _loading = true;
   String? _error;
@@ -122,8 +126,8 @@ class _Score_Osmd_ViewState extends State<Score_Osmd_View> {
       ..setNavigationDelegate(
         NavigationDelegate(
           // NOTE: we deliberately do NOT call loadScore() here. This only
-          // tells us the HTML document finished parsing — the CDN-hosted
-          // OSMD script (and window.OSMDBridge) may still be loading. The
+          // tells us the HTML document finished parsing — the OSMD script
+          // (and window.OSMDBridge) may still be executing. The
           // actual "safe to call JS" signal is the 'bridgeReady' message
           // posted from the page itself once OSMDBridge exists.
           onWebResourceError: (error) {
@@ -136,14 +140,14 @@ class _Score_Osmd_ViewState extends State<Score_Osmd_View> {
           },
         ),
       )
-      // Asset path must exactly match the file under your assets/ folder
-      // (and its pubspec.yaml entry) — case-sensitive on iOS/Linux builds.
-      ..loadFlutterAsset('assets/osmd_viewer.html');
+      // Case-sensitive on iOS. The page loads opensheetmusicdisplay.min.js
+      // from the same asset folder.
+      ..loadFlutterAsset('assets/osmd/osmd_viewer.html');
     return _web;
   }
 
   @override
-  void didUpdateWidget(covariant Score_Osmd_View oldWidget) {
+  void didUpdateWidget(covariant ScoreOsmdView oldWidget) {
     super.didUpdateWidget(oldWidget);
     // A new sheet was selected — reload it into the same WebView instead
     // of tearing down and recreating the page.

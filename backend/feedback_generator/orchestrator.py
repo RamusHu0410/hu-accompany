@@ -4,7 +4,7 @@ pieces to summarizer.py, return plain JSON-serializable dicts.
 No feedback text and no rating logic live here -- every message and every
 0-100 comes from a module in judges/, and every aggregate from
 summarizer.py. Returning plain dicts at the package boundary matches
-pdf_processor.process() and imslp_search.search_imslp().
+pdf_processor.process().
 
 Two phases:
 
