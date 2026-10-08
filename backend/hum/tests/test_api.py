@@ -124,7 +124,7 @@ class RequestErrorTests(HumTestCase):
 
     def test_unusable_settings(self):
         hum = self.uploaded_hum()
-        for engine in ("epic", "simple"):
+        for engine in ("band", "epic", "simple"):
             with self.subTest(engine=engine):
                 response = self.post_json("/api/hum/song", {"hum": hum, "engine": engine, "settings": {"speed": "fast"}})
                 self.assertEqual(response.status_code, 400)
@@ -133,9 +133,9 @@ class RequestErrorTests(HumTestCase):
 
 @unittest.skipUnless(can_render(), "needs FluidSynth and a soundfont")
 class SongTests(HumTestCase):
-    def test_both_engines_make_a_wav(self):
+    def test_every_engine_makes_a_wav(self):
         hum = self.uploaded_hum()
-        for engine in ("epic", "simple"):
+        for engine in ("band", "epic", "simple"):
             with self.subTest(engine=engine):
                 response = self.post_json("/api/hum/song", {"hum": hum, "engine": engine})
                 self.assertEqual(response.status_code, 200, response.content[:200])
@@ -143,17 +143,17 @@ class SongTests(HumTestCase):
                 with wave.open(io.BytesIO(response.content)) as song:
                     self.assertGreater(song.getnframes() / song.getframerate(), 2)
 
-    def test_epic_is_the_default_engine(self):
+    def test_band_is_the_default_engine(self):
         hum = self.uploaded_hum()
         default = self.post_json("/api/hum/song", {"hum": hum}).content
+        band = self.post_json("/api/hum/song", {"hum": hum, "engine": "band"}).content
         epic = self.post_json("/api/hum/song", {"hum": hum, "engine": "epic"}).content
-        simple = self.post_json("/api/hum/song", {"hum": hum, "engine": "simple"}).content
-        self.assertEqual(len(default), len(epic))
-        self.assertNotEqual(len(default), len(simple))
+        self.assertEqual(default, band)
+        self.assertNotEqual(len(default), len(epic))
 
     def test_settings_change_the_song(self):
         hum = self.uploaded_hum()
-        for engine in ("epic", "simple"):
+        for engine in ("band", "epic", "simple"):
             with self.subTest(engine=engine):
                 slow = self.post_json("/api/hum/song", {"hum": hum, "engine": engine, "settings": {"speed": 0.0}}).content
                 fast = self.post_json("/api/hum/song", {"hum": hum, "engine": engine, "settings": {"speed": 1.0}}).content
@@ -171,6 +171,13 @@ class NotesTests(HumTestCase):
                 self.assertEqual(set(body), {"sung", "played", "contour"})
                 self.assertGreater(len(body["sung"]), 0)
                 self.assertEqual(set(body["sung"][0]), {"midi", "start", "duration"})
+
+    def test_the_band_graphs_the_hum_against_its_melody(self):
+        body = self.post_json("/api/hum/notes", {"hum": self.uploaded_hum(), "engine": "band"}).json()
+        self.assertEqual(len(body["sung"]), len(body["played"]))
+        self.assertEqual(body["played"][0]["start"], 0)
+        for sung, played in zip(body["sung"], body["played"]):
+            self.assertEqual((played["midi"] - sung["midi"]) % 12, 0)  # the same tune, perhaps an octave up
 
 
 class RawTests(HumTestCase):
@@ -232,14 +239,75 @@ class RawTests(HumTestCase):
         self.assertEqual(response.status_code, 400)
 
 
+class ProjectTests(HumTestCase):
+    """The band engine's song as an editable project."""
+
+    def project(self, **settings):
+        response = self.post_json("/api/hum/project", {"hum": self.uploaded_hum(), "settings": settings})
+        self.assertEqual(response.status_code, 200, response.content[:200])
+        return response.json()["project"]
+
+    def test_the_hum_comes_back_arranged_as_a_project(self):
+        project = self.project(style="lo-fi", mood="chill")
+        self.assertEqual((project["preset"], project["mood"]), ("lofi", "chill"))
+        self.assertEqual([s["name"] for s in project["sections"]], ["intro", "verse", "chorus", "outro"])
+        self.assertEqual({t["role"] for t in project["tracks"]}, {"melody", "chords", "bass", "drums"})
+        self.assertTrue(project["hum"].endswith(".wav"))
+
+    def test_the_project_exports_as_midi(self):
+        import pretty_midi
+
+        project = self.project(style="jazz")
+        response = self.post_json("/api/hum/project/midi", {"project": project})
+        self.assertEqual(response["Content-Type"], "audio/midi")
+        midi = pretty_midi.PrettyMIDI(io.BytesIO(response.content))
+        self.assertEqual(len(midi.instruments), len(project["tracks"]))
+
+    @unittest.skipUnless(can_render(), "needs FluidSynth and a soundfont")
+    def test_an_edited_project_renders_only_what_changed(self):
+        project = self.project(style="rock")
+        first = self.post_json("/api/hum/project/audio", {"project": project})
+        self.assertEqual(first.status_code, 200, first.content[:200])
+        self.assertEqual(first["Content-Type"], "audio/wav")
+        self.assertEqual(len(first["X-Rendered-Tracks"].split(",")), len(project["tracks"]))
+
+        bass = next(t for t in project["tracks"] if t["role"] == "bass")
+        bass["mute"] = True
+        drums = next(t for t in project["tracks"] if t["role"] == "drums")
+        drums["notes"] = drums["notes"][:-1]
+        second = self.post_json("/api/hum/project/audio", {"project": project})
+        self.assertEqual(second["X-Rendered-Tracks"], "drums")
+
+    def test_errors(self):
+        self.assertEqual(self.post_json("/api/hum/project", {}).status_code, 400)
+        self.assertEqual(self.post_json("/api/hum/project", {"hum": "gone.wav"}).status_code, 404)
+        bad_mood = self.post_json("/api/hum/project", {"hum": self.uploaded_hum(), "settings": {"mood": "furious"}})
+        self.assertEqual(bad_mood.json()["code"], "bad_settings")
+        for url in ("/api/hum/project/audio", "/api/hum/project/midi"):
+            with self.subTest(url=url):
+                self.assertEqual(self.post_json(url, {}).status_code, 400)
+                broken = self.post_json(url, {"project": {"version": 1, "tempo": "fast"}})
+                self.assertEqual(broken.json()["code"], "bad_project")
+                self.assertEqual(self.client.get(url).status_code, 405)
+
+    def test_presets_list_each_genres_band_and_the_moods(self):
+        body = self.client.get("/api/hum/presets").json()
+        lofi = next(p for p in body["presets"] if p["id"] == "lofi")
+        self.assertEqual(lofi["band"]["chords"], "Electric Piano 1")
+        self.assertEqual(len(body["presets"]), 8)
+        self.assertIn("hype", [m["id"] for m in body["moods"]])
+
+
 class EnginesTests(HumTestCase):
     def test_lists_both_engines_with_their_styles(self):
         body = self.client.get("/api/hum/engines").json()
         engines = {engine["id"]: engine for engine in body["engines"]}
-        self.assertEqual(set(engines), {"epic", "simple"})
+        self.assertEqual(set(engines), {"band", "epic", "simple"})
+        self.assertIn("lofi", engines["band"]["styles"])
+        self.assertIn("dark", engines["band"]["moods"])
         self.assertIn("cinematic", engines["epic"]["styles"])
         self.assertIn("jazz", engines["simple"]["styles"])
-        self.assertEqual(body["default"], "epic")
+        self.assertEqual(body["default"], "band")
 
 
 class TalkTests(HumTestCase):

@@ -1,11 +1,6 @@
 import 'package:flutter/material.dart';
-<<<<<<< HEAD:frontend/lib/widgets/Library_Browse.dart
-import '../theme/Design_Tokens.dart';
-import 'Press_Scale.dart';
-=======
 import 'package:hu_accomponist/shared/theme/Design_Tokens.dart';
 import 'package:hu_accomponist/shared/ui/Press_Scale.dart';
->>>>>>> b60c0a0e4274b32570d119c61e61935cac5cf3ce:frontend/lib/features/search/Library_Browse.dart
 
 // ─── Shared library styling ──────────────────────────────────────────────────
 const String libBookFont = 'Georgia';

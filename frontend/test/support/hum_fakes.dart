@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'dart:ui';
@@ -7,6 +8,7 @@ import 'package:hu_accomponist/features/hum/file_sharer.dart';
 import 'package:hu_accomponist/features/hum/hum_audio.dart';
 import 'package:hu_accomponist/integrations/hum/hum_models.dart';
 import 'package:hu_accomponist/integrations/hum/hum_repository.dart';
+import 'package:hu_accomponist/integrations/hum/saved_hum_store.dart';
 import 'package:hu_accomponist/integrations/server/api_client.dart';
 
 class FakeRecorder implements HumRecorder {
@@ -211,3 +213,37 @@ const ApiException silentHum = ApiException(
   code: 'silent',
   status: 400,
 );
+
+/// Saved songs in a list, their audio in a temporary folder (written
+/// synchronously, so widget tests don't wait on real file I/O).
+class MemorySavedHumStore implements SavedHumStore {
+  final List<SavedHum> songs = [];
+  final Directory folder = Directory.systemTemp.createTempSync('hummed-');
+  bool fail = false;
+  int _next = 0;
+
+  @override
+  Future<List<SavedHum>> loadAll() async => List.of(songs);
+
+  @override
+  Future<SavedHum> save(Uint8List wav, SavedHum details) async {
+    if (fail) throw const FileSystemException('The disk is full');
+    final saved = SavedHum.fromJson({...details.toJson(), 'id': 's${_next++}'});
+    File('${folder.path}/${saved.audioFile}').writeAsBytesSync(wav);
+    songs.insert(0, saved);
+    return saved;
+  }
+
+  @override
+  Future<void> rename(String id, String title) async {
+    final i = songs.indexWhere((song) => song.id == id);
+    if (i >= 0) songs[i] = songs[i].renamed(title);
+  }
+
+  @override
+  Future<void> delete(String id) async => songs.removeWhere((s) => s.id == id);
+
+  @override
+  Future<File> audioFor(SavedHum song) async =>
+      File('${folder.path}/${song.audioFile}');
+}

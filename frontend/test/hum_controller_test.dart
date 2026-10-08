@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:hu_accomponist/features/hum/hum_controller.dart';
 import 'package:hu_accomponist/integrations/hum/hum_models.dart';
+import 'package:hu_accomponist/integrations/hum/song_style.dart';
 
 import 'support/hum_fakes.dart';
 
@@ -11,6 +12,7 @@ void main() {
   late FakeRecorder recorder;
   late FakePlayer player;
   late FakeHumRepository repository;
+  late MemorySavedHumStore store;
   late HumController controller;
 
   HumController build({Duration maxHum = const Duration(seconds: 15)}) =>
@@ -20,6 +22,7 @@ void main() {
         player: player,
         rawPlayer: FakePlayer(),
         sharer: FakeSharer(),
+        store: store,
         maxHum: maxHum,
       );
 
@@ -27,6 +30,7 @@ void main() {
     recorder = FakeRecorder();
     player = FakePlayer();
     repository = FakeHumRepository();
+    store = MemorySavedHumStore();
     controller = build();
   });
 
@@ -50,7 +54,7 @@ void main() {
       expect(controller.notes.sung, hasLength(1));
       expect(player.played, hasLength(1));
       expect(controller.error, isNull);
-      expect(repository.songCalls.single.$1, HumEngine.epic);
+      expect(repository.songCalls.single.$1, HumEngine.band);
     });
 
     test('says so when the microphone is off, and does not record', () async {
@@ -142,6 +146,53 @@ void main() {
       },
     );
 
+    test('picking a genre remakes the song in it', () async {
+      await hum();
+      await controller.setGenre(SongGenre.lofi);
+
+      expect(controller.genre, SongGenre.lofi);
+      expect(repository.songCalls.last.$2.style, 'lofi');
+      expect(player.played, hasLength(2));
+
+      await controller.setGenre(
+        SongGenre.lofi,
+      ); // already chosen: nothing to do
+      expect(repository.songCalls, hasLength(2));
+    });
+
+    test(
+      'a mood is sent with the song, and picking it again clears it',
+      () async {
+        await hum();
+        await controller.setMood(SongMood.hype);
+
+        expect(controller.mood, SongMood.hype);
+        expect(repository.songCalls.last.$2.toJson()['mood'], 'hype');
+
+        await controller.setMood(SongMood.hype);
+
+        expect(controller.mood, isNull);
+        expect(
+          repository.songCalls.last.$2.toJson().containsKey('mood'),
+          isFalse,
+        );
+      },
+    );
+
+    test('reset keeps the genre and the mood', () async {
+      await hum();
+      await controller.setGenre(SongGenre.jazz);
+      await controller.setMood(SongMood.dark);
+      controller.moveFader(speed: 0.9);
+      await controller.resetSettings();
+
+      expect(
+        (controller.genre, controller.mood),
+        (SongGenre.jazz, SongMood.dark),
+      );
+      expect(controller.settings.speed, 0.5);
+    });
+
     test('reset puts the faders back in the middle', () async {
       await hum();
       controller.moveFader(speed: 0.9, pitch: 0.1);
@@ -167,6 +218,69 @@ void main() {
       expect(player.played, hasLength(2));
       expect(controller.notes.played, hasLength(24)); // epic's
       expect(controller.engine, HumEngine.epic);
+    });
+  });
+
+  group('saving', () {
+    test('there is nothing to save before a song is made', () async {
+      expect(controller.canSave, isFalse);
+      expect(await controller.save(), isFalse);
+      expect(store.songs, isEmpty);
+    });
+
+    test('one tap keeps the song, named for its genre and key', () async {
+      await hum();
+      expect(controller.canSave, isTrue);
+
+      expect(await controller.save(), isTrue);
+
+      final saved = store.songs.single;
+      expect(saved.title, 'Cinematic hum in G major');
+      expect((saved.engine, saved.humFilename), ('band', 'hum-1.wav'));
+      expect(saved.sung, hasLength(1));
+      expect(
+        (await store.audioFor(saved)).readAsBytesSync(),
+        player.played.last,
+      );
+      expect(controller.savedThisSong, isTrue);
+      expect(controller.canSave, isFalse);
+    });
+
+    test('the same song is saved once', () async {
+      await hum();
+      await controller.save();
+      expect(await controller.save(), isFalse);
+      expect(store.songs, hasLength(1));
+    });
+
+    test('a changed song can be saved again, as a new one', () async {
+      await hum();
+      await controller.save();
+      await controller.setGenre(SongGenre.lofi);
+
+      expect(controller.canSave, isTrue);
+      await controller.save();
+      expect(store.songs.map((s) => s.title), [
+        'Lo-fi hum in G major',
+        'Cinematic hum in G major',
+      ]);
+      expect(store.songs.first.settings.style, 'lofi');
+    });
+
+    test('other engines are named after the engine', () async {
+      await hum();
+      await controller.setEngine(HumEngine.simple);
+      await controller.save();
+      expect(store.songs.single.title, 'Simple hum in G major');
+    });
+
+    test('a failed save says why and can be tried again', () async {
+      await hum();
+      store.fail = true;
+
+      expect(await controller.save(), isFalse);
+      expect(controller.error, contains("Couldn't save"));
+      expect(controller.canSave, isTrue);
     });
   });
 
@@ -204,6 +318,23 @@ void main() {
         expect(controller.settings.speed, 0.7);
         expect(repository.songCalls, hasLength(2));
         expect(repository.songCalls.last.$2.speed, 0.7);
+      },
+    );
+
+    test(
+      'a chat command keeps the mood the server does not know about',
+      () async {
+        // Talk mode's settings have no mood: the server sends them back without one.
+        repository.onTalk = (text, settings) => FakeHumRepository.faster(
+          text,
+          SongSettings.fromJson(settings.toJson()..remove('mood')),
+        );
+        await hum();
+        await controller.setMood(SongMood.chill);
+        await controller.send('make it faster');
+
+        expect(controller.settings.speed, 0.7);
+        expect(controller.mood, SongMood.chill);
       },
     );
 

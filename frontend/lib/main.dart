@@ -7,20 +7,6 @@ import 'package:hu_accomponist/integrations/scores/score_models.dart';
 import 'package:hu_accomponist/features/home/Vinyl_Loading_Screen.dart';
 import 'package:hu_accomponist/features/home/Record_Navigator_Page.dart';
 import 'package:hu_accomponist/src/rust/models.dart';
-<<<<<<< HEAD
-import 'services/Phrase_Send2_Server.dart';
-import 'utils/Pull_back_Phrase.dart';
-import 'models/Phrase_Feedback.dart';
-import 'theme/Color_Theme.dart';
-import 'theme/Design_Tokens.dart';
-import 'widgets/Practice_Tool_Buttons.dart';
-import 'widgets/Practice_Pen_Panel.dart';
-import 'widgets/Practice_Settings_Drawer.dart';
-
-// Re-exported so anything that already reached for PhraseFeedback through
-// main.dart keeps compiling after the enum moved to its own file.
-export 'models/Phrase_Feedback.dart';
-=======
 import 'package:hu_accomponist/integrations/feedback/Phrase_send2_server.dart';
 import 'package:hu_accomponist/integrations/feedback/Pull_back_phrase.dart';
 import 'package:hu_accomponist/features/practice/Phrase_Feedback.dart';
@@ -34,85 +20,17 @@ import 'package:hu_accomponist/features/practice/Exercise_Display.dart';
 import 'package:hu_accomponist/features/practice/exercise_picker.dart';
 import 'package:hu_accomponist/features/practice/Exercise_Session.dart';
 import 'package:hu_accomponist/integrations/audio/Rust_Bridge.dart';
->>>>>>> b60c0a0e4274b32570d119c61e61935cac5cf3ce
 
 
 // Re-exported so anything that already reached for PhraseFeedback through
 // main.dart keeps compiling after the enum moved to its own file.
 export 'package:hu_accomponist/features/practice/Phrase_Feedback.dart';
 
-<<<<<<< HEAD
-
-typedef StartRecordingFunc = ffi.Void Function();
-typedef StartRecordingFuncDart = void Function();
-typedef StopRecordingFunc = ffi.Void Function();
-typedef StopRecordingFuncDart = void Function();
-
-
-// ─── Safe no-op stubs used when native symbols are unavailable ───────────────
-void _stubStart() =>
-    debugPrint('NativeBridge: start_recording stub (symbols not linked yet)');
-void _stubStop() =>
-    debugPrint('NativeBridge: stop_recording stub (symbols not linked yet)');
-
-class NativeBridge {
-  // Nullable so we know whether real lookup succeeded
-  ffi.DynamicLibrary? _nativeLib;
-
-  // Always callable — fall back to stubs if lookup failed
-  StartRecordingFuncDart _startRecording = _stubStart;
-  StopRecordingFuncDart _stopRecording = _stubStop;
-
-  bool get isNativeAvailable => _nativeLib != null;
-
-  NativeBridge() {
-    // All lookup work is inside try/catch so a missing symbol
-    // can NEVER reach main() and block the UI from rendering.
-    try {
-      final lib = ffi.DynamicLibrary.executable();
-
-      _startRecording = lib
-          .lookup<ffi.NativeFunction<StartRecordingFunc>>('start_recording')
-          .asFunction();
-
-      _stopRecording = lib
-          .lookup<ffi.NativeFunction<StopRecordingFunc>>('stop_recording')
-          .asFunction();
-
-      _nativeLib = lib; // only set AFTER both lookups succeed
-      debugPrint('NativeBridge: native symbols linked successfully.');
-    } on ArgumentError catch (e) {
-      // Symbol not found — app keeps running with stubs
-      debugPrint('NativeBridge: symbol lookup failed — $e');
-      debugPrint(
-        'NativeBridge: running with no-op stubs. '
-        'Make sure start_recording / stop_recording are compiled '
-        'into the iOS Runner target with external "C" linkage.',
-      );
-    } catch (e) {
-      debugPrint('NativeBridge: unexpected init error — $e');
-    }
-  }
-
-  // Public API — callers never touch private fields directly
-  void startRecording() => _startRecording();
-  void stopRecording() => _stopRecording();
-}
-
-// Single shared instance — safe because constructor never throws now
-final NativeBridge _nativeBridge = NativeBridge();
-// NOTE: AudioNative (raw dart:ffi start_recording/stop_recording) is no
-// longer wired in here — recording now goes through Draggable_Recorder_Button,
-// which owns the Rust-bridge notesStream() pipeline directly. AudioNative
-// and NativeBridge above are both now unused by this flow; left in place
-// in case you still want them, but worth deleting if not.
-=======
 // Audio capture is driven through integrations/audio/Audio_Native.dart,
 // which owns the dart:ffi lookup of start_recording/stop_recording. Those
 // are C symbols rather than flutter_rust_bridge calls because native_ffi
 // marks listen_audio/stop_audio as `#[frb(ignore)]`; src/rust/api.dart
 // therefore exposes only initSession/getUserData/notesStream.
->>>>>>> b60c0a0e4274b32570d119c61e61935cac5cf3ce
 
 Future<void> main() async {
   // Attempt to load the native Rust library, but never let a failure here
@@ -408,13 +326,8 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
   double _penSize = 3.0;
 
   void _goToNavPage() async {
-<<<<<<< HEAD
-    final selected = await Navigator.of(context).push<SelectedSheet>(
-      PageRouteBuilder<SelectedSheet>(
-=======
     final selected = await Navigator.of(context).push<LoadedScore>(
       PageRouteBuilder<LoadedScore>(
->>>>>>> b60c0a0e4274b32570d119c61e61935cac5cf3ce
         transitionDuration: Motion.page,
         reverseTransitionDuration: Motion.base,
         pageBuilder: (context, animation, secondaryAnimation) =>
@@ -520,17 +433,6 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
                       else
                         Center(
                           child: Padding(
-<<<<<<< HEAD
-                            padding: EdgeInsets.all(Space.xxl),
-                            child: Text(
-                              'Select a score from the library',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                color: PracticePalette.mutedBrown,
-                                fontSize: 15,
-                                letterSpacing: 0.4,
-                              ),
-=======
                             padding: const EdgeInsets.all(Space.xxl),
                             child: Column(
                               mainAxisSize: MainAxisSize.min,
@@ -554,7 +456,6 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
                                   ),
                                 ),
                               ],
->>>>>>> b60c0a0e4274b32570d119c61e61935cac5cf3ce
                             ),
                           ),
                         ),
@@ -724,9 +625,6 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
             Draggable_Recorder_Button(
               onToggle: _onRecordingChanged,
               onPhrase: _onPhraseReceived,
-<<<<<<< HEAD
-              accent: PracticeSettingsDrawer.feedbackColor(_feedback),
-=======
               onBeforeCapture: _beforeCapture,
               onError: _say,
               accent: PracticeSettingsDrawer.feedbackColor(_feedback),
@@ -739,7 +637,6 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
               right: Space.lg,
               bottom: 76,
               child: PhraseFeedbackOverlay(report: _latestReport),
->>>>>>> b60c0a0e4274b32570d119c61e61935cac5cf3ce
             ),
 
             // ─────────────────────────────────────────────

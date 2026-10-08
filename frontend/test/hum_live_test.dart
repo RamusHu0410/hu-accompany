@@ -65,19 +65,37 @@ void main() {
         expect(slow.length, greaterThan(fast.length));
       });
 
-      test('the raw hum comes back exactly, plays on both instruments, and exports', () async {
-      final raw = await repository.raw(hum);
-      expect(raw.notes.first.start, 0);
-      expect(raw.notes.length, hum.noteCount);
-      for (final instrument in RawInstrument.values) {
-        final audio = await repository.rawAudio(hum, instrument);
-        expect(String.fromCharCodes(audio.take(4)), 'RIFF');
-      }
-      final midi = await repository.rawMidi(hum);
-      expect(String.fromCharCodes(midi.take(4)), 'MThd');
-    });
+      test('the band plays each genre and mood differently', () async {
+        Future<int> length(String style, [String? mood]) async =>
+            (await repository.song(
+              hum,
+              SongSettings(style: style, mood: mood),
+              HumEngine.band,
+            )).length;
+        // a ballad is slow and starts with a longer intro; a chill mood slows it further
+        expect(await length('ballad'), greaterThan(await length('rock')));
+        expect(
+          await length('ballad', 'chill'),
+          greaterThan(await length('ballad')),
+        );
+      });
 
-    test('a typed command is answered, keys or no keys', () async {
+      test(
+        'the raw hum comes back exactly, plays on both instruments, and exports',
+        () async {
+          final raw = await repository.raw(hum);
+          expect(raw.notes.first.start, 0);
+          expect(raw.notes.length, hum.noteCount);
+          for (final instrument in RawInstrument.values) {
+            final audio = await repository.rawAudio(hum, instrument);
+            expect(String.fromCharCodes(audio.take(4)), 'RIFF');
+          }
+          final midi = await repository.rawMidi(hum);
+          expect(String.fromCharCodes(midi.take(4)), 'MThd');
+        },
+      );
+
+      test('a typed command is answered, keys or no keys', () async {
         final turn = await repository.talk(
           'make it faster',
           const SongSettings(),

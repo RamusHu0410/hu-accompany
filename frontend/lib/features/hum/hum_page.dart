@@ -7,6 +7,8 @@ import 'package:hu_accomponist/features/hum/hum_controls.dart';
 import 'package:hu_accomponist/features/hum/hum_notes_view.dart';
 import 'package:hu_accomponist/features/hum/hum_record_button.dart';
 import 'package:hu_accomponist/features/hum/raw_hum_panel.dart';
+import 'package:hu_accomponist/features/hum/song_style_picker.dart';
+import 'package:hu_accomponist/features/shelf/Shelf_Page.dart';
 import 'package:hu_accomponist/integrations/hum/hum_models.dart';
 import 'package:hu_accomponist/shared/theme/Color_Theme.dart';
 import 'package:hu_accomponist/shared/theme/Design_Tokens.dart';
@@ -54,6 +56,25 @@ class _HumPageState extends State<HumPage> {
     );
   }
 
+  Future<void> _save() async {
+    final messenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context);
+    if (!await _controller.save()) return;
+    messenger.showSnackBar(
+      SnackBar(
+        content: const Text('Saved to your shelf, under Hummed.'),
+        action: SnackBarAction(
+          label: 'View',
+          onPressed: () => navigator.push(
+            MaterialPageRoute<void>(
+              builder: (_) => const Shelf_Page(initialTab: 1),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _content() {
     final c = _controller;
     return ListView(
@@ -82,6 +103,8 @@ class _HumPageState extends State<HumPage> {
             isPlaying: c.isPlaying,
             canPlay: c.hasSong && c.phase == HumPhase.idle,
             onToggle: c.togglePlay,
+            saved: c.savedThisSong,
+            onSave: c.canSave ? _save : null,
           ),
           const SizedBox(height: Space.md),
           RawHumPanel(playback: c.rawPlayback),
@@ -94,6 +117,16 @@ class _HumPageState extends State<HumPage> {
             onFaderEnd: c.commitSettings,
             onReset: c.resetSettings,
           ),
+          if (c.engine == HumEngine.band) ...[
+            const SizedBox(height: Space.md),
+            SongStylePicker(
+              genre: c.genre,
+              mood: c.mood,
+              enabled: c.phase == HumPhase.idle,
+              onGenre: c.setGenre,
+              onMood: c.setMood,
+            ),
+          ],
           const SizedBox(height: Space.md),
           HumChat(messages: c.chat, busy: c.chatBusy, onSend: c.send),
         ],
@@ -158,12 +191,18 @@ class _SongBar extends StatelessWidget {
     required this.isPlaying,
     required this.canPlay,
     required this.onToggle,
+    required this.saved,
+    required this.onSave,
   });
 
   final HumUpload hum;
   final bool isPlaying;
   final bool canPlay;
   final VoidCallback onToggle;
+  final bool saved;
+
+  /// Null while there's nothing new to save.
+  final VoidCallback? onSave;
 
   @override
   Widget build(BuildContext context) {
@@ -191,6 +230,19 @@ class _SongBar extends StatelessWidget {
               color: PracticePalette.mutedBrown,
               fontSize: 13,
             ),
+          ),
+        ),
+        TextButton.icon(
+          key: const ValueKey('save-song'),
+          onPressed: onSave,
+          icon: Icon(
+            saved ? Icons.check_rounded : Icons.bookmark_add_outlined,
+            size: 18,
+          ),
+          label: Text(saved ? 'Saved' : 'Save'),
+          style: TextButton.styleFrom(
+            foregroundColor: PracticePalette.gold,
+            disabledForegroundColor: PracticePalette.mutedBrown,
           ),
         ),
       ],

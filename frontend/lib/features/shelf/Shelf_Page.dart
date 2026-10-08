@@ -1,12 +1,4 @@
 import 'package:flutter/material.dart';
-<<<<<<< HEAD:frontend/lib/screens/Shelf_Page.dart
-import '../theme/Color_Theme.dart';
-import '../theme/Design_Tokens.dart';
-import '../widgets/Score_Card.dart';
-import '../widgets/Shelf_Empty.dart';
-import '../widgets/Shelf_Skeleton.dart';
-import '../models/Shelf_Manager.dart';
-=======
 import 'package:hu_accomponist/shared/theme/Color_Theme.dart';
 import 'package:hu_accomponist/shared/theme/Design_Tokens.dart';
 import 'package:hu_accomponist/features/practice/Open_Practice.dart';
@@ -14,15 +6,24 @@ import 'package:hu_accomponist/features/shelf/Score_Card.dart';
 import 'package:hu_accomponist/features/shelf/Shelf_Empty.dart';
 import 'package:hu_accomponist/features/shelf/Shelf_Skeleton.dart';
 import 'package:hu_accomponist/features/shelf/Shelf_Manager.dart';
->>>>>>> b60c0a0e4274b32570d119c61e61935cac5cf3ce:frontend/lib/features/shelf/Shelf_Page.dart
+import 'package:hu_accomponist/features/shelf/hummed_songs_controller.dart';
+import 'package:hu_accomponist/features/shelf/hummed_songs_view.dart';
 
-/// The shelf: every sheet the user has actually opened, most recent
-/// first, read from on-device storage (see Shelf_Manager.dart). There is
-/// no "browse by era" facet in the data the app collects, so sections are
-/// drawn from what's genuinely known — recency — rather than an invented
-/// classification.
+/// The shelf, in two tabs. Sheets: every sheet the user has actually
+/// opened, most recent first, read from on-device storage (see
+/// Shelf_Manager.dart). There is no "browse by era" facet in the data the
+/// app collects, so sections are drawn from what's genuinely known —
+/// recency — rather than an invented classification. Hummed: the songs
+/// saved from the hum page (see hummed_songs_controller.dart).
 class Shelf_Page extends StatefulWidget {
-  const Shelf_Page({super.key});
+  const Shelf_Page({super.key, this.hummed, this.initialTab = 0});
+
+  /// The Hummed tab's controller (tests hand in one with fakes). The page
+  /// disposes only one it made itself.
+  final HummedSongsController? hummed;
+
+  /// 0 opens on Sheets, 1 on Hummed.
+  final int initialTab;
 
   @override
   State<Shelf_Page> createState() => _Shelf_PageState();
@@ -31,6 +32,8 @@ class Shelf_Page extends StatefulWidget {
 class _Shelf_PageState extends State<Shelf_Page> {
   List<ShelfEntry> _entries = [];
   bool _loading = true;
+  late final HummedSongsController _hummed =
+      widget.hummed ?? HummedSongsController();
 
   static const int _recentCount = 6;
 
@@ -38,6 +41,13 @@ class _Shelf_PageState extends State<Shelf_Page> {
   void initState() {
     super.initState();
     _load();
+    _hummed.load();
+  }
+
+  @override
+  void dispose() {
+    if (widget.hummed == null) _hummed.dispose();
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -55,43 +65,62 @@ class _Shelf_PageState extends State<Shelf_Page> {
     final base = ShelfPalette.base(brightness);
     final textColor = ShelfPalette.textColor(brightness);
 
-    return Scaffold(
-      backgroundColor: base,
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        title: Text(
-          'Shelf',
-          style: TextStyle(
-            color: textColor,
-            letterSpacing: 2,
-            fontSize: 14,
-            fontWeight: FontWeight.w600,
+    return DefaultTabController(
+      length: 2,
+      initialIndex: widget.initialTab,
+      child: Scaffold(
+        backgroundColor: base,
+        appBar: AppBar(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          title: Text(
+            'Shelf',
+            style: TextStyle(
+              color: textColor,
+              letterSpacing: 2,
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          iconTheme: IconThemeData(color: textColor),
+          bottom: TabBar(
+            labelColor: textColor,
+            unselectedLabelColor: ShelfPalette.subtextColor(brightness),
+            indicatorColor: textColor,
+            dividerColor: Colors.transparent,
+            tabs: const [
+              Tab(text: 'Sheets'),
+              Tab(text: 'Hummed'),
+            ],
           ),
         ),
-        iconTheme: IconThemeData(color: textColor),
-      ),
-      body: SafeArea(
-        // The three states are crossfaded rather than swapped outright, so
-        // the skeleton dissolves into the real grid it was standing in for.
-        child: AnimatedSwitcher(
-          duration: Motion.slow,
-          switchInCurve: Motion.enter,
-          switchOutCurve: Motion.exit,
-          child: _loading
-              ? ShelfSkeleton(
-                  key: const ValueKey('shelf-loading'),
-                  brightness: brightness,
-                )
-              : _entries.isEmpty
-              ? ShelfEmpty(
-                  key: const ValueKey('shelf-empty'),
-                  textColor: textColor,
-                )
-              : KeyedSubtree(
-                  key: const ValueKey('shelf-content'),
-                  child: _sections(brightness, textColor),
-                ),
+        body: SafeArea(
+          child: TabBarView(
+            children: [
+              // The three states are crossfaded rather than swapped outright, so
+              // the skeleton dissolves into the real grid it was standing in for.
+              AnimatedSwitcher(
+                duration: Motion.slow,
+                switchInCurve: Motion.enter,
+                switchOutCurve: Motion.exit,
+                child: _loading
+                    ? ShelfSkeleton(
+                        key: const ValueKey('shelf-loading'),
+                        brightness: brightness,
+                      )
+                    : _entries.isEmpty
+                    ? ShelfEmpty(
+                        key: const ValueKey('shelf-empty'),
+                        textColor: textColor,
+                      )
+                    : KeyedSubtree(
+                        key: const ValueKey('shelf-content'),
+                        child: _sections(brightness, textColor),
+                      ),
+              ),
+              HummedSongsView(controller: _hummed, brightness: brightness),
+            ],
+          ),
         ),
       ),
     );
@@ -109,14 +138,22 @@ class _Shelf_PageState extends State<Shelf_Page> {
           count: recent.length,
           textColor: textColor,
         ),
-        _ScoreGrid(entries: recent, brightness: brightness, textColor: textColor),
+        _ScoreGrid(
+          entries: recent,
+          brightness: brightness,
+          textColor: textColor,
+        ),
         if (older.isNotEmpty) ...[
           _SectionHeader(
             title: 'Your Collection',
             count: older.length,
             textColor: textColor,
           ),
-          _ScoreGrid(entries: older, brightness: brightness, textColor: textColor),
+          _ScoreGrid(
+            entries: older,
+            brightness: brightness,
+            textColor: textColor,
+          ),
         ],
         const SliverToBoxAdapter(child: SizedBox(height: Space.xxl)),
       ],

@@ -1,15 +1,8 @@
 import 'package:flutter/material.dart';
-<<<<<<< HEAD:frontend/lib/widgets/Practice_Settings_Drawer.dart
-import '../models/Phrase_Feedback.dart';
-import '../theme/Color_Theme.dart';
-import '../theme/Design_Tokens.dart';
-import 'Press_Scale.dart';
-=======
 import 'package:hu_accomponist/features/practice/Phrase_Feedback.dart';
 import 'package:hu_accomponist/shared/theme/Color_Theme.dart';
 import 'package:hu_accomponist/shared/theme/Design_Tokens.dart';
 import 'package:hu_accomponist/shared/ui/Press_Scale.dart';
->>>>>>> b60c0a0e4274b32570d119c61e61935cac5cf3ce:frontend/lib/features/practice/Practice_Settings_Drawer.dart
 
 /// The practice screen's side drawer: current recording and phrase status,
 /// plus the two actions that don't belong on the score itself.
@@ -19,10 +12,7 @@ class PracticeSettingsDrawer extends StatelessWidget {
   final PhraseFeedback feedback;
   final VoidCallback onOpenLibrary;
   final VoidCallback onClearAnnotations;
-<<<<<<< HEAD:frontend/lib/widgets/Practice_Settings_Drawer.dart
-=======
   final VoidCallback onOpenExercises;
->>>>>>> b60c0a0e4274b32570d119c61e61935cac5cf3ce:frontend/lib/features/practice/Practice_Settings_Drawer.dart
 
   const PracticeSettingsDrawer({
     super.key,
@@ -31,18 +21,12 @@ class PracticeSettingsDrawer extends StatelessWidget {
     required this.feedback,
     required this.onOpenLibrary,
     required this.onClearAnnotations,
-<<<<<<< HEAD:frontend/lib/widgets/Practice_Settings_Drawer.dart
-=======
     required this.onOpenExercises,
->>>>>>> b60c0a0e4274b32570d119c61e61935cac5cf3ce:frontend/lib/features/practice/Practice_Settings_Drawer.dart
   });
 
   static Color feedbackColor(PhraseFeedback feedback) => switch (feedback) {
     PhraseFeedback.good => PracticePalette.gold,
-<<<<<<< HEAD:frontend/lib/widgets/Practice_Settings_Drawer.dart
-=======
     PhraseFeedback.fair => PracticePalette.caution,
->>>>>>> b60c0a0e4274b32570d119c61e61935cac5cf3ce:frontend/lib/features/practice/Practice_Settings_Drawer.dart
     PhraseFeedback.off => PracticePalette.alert,
     PhraseFeedback.none => PracticePalette.mutedBrown,
   };
@@ -51,10 +35,7 @@ class PracticeSettingsDrawer extends StatelessWidget {
   Widget build(BuildContext context) {
     final feedbackLabel = switch (feedback) {
       PhraseFeedback.good => 'Last phrase — on pitch',
-<<<<<<< HEAD:frontend/lib/widgets/Practice_Settings_Drawer.dart
-=======
       PhraseFeedback.fair => 'Last phrase — roughly there',
->>>>>>> b60c0a0e4274b32570d119c61e61935cac5cf3ce:frontend/lib/features/practice/Practice_Settings_Drawer.dart
       PhraseFeedback.off => 'Last phrase — off pitch',
       PhraseFeedback.none => 'No phrase analyzed yet',
     };
@@ -110,14 +91,11 @@ class PracticeSettingsDrawer extends StatelessWidget {
               onTap: onOpenLibrary,
             ),
             _DrawerAction(
-<<<<<<< HEAD:frontend/lib/widgets/Practice_Settings_Drawer.dart
-=======
               icon: Icons.music_note_rounded,
               label: 'Practise an exercise',
               onTap: onOpenExercises,
             ),
             _DrawerAction(
->>>>>>> b60c0a0e4274b32570d119c61e61935cac5cf3ce:frontend/lib/features/practice/Practice_Settings_Drawer.dart
               icon: Icons.layers_clear_outlined,
               label: 'Clear annotations',
               onTap: onClearAnnotations,

@@ -2,16 +2,6 @@ import 'dart:math';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-<<<<<<< HEAD:frontend/lib/screens/Record_Navigator_Page.dart
-import '../theme/Color_Theme.dart';
-import '../theme/Design_Tokens.dart';
-import '../controllers/Disk_Spin_Controller.dart';
-import '../widgets/Vinyl_Disk_Painter.dart';
-import 'Shelf_Page.dart';
-import 'Music_Library_Page.dart';
-import 'Quiz_Home_Page.dart';
-import '../main.dart';
-=======
 import 'package:hu_accomponist/shared/theme/Color_Theme.dart';
 import 'package:hu_accomponist/shared/theme/Design_Tokens.dart';
 import 'package:hu_accomponist/features/home/Disk_Spin_Controller.dart';
@@ -23,7 +13,6 @@ import 'package:hu_accomponist/integrations/scores/score_models.dart';
 import 'package:hu_accomponist/features/quiz/Quiz_Home_Page.dart';
 import 'package:hu_accomponist/features/hum/hum_page.dart';
 import 'package:hu_accomponist/main.dart';
->>>>>>> b60c0a0e4274b32570d119c61e61935cac5cf3ce:frontend/lib/features/home/Record_Navigator_Page.dart
 
 /// One destination in the record crate — everything needed to draw its
 /// disk and to build the page it opens once it's spun up to speed.
@@ -82,15 +71,12 @@ class _Record_Navigator_PageState extends State<Record_Navigator_Page>
       diskColor: TurntablePalette.diskQuiz,
       pageBuilder: (_) => const Quiz_Home_Page(),
     ),
-<<<<<<< HEAD:frontend/lib/screens/Record_Navigator_Page.dart
-=======
     _RecordEntry(
       title: 'HUM',
       sublabel: 'make a song',
       diskColor: TurntablePalette.diskHum,
       pageBuilder: (_) => const HumPage(),
     ),
->>>>>>> b60c0a0e4274b32570d119c61e61935cac5cf3ce:frontend/lib/features/home/Record_Navigator_Page.dart
   ];
 
   int _activeIndex = 0;

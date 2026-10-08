@@ -1,13 +1,7 @@
 import 'package:flutter/material.dart';
-<<<<<<< HEAD:frontend/lib/widgets/Practice_Tool_Buttons.dart
-import '../theme/Color_Theme.dart';
-import '../theme/Design_Tokens.dart';
-import 'Press_Scale.dart';
-=======
 import 'package:hu_accomponist/shared/theme/Color_Theme.dart';
 import 'package:hu_accomponist/shared/theme/Design_Tokens.dart';
 import 'package:hu_accomponist/shared/ui/Press_Scale.dart';
->>>>>>> b60c0a0e4274b32570d119c61e61935cac5cf3ce:frontend/lib/features/practice/Practice_Tool_Buttons.dart
 
 /// The round tool buttons along the top of the score — settings, pen,
 /// undo, palette. [active] fills the button rather than outlining it.
