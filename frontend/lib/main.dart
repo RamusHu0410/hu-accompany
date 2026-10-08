@@ -1,15 +1,13 @@
 import 'package:flutter/material.dart';
-import 'widgets/Draggable_Recorder_Button.dart';
-import 'widgets/Drawing_Overlay.dart';
-import 'screens/Music_Library_Page.dart';
-import 'models/Score_Page_Controller.dart';
-import 'renderers/Score_Pages_View.dart';
-import 'dart:ffi' as ffi;
-import 'dart:typed_data';
-import 'screens/Vinyl_Loading_Screen.dart';
-import 'screens/Record_Navigator_Page.dart';
-import 'package:hu_accomponist/src/rust/frb_generated.dart';
+import 'package:hu_accomponist/features/practice/Draggable_Recorder_Button.dart';
+import 'package:hu_accomponist/features/practice/Drawing_Overlay.dart';
+import 'package:hu_accomponist/features/search/Music_Library_Page.dart';
+import 'package:hu_accomponist/features/practice/score_osmd_view.dart';
+import 'package:hu_accomponist/integrations/scores/score_models.dart';
+import 'package:hu_accomponist/features/home/Vinyl_Loading_Screen.dart';
+import 'package:hu_accomponist/features/home/Record_Navigator_Page.dart';
 import 'package:hu_accomponist/src/rust/models.dart';
+<<<<<<< HEAD
 import 'services/Phrase_Send2_Server.dart';
 import 'utils/Pull_back_Phrase.dart';
 import 'models/Phrase_Feedback.dart';
@@ -22,9 +20,28 @@ import 'widgets/Practice_Settings_Drawer.dart';
 // Re-exported so anything that already reached for PhraseFeedback through
 // main.dart keeps compiling after the enum moved to its own file.
 export 'models/Phrase_Feedback.dart';
+=======
+import 'package:hu_accomponist/integrations/feedback/Phrase_send2_server.dart';
+import 'package:hu_accomponist/integrations/feedback/Pull_back_phrase.dart';
+import 'package:hu_accomponist/features/practice/Phrase_Feedback.dart';
+import 'package:hu_accomponist/shared/theme/Color_Theme.dart';
+import 'package:hu_accomponist/shared/theme/Design_Tokens.dart';
+import 'package:hu_accomponist/features/practice/Practice_Tool_Buttons.dart';
+import 'package:hu_accomponist/features/practice/Practice_Pen_Panel.dart';
+import 'package:hu_accomponist/features/practice/Practice_Settings_Drawer.dart';
+import 'package:hu_accomponist/features/practice/phrase_feedback_overlay.dart';
+import 'package:hu_accomponist/features/practice/Exercise_Display.dart';
+import 'package:hu_accomponist/features/practice/exercise_picker.dart';
+import 'package:hu_accomponist/features/practice/Exercise_Session.dart';
+import 'package:hu_accomponist/integrations/audio/Rust_Bridge.dart';
+>>>>>>> b60c0a0e4274b32570d119c61e61935cac5cf3ce
 
 
+// Re-exported so anything that already reached for PhraseFeedback through
+// main.dart keeps compiling after the enum moved to its own file.
+export 'package:hu_accomponist/features/practice/Phrase_Feedback.dart';
 
+<<<<<<< HEAD
 
 typedef StartRecordingFunc = ffi.Void Function();
 typedef StartRecordingFuncDart = void Function();
@@ -89,24 +106,23 @@ final NativeBridge _nativeBridge = NativeBridge();
 // which owns the Rust-bridge notesStream() pipeline directly. AudioNative
 // and NativeBridge above are both now unused by this flow; left in place
 // in case you still want them, but worth deleting if not.
+=======
+// Audio capture is driven through integrations/audio/Audio_Native.dart,
+// which owns the dart:ffi lookup of start_recording/stop_recording. Those
+// are C symbols rather than flutter_rust_bridge calls because native_ffi
+// marks listen_audio/stop_audio as `#[frb(ignore)]`; src/rust/api.dart
+// therefore exposes only initSession/getUserData/notesStream.
+>>>>>>> b60c0a0e4274b32570d119c61e61935cac5cf3ce
 
 Future<void> main() async {
   // Attempt to load the native Rust library, but never let a failure here
-  // block the UI from rendering — same reasoning as NativeBridge above.
+  // block the UI from rendering.
   // Right now this is expected to potentially fail while the Xcode/cargokit
   // integration for native_ffi is still being fixed; once that's sorted,
   // this try/catch can stay as a permanent safety net regardless.
-  try {
-    await RustLib.init();
-    debugPrint('RustLib: initialized successfully.');
-  } catch (e) {
-    debugPrint('RustLib: init failed — $e');
-    debugPrint(
-      'RustLib: continuing without Rust bindings. '
-      'Any feature that calls into native_ffi will be unavailable '
-      'until the native library is rebuilt/relinked.',
-    );
-  }
+  // Loading strategy differs per platform (static on iOS, dynamic
+  // elsewhere), and failure must never block the UI — see Rust_Bridge.dart.
+  await RustBridge.ensureInitialized();
 
   runApp(const HuAccumponistApp());
 }
@@ -146,7 +162,7 @@ class HuAccumponistApp extends StatelessWidget {
 }
 
 class ScoreViewerPage extends StatefulWidget {
-  final SelectedSheet? selected;
+  final LoadedScore? selected;
   const ScoreViewerPage({super.key, this.selected});
 
   @override
@@ -161,6 +177,15 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
   bool _isRecording = false;
 
   PhraseFeedback _feedback = PhraseFeedback.none;
+
+  /// The most recent analyzed phrase, handed to the feedback overlay for display.
+  /// Purely presentational -- [_feedback] still drives the recorder halo,
+  /// exactly as before.
+  PhraseReport? _latestReport;
+
+  /// The exercise being practised, if any. While set it replaces the score,
+  /// and it is what Rust listens for and the backend judges against.
+  ExerciseSession? _exercise;
   final DrawingController _drawing = DrawingController();
 
   /// Call this from the Flutter-Rust-Bridge performance-result callback.
@@ -182,10 +207,14 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
     if (mounted) {
       setState(() => _isRecording = isRecording);
     }
+    if (!isRecording) {
+      _exercise?.finish();
+    }
     if (isRecording) {
       // A fresh recording gets a fresh session — the backend assigns the
       // real session id on phrase 1's response (see below).
       _feedbackSessionId = null;
+      setState(() => _latestReport = null);
       setPhraseFeedback(PhraseFeedback.none);
     }
   }
@@ -196,74 +225,172 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
   // phrase 1 comes back.
   String? _feedbackSessionId;
 
+  /// Tempo and metre assumed for bar numbering when the loaded score's
+  /// MusicXML does not state them; named here so the assumption is visible
+  /// rather than sitting as two literals inside the request.
+  static const double _assumedBpm = 96;
+  static const String _assumedTimeSignature = '4/4';
+
+  double get _bpm => _score?.summary.tempoBpm ?? _assumedBpm;
+  String get _timeSignature {
+    final fromScore = _score?.summary.timeSignature ?? '';
+    return fromScore.isEmpty ? _assumedTimeSignature : fromScore;
+  }
+
+  /// Ground-truth notes for the loaded piece, in the backend's
+  /// expected_notes shape. Empty until something populates it: the OMR
+  /// endpoints that would produce it are never called from this app.
+  List<Map<String, dynamic>> _expectedNotes = const [];
+
   /// Fired by Draggable_Recorder_Button once per phrase, as soon as Rust
   /// finishes analyzing it. Sends it to /api/feedback/phrase, which
   /// judges and returns the phrase's report in the same response, then
-  /// reflects the result in the companion's mood.
+  /// shows the result in the feedback card.
   ///
-  /// TODO — three inputs the real endpoint requires that nothing in this
-  /// file currently tracks; wire these in from wherever they actually
-  /// live once that's decided:
-  ///   - `piece`: title/composer/composed_date for the loaded score —
-  ///     probably known back when the piece was picked from the library.
-  ///   - `bpm` / `timeSignature`: also piece-level, likely from the same
-  ///     place, or from the OMR output below.
-  ///   - `expectedNotes`: the ground-truth notes for this phrase's bars —
-  ///     presumably the notes_json your OMR pipeline
-  ///     (/api/score/process or /api/score/process-omr) already produced
-  ///     for this piece, sliced to the bars this phrase covers.
+  /// `piece` now carries the real title and composer captured when the
+  /// score was picked from the library (see [_piece]).
   ///
-  /// TODO: once you're happy with the shape, this is also the place to
-  /// surface PhraseReport.feedback in the UI (e.g. highlighting the wrong
-  /// note on the score via each finding's `box`) rather than only driving
-  /// mood.
+  /// Two inputs still have no source anywhere in the app, and are sent as
+  /// documented defaults rather than invented values:
+  ///
+  ///   - `bpm` / `timeSignature`: taken from the score's MusicXML when it
+  ///     states them, otherwise [_assumedBpm] and [_assumedTimeSignature].
+  ///     The backend uses them only to number bars, so a wrong tempo
+  ///     mislabels bar numbers but does not invalidate pitch scoring.
+  ///
+  ///   - `expectedNotes`: nothing turns the loaded MusicXML into expected
+  ///     notes yet, so it is sent empty. The backend requires a non-empty
+  ///     `expected_notes` to judge against, so phrases come back rejected
+  ///     rather than scored — see the diagnostics line below, which says
+  ///     so explicitly in the terminal instead of failing silently.
   Future<void> _onPhraseReceived(int phraseNumber, List<Notes> notes) async {
+    final exercise = _exercise;
+    if (exercise != null) {
+      exercise.onRustBatch(notes);
+      return;
+    }
+
+    if (_expectedNotes.isEmpty) {
+      debugPrint(
+        '[Diagnostics] phrase $phraseNumber: no expected_notes for '
+        '"${_piece.title}" — nothing derives expected notes from the '
+        'MusicXML yet, so the backend has nothing to judge against and '
+        'will reject this phrase.',
+      );
+    }
+
     final report = await PhraseUploadService.sendPhrase(
       sessionId: _feedbackSessionId,
       phraseNumber: phraseNumber,
-      // PLACEHOLDER — see TODO above.
-      bpm: 96,
-      timeSignature: '4/4',
-      piece: const PieceInfo(
-        title: 'TODO',
-        composer: 'TODO',
-        composedDate: 'TODO',
-      ),
-      expectedNotes: const [],
+      bpm: _bpm,
+      timeSignature: _timeSignature,
+      piece: _piece,
+      expectedNotes: _expectedNotes,
       userNotes: notes,
     );
 
     if (report == null || !mounted) return;
 
     _feedbackSessionId = report.sessionId;
+    // Surfaces the report the call already returns. The request itself is
+    // untouched -- this only consumes the response.
+    setState(() => _latestReport = report);
 
-    // ASSUMPTION: overall >= 80 reads as "enjoying", otherwise "mad" —
-    // adjust once you have a feel for real score distributions.
-    applyPerformanceResult(playedCorrectly: report.scores.overall >= 80);
+    setPhraseFeedback(PhraseFeedback.forScore(report.scores.overall));
   }
 
-  // Null until a sheet has been picked from the library.
-  Uint8List? _pdfBytes;
-  bool get _hasScore => _pdfBytes != null;
+  /// Identity of the loaded score, captured when it is picked from the
+  /// library and sent with every phrase.
+  ///
+  /// `composedDate` is empty because nothing in the app knows it: the
+  /// score catalog carries title and composer only. The backend treats
+  /// `piece` as optional metadata and stores it
+  /// as-is, so an empty date is honest; a fabricated one would be written
+  /// into every stored phrase file.
+  PieceInfo _piece = const PieceInfo(
+    title: '',
+    composer: '',
+    composedDate: '',
+  );
 
-  // Owns the fetched-and-parsed pages for whatever score is currently
-  // loaded — kept as a stable field (not rebuilt in build()) so it isn't
-  // torn down and its cache/prefetch thrown away on every setState.
-  ScorePageController? _pageController;
+  // Null until a score has been picked from the library.
+  LoadedScore? _score;
+  bool get _hasScore => _score != null;
 
-  // Swaps in a new score, or clears it if [pdfBytes] is null.
-  void _setScore(Uint8List? pdfBytes) {
-    final previousController = _pageController;
-    _pdfBytes = pdfBytes;
-    _pageController = pdfBytes != null ? ScorePageController(pdfBytes) : null;
-    // Close only after the controller's queued renders finish. This prevents
-    // a newly selected score from closing a document still used by old pages.
-    previousController?.dispose();
+  // Kept as a stable field so picking another score reloads the same
+  // WebView instead of rebuilding it.
+  final ScoreOsmdController _osmd = ScoreOsmdController();
+
+  // Swaps in a new score, or clears it if [selected] is null.
+  void _setScore(LoadedScore? selected) {
+    if (selected != null) _endExercise();
+    _score = selected;
+    _piece = selected == null
+        ? const PieceInfo(title: '', composer: '', composedDate: '')
+        : PieceInfo(
+            title: selected.summary.title,
+            composer: selected.summary.composer,
+            composedDate: '',
+          );
+  }
+
+  // ── Exercises ──────────────────────────────────────────────────────
+
+  Future<void> _openExercisePicker() async {
+    final choice = await ExercisePicker.show(context);
+    if (choice == null || !mounted) return;
+    setState(() {
+      _endExercise();
+      _exercise = ExerciseSession(
+        exercise: choice.exercise,
+        bpm: choice.bpm,
+        octave: choice.octave,
+        onReport: _onExerciseReport,
+      );
+      _latestReport = null;
+      _feedback = PhraseFeedback.none;
+    });
+  }
+
+  void _endExercise() {
+    _exercise?.dispose();
+    _exercise = null;
+  }
+
+  void _onExerciseReport(PhraseReport report) {
+    if (!mounted) return;
+    setState(() => _latestReport = report);
+    setPhraseFeedback(PhraseFeedback.forScore(report.scores.overall));
+  }
+
+  /// Runs between the mic tap and the microphone opening. Recording is
+  /// refused without an exercise: Rust only listens for the notes of a
+  /// loaded piece, and nothing derives those notes from a score's MusicXML
+  /// yet, so a score alone gives Rust nothing to listen for.
+  Future<bool> _beforeCapture() async {
+    final exercise = _exercise;
+    if (exercise == null) {
+      _say(
+        'Pick an exercise first. Following along with a score is not '
+        'supported yet.',
+      );
+      return false;
+    }
+    final error = await exercise.prepare();
+    if (error != null && error != 'cancelled') _say(error);
+    return error == null;
+  }
+
+  void _say(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), duration: const Duration(seconds: 4)),
+    );
   }
 
   @override
   void dispose() {
-    _pageController?.dispose();
+    _exercise?.dispose();
     _drawing.dispose();
     super.dispose();
   }
@@ -272,11 +399,7 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
   void initState() {
     super.initState();
 
-    // ASSUMPTION: SelectedSheet (defined in Music_Library_Page.dart) needs
-    // a pdfBytes field now instead of musicXml, and whatever populates it
-    // needs to call ApiService.fetchScorePdf() instead of the old
-    // fetchMusicSheet().
-    _setScore(widget.selected?.pdfBytes);
+    _setScore(widget.selected);
   }
 
   // Pen settings
@@ -285,8 +408,13 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
   double _penSize = 3.0;
 
   void _goToNavPage() async {
+<<<<<<< HEAD
     final selected = await Navigator.of(context).push<SelectedSheet>(
       PageRouteBuilder<SelectedSheet>(
+=======
+    final selected = await Navigator.of(context).push<LoadedScore>(
+      PageRouteBuilder<LoadedScore>(
+>>>>>>> b60c0a0e4274b32570d119c61e61935cac5cf3ce
         transitionDuration: Motion.page,
         reverseTransitionDuration: Motion.base,
         pageBuilder: (context, animation, secondaryAnimation) =>
@@ -306,7 +434,7 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
 
     if (selected != null) {
       setState(() {
-        _setScore(selected.pdfBytes);
+        _setScore(selected);
       });
     }
   }
@@ -326,6 +454,10 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
           _goToNavPage();
         },
         onClearAnnotations: _drawing.clear,
+        onOpenExercises: () {
+          Navigator.pop(context);
+          _openExercisePicker();
+        },
       ),
       body: SafeArea(
         child: Stack(
@@ -374,13 +506,21 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
                   clipBehavior: Clip.antiAlias,
                   child: Stack(
                     children: [
-                      if (_hasScore)
+                      if (_exercise != null)
                         Positioned.fill(
-                          child: Score_Pages_View(controller: _pageController!),
+                          child: ExerciseDisplay(session: _exercise!),
+                        )
+                      else if (_hasScore)
+                        Positioned.fill(
+                          child: ScoreOsmdView(
+                            musicXml: _score!.musicXml,
+                            controller: _osmd,
+                          ),
                         )
                       else
-                        const Center(
+                        Center(
                           child: Padding(
+<<<<<<< HEAD
                             padding: EdgeInsets.all(Space.xxl),
                             child: Text(
                               'Select a score from the library',
@@ -390,6 +530,31 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
                                 fontSize: 15,
                                 letterSpacing: 0.4,
                               ),
+=======
+                            padding: const EdgeInsets.all(Space.xxl),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Text(
+                                  'Select a score from the library',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    color: PracticePalette.mutedBrown,
+                                    fontSize: 15,
+                                    letterSpacing: 0.4,
+                                  ),
+                                ),
+                                const SizedBox(height: Space.md),
+                                TextButton.icon(
+                                  onPressed: _openExercisePicker,
+                                  icon: const Icon(Icons.music_note_rounded),
+                                  label: const Text('or practise an exercise'),
+                                  style: TextButton.styleFrom(
+                                    foregroundColor: PracticePalette.gold,
+                                  ),
+                                ),
+                              ],
+>>>>>>> b60c0a0e4274b32570d119c61e61935cac5cf3ce
                             ),
                           ),
                         ),
@@ -559,7 +724,22 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
             Draggable_Recorder_Button(
               onToggle: _onRecordingChanged,
               onPhrase: _onPhraseReceived,
+<<<<<<< HEAD
               accent: PracticeSettingsDrawer.feedbackColor(_feedback),
+=======
+              onBeforeCapture: _beforeCapture,
+              onError: _say,
+              accent: PracticeSettingsDrawer.feedbackColor(_feedback),
+            ),
+
+            // ─────────────────────────────────────────────
+            // PHRASE FEEDBACK
+            // ─────────────────────────────────────────────
+            Positioned(
+              right: Space.lg,
+              bottom: 76,
+              child: PhraseFeedbackOverlay(report: _latestReport),
+>>>>>>> b60c0a0e4274b32570d119c61e61935cac5cf3ce
             ),
 
             // ─────────────────────────────────────────────

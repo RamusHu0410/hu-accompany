@@ -6,6 +6,34 @@ django
 # libpq/pg_config is needed to install.
 psycopg[binary]
 
+# Hum -> song (the hum app: hum/engine). FluidSynth, the program that turns MIDI into sound, is
+# separate: `brew install fluid-synth` on macOS, `apt install fluidsynth` on Debian/Ubuntu.
+numpy
+scipy
+music21
+pydantic
+librosa
+soundfile
+pretty-midi
+mido
+pedalboard
+av
+arvo
+# Talk mode: Gemini works out what was asked, ElevenLabs hears and speaks it.
+google-genai
+elevenlabs
+# basic-pitch finds the notes in a hum. Its normal install pulls in TensorFlow, which this app
+# doesn't use (it runs basic-pitch's ONNX model with onnxruntime), so install it without its
+# dependencies after the lines above:
+#   pip install --no-deps basic-pitch
+# These are the ones basic-pitch does need from that list:
+mir-eval
+resampy
+scikit-learn
+onnxruntime
+# Tests for the hum engine (`python -m pytest`, see pytest.ini)
+pytest
+
 # Config / environment
 python-dotenv
 
@@ -13,10 +41,6 @@ python-dotenv
 # Django server so the Flutter app can find it without a fixed IP)
 requests
 zeroconf
-
-# IMSLP score download (imslp_downloader app drives a real browser
-# through IMSLP's disclaimer/subscribe flow)
-playwright
 
 # PDF -> image extraction (image_processor phase1_prepare, scripts/pdf_processor.py)
 PyMuPDF
@@ -49,10 +73,6 @@ music21
 pdfplumber
 pytesseract
 
-# LLM client -- currently unused (imslp_search/main.py has a Gemini
-# integration commented out); keep or drop depending on whether that
-# code path is coming back
-google-genai
 alembic==1.19.1
 annotated-doc==0.0.5
 annotated-types==0.8.0

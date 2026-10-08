@@ -111,3 +111,13 @@ app.*.map.json
 /android/app/profile
 /android/app/release
 .aider*
+
+# Score MusicXML extracted by `manage.py import_pdmx` (regenerable from PDMX)
+backend/storage/musicxml/
+# PDMX score archive (shared locally, too large for git)
+backend/mxl.tar
+
+# Hummed recordings and songs made from them (see backend/hum/paths.py): users' own audio
+backend/hum_data/
+# Soundfonts used to render songs (large; copy them in by hand, see backend/hum/README.md)
+*.sf2

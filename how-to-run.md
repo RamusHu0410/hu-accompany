@@ -2,6 +2,7 @@ Run django server
 
 cd backend
 python3 manage.py runserver 0.0.0.0:8000
+docker compose up -d
 
 FOR KELVIN:
 export DYLD_FALLBACK_LIBRARY_PATH="$(brew --prefix vips)/lib:$DYLD_FALLBACK_LIBRARY_PATH"

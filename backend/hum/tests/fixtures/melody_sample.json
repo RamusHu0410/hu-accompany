@@ -1,0 +1,43 @@
+{
+  "tempo_bpm": 92.0,
+  "key": "D minor",
+  "time_signature": "4/4",
+  "tuning_offset_cents": 14,
+  "notes": [
+    {"pitch": 62, "start_beats": 0.0, "duration_beats": 1.5, "velocity": 84},
+    {"pitch": 64, "start_beats": 1.5, "duration_beats": 0.5, "velocity": 72},
+    {"pitch": 65, "start_beats": 2.0, "duration_beats": 1.0, "velocity": 78},
+    {"pitch": 67, "start_beats": 3.0, "duration_beats": 1.0, "velocity": 80},
+
+    {"pitch": 69, "start_beats": 4.0, "duration_beats": 1.0, "velocity": 86},
+    {"pitch": 69, "start_beats": 5.0, "duration_beats": 1.0, "velocity": 74},
+    {"pitch": 69, "start_beats": 6.0, "duration_beats": 1.0, "velocity": 78},
+    {"pitch": 70, "start_beats": 7.0, "duration_beats": 1.0, "velocity": 82},
+
+    {"pitch": 69, "start_beats": 8.0, "duration_beats": 1.0, "velocity": 84},
+    {"pitch": 67, "start_beats": 9.0, "duration_beats": 1.0, "velocity": 78},
+    {"pitch": 65, "start_beats": 10.0, "duration_beats": 1.0, "velocity": 76},
+    {"pitch": 64, "start_beats": 11.0, "duration_beats": 1.0, "velocity": 74},
+
+    {"pitch": 65, "start_beats": 12.0, "duration_beats": 1.0, "velocity": 76},
+    {"pitch": 64, "start_beats": 13.0, "duration_beats": 1.0, "velocity": 72},
+    {"pitch": 62, "start_beats": 14.0, "duration_beats": 2.0, "velocity": 70},
+
+    {"pitch": 65, "start_beats": 16.0, "duration_beats": 1.5, "velocity": 80},
+    {"pitch": 67, "start_beats": 17.5, "duration_beats": 0.5, "velocity": 74},
+    {"pitch": 69, "start_beats": 18.0, "duration_beats": 1.0, "velocity": 84},
+    {"pitch": 74, "start_beats": 19.0, "duration_beats": 1.0, "velocity": 92},
+
+    {"pitch": 72, "start_beats": 20.0, "duration_beats": 1.5, "velocity": 90},
+    {"pitch": 70, "start_beats": 21.5, "duration_beats": 0.5, "velocity": 80},
+    {"pitch": 69, "start_beats": 22.0, "duration_beats": 1.0, "velocity": 84},
+    {"pitch": 69, "start_beats": 23.0, "duration_beats": 1.0, "velocity": 78},
+
+    {"pitch": 67, "start_beats": 24.0, "duration_beats": 1.0, "velocity": 80},
+    {"pitch": 70, "start_beats": 25.0, "duration_beats": 1.0, "velocity": 78},
+    {"pitch": 69, "start_beats": 26.0, "duration_beats": 1.0, "velocity": 76},
+    {"pitch": 64, "start_beats": 27.0, "duration_beats": 1.0, "velocity": 74},
+
+    {"pitch": 62, "start_beats": 28.0, "duration_beats": 4.0, "velocity": 72}
+  ]
+}

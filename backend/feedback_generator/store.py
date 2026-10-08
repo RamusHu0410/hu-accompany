@@ -12,9 +12,8 @@ phrase in phase 1 and one file per phase-2 judge:
         Era.json          # judges/phase2/era.py
 
 Mirrors pdf_processor, which writes its piece_data JSON into storage rather
-than a DB table -- there is no Django model for feedback. Unlike
-imslp_downloader/storage.py, this module does *not* read
-django.conf.settings: feedback_generator stays framework-free, so the caller
+than a DB table -- there is no Django model for feedback. This module does
+*not* read django.conf.settings: feedback_generator stays framework-free, so the caller
 passes the storage root in (api/views.py passes settings.STORAGE_ROOT).
 
 Phrase files are addressed by phrase number, so re-recording a phrase

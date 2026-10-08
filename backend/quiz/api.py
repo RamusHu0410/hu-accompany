@@ -1,8 +1,14 @@
 """HTTP layer for the quiz package.
 
+<<<<<<< HEAD
 Kept in the package rather than in api/views.py, following the same shape as
 imslp_downloader/api.py, so the quiz feature is self-contained: the only
 edit needed elsewhere is one line in api/urls.py wiring the route up.
+=======
+Kept in the package rather than in api/views.py so the quiz feature is
+self-contained: the only edit needed elsewhere is one line in api/urls.py
+wiring the route up.
+>>>>>>> b60c0a0e4274b32570d119c61e61935cac5cf3ce
 
 This module does no quiz logic of its own -- it decodes the body, calls
 generate_quiz, and translates the package's exceptions into status codes.
