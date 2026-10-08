@@ -150,19 +150,73 @@ class HumNote {
   final double start;
   final double duration;
 
+  /// How hard the note was sung, 1 to 127.
+  final int velocity;
+
   const HumNote({
     required this.midi,
     required this.start,
     required this.duration,
+    this.velocity = 90,
   });
 
   factory HumNote.fromJson(Map<String, dynamic> json) => HumNote(
     midi: (json['midi'] as num).toDouble(),
     start: (json['start'] as num).toDouble(),
     duration: (json['duration'] as num).toDouble(),
+    velocity: (json['velocity'] as num? ?? 90).toInt(),
   );
 
   double get end => start + duration;
+}
+
+/// What "play back my hum" plays it on.
+enum RawInstrument {
+  piano('piano', 'Piano'),
+  synth('synth', 'Synth');
+
+  const RawInstrument(this.apiName, this.label);
+
+  final String apiName;
+  final String label;
+}
+
+/// The hum exactly as hummed: no quantizing, no key, no arrangement.
+/// Times are seconds from the first note, which starts at 0.
+class RawHum {
+  final List<HumNote> notes;
+
+  /// The same tune on the beat grid and in the key (times in beats). Shown
+  /// for comparison; arrangements are built on it.
+  final List<HumNote> quantized;
+  final double tempo;
+  final String key;
+  final String mode;
+  final double duration;
+
+  const RawHum({
+    required this.notes,
+    this.quantized = const [],
+    required this.tempo,
+    required this.key,
+    required this.mode,
+    required this.duration,
+  });
+
+  factory RawHum.fromJson(Map<String, dynamic> json) => RawHum(
+    notes: HumNotes._notes(json['notes']),
+    quantized: HumNotes._notes(json['quantized']),
+    tempo: (json['tempo'] as num? ?? 0).toDouble(),
+    key: json['key'] as String? ?? '',
+    mode: json['mode'] as String? ?? '',
+    duration: (json['duration'] as num? ?? 0).toDouble(),
+  );
+
+  /// The notes sounding at [seconds], by index.
+  Set<int> soundingAt(double seconds) => {
+    for (var i = 0; i < notes.length; i++)
+      if (notes[i].start <= seconds && seconds < notes[i].end) i,
+  };
 }
 
 /// The notes heard in the hum, and the notes the song plays, for drawing.

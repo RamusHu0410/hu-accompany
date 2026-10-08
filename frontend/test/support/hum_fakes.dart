@@ -1,6 +1,9 @@
 import 'dart:async';
 import 'dart:typed_data';
 
+import 'dart:ui';
+
+import 'package:hu_accomponist/features/hum/file_sharer.dart';
 import 'package:hu_accomponist/features/hum/hum_audio.dart';
 import 'package:hu_accomponist/integrations/hum/hum_models.dart';
 import 'package:hu_accomponist/integrations/hum/hum_repository.dart';
@@ -29,6 +32,14 @@ class FakeRecorder implements HumRecorder {
 
 class FakePlayer implements SongPlayer {
   final StreamController<bool> _playing = StreamController<bool>.broadcast();
+  final StreamController<Duration> _position =
+      StreamController<Duration>.broadcast();
+
+  @override
+  Stream<Duration> get position => _position.stream;
+
+  /// Moves the playhead, as the real player does while playing.
+  void emitPosition(Duration at) => _position.add(at);
   final List<Uint8List> played = [];
   int stops = 0;
 
@@ -51,7 +62,22 @@ class FakePlayer implements SongPlayer {
   }
 
   @override
-  Future<void> dispose() => _playing.close();
+  Future<void> dispose() async {
+    await _playing.close();
+    await _position.close();
+  }
+}
+
+class FakeSharer implements FileSharer {
+  final List<(String, String, int)> shared = [];
+
+  @override
+  Future<void> share(
+    Uint8List bytes, {
+    required String filename,
+    required String mimeType,
+    Rect? origin,
+  }) async => shared.add((filename, mimeType, bytes.length));
 }
 
 /// A server that answers instantly unless a test holds a call back.
@@ -121,6 +147,39 @@ class FakeHumRepository implements HumRepository {
     if (talkError != null) throw talkError!;
     return (onTalk ?? faster)(text, settings);
   }
+
+  Object? rawError;
+  final List<RawInstrument> rawAudioCalls = [];
+  int rawCalls = 0;
+
+  static const RawHum rawHum = RawHum(
+    notes: [
+      HumNote(midi: 50, start: 0, duration: 0.6, velocity: 100),
+      HumNote(midi: 52, start: 0.6, duration: 0.6, velocity: 80),
+      HumNote(midi: 53, start: 1.2, duration: 1.0, velocity: 110),
+    ],
+    tempo: 92,
+    key: 'D',
+    mode: 'minor',
+    duration: 2.2,
+  );
+
+  @override
+  Future<RawHum> raw(HumUpload hum) async {
+    rawCalls++;
+    if (rawError != null) throw rawError!;
+    return rawHum;
+  }
+
+  @override
+  Future<Uint8List> rawAudio(HumUpload hum, RawInstrument instrument) async {
+    rawAudioCalls.add(instrument);
+    return Uint8List.fromList([100 + instrument.index]);
+  }
+
+  @override
+  Future<Uint8List> rawMidi(HumUpload hum) async =>
+      Uint8List.fromList('MThd'.codeUnits);
 
   @override
   Future<Uri> speechUrl(String speechId) async =>

@@ -2,7 +2,9 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import 'package:hu_accomponist/features/hum/file_sharer.dart';
 import 'package:hu_accomponist/features/hum/hum_audio.dart';
+import 'package:hu_accomponist/features/hum/raw_playback_controller.dart';
 import 'package:hu_accomponist/integrations/hum/hum_models.dart';
 import 'package:hu_accomponist/integrations/hum/hum_repository.dart';
 import 'package:hu_accomponist/integrations/server/api_client.dart';
@@ -33,10 +35,19 @@ class HumController extends ChangeNotifier {
     HumRepository? repository,
     HumRecorder? recorder,
     SongPlayer? player,
+    SongPlayer? rawPlayer,
+    FileSharer sharer = const SystemFileSharer(),
     this.maxHum = const Duration(seconds: 15),
   }) : _repository = repository ?? const ServerHumRepository(),
        _recorder = recorder ?? MicRecorder(),
        _player = player ?? JustAudioSongPlayer() {
+    rawPlayback = RawPlaybackController(
+      repository: _repository,
+      player: rawPlayer ?? JustAudioSongPlayer(name: 'raw'),
+      sharer: sharer,
+      beforePlay:
+          _player.stop, // the song and the raw hum never play over each other
+    );
     _playingSub = _player.playing.listen((playing) {
       if (playing == isPlaying) return;
       isPlaying = playing;
@@ -48,6 +59,9 @@ class HumController extends ChangeNotifier {
   final HumRecorder _recorder;
   final SongPlayer _player;
   final Duration maxHum;
+
+  /// "Play back my hum": the raw notes, played exactly as hummed.
+  late final RawPlaybackController rawPlayback;
 
   HumPhase phase = HumPhase.idle;
   HumUpload? hum;
@@ -76,6 +90,7 @@ class HumController extends ChangeNotifier {
   Future<void> startHum() async {
     if (isBusy) return;
     await _player.stop();
+    await rawPlayback.stop();
     error = null;
     try {
       if (!await _recorder.requestPermission()) {
@@ -109,6 +124,9 @@ class HumController extends ChangeNotifier {
       hum = upload;
       _song = null;
       notes = const HumNotes();
+      unawaited(
+        rawPlayback.load(upload),
+      ); // reports its own errors on its panel
       await _remake(job);
     } on ApiException catch (e) {
       _fail(job, e.message);
@@ -147,7 +165,9 @@ class HumController extends ChangeNotifier {
   Future<void> togglePlay() async {
     if (isPlaying) return _player.stop();
     final song = _song;
-    if (song != null) await _player.playWav(song);
+    if (song == null) return;
+    await rawPlayback.stop();
+    await _player.playWav(song);
   }
 
   Future<void> _remakeIfHummed() async {
@@ -173,6 +193,7 @@ class HumController extends ChangeNotifier {
       notes = results[1] as HumNotes;
       phase = HumPhase.idle;
       _changed();
+      await rawPlayback.stop();
       await _player.playWav(_song!);
     } on ApiException catch (e) {
       _fail(job, e.message);
@@ -241,6 +262,7 @@ class HumController extends ChangeNotifier {
     _playingSub?.cancel();
     _recorder.dispose();
     _player.dispose();
+    rawPlayback.dispose();
     super.dispose();
   }
 }

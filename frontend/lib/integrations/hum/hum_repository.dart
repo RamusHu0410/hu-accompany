@@ -34,6 +34,15 @@ abstract class HumRepository {
 
   /// Where a reply's speech (MP3) can be streamed from.
   Future<Uri> speechUrl(String speechId);
+
+  /// The hum exactly as hummed, with no quantizing or arrangement.
+  Future<RawHum> raw(HumUpload hum);
+
+  /// Those raw notes played on [instrument], as WAV bytes.
+  Future<Uint8List> rawAudio(HumUpload hum, RawInstrument instrument);
+
+  /// Those raw notes as a standard MIDI file.
+  Future<Uint8List> rawMidi(HumUpload hum);
 }
 
 class ServerHumRepository implements HumRepository {
@@ -105,6 +114,33 @@ class ServerHumRepository implements HumRepository {
   @override
   Future<Uri> speechUrl(String speechId) =>
       client.resolve('/api/hum/talk/speech/$speechId');
+
+  @override
+  Future<RawHum> raw(HumUpload hum) async {
+    final response = ApiClient.ensureOk(
+      await client.postJson('/api/hum/raw', {'hum': hum.filename}),
+    );
+    return RawHum.fromJson(_json(response.bodyBytes));
+  }
+
+  @override
+  Future<Uint8List> rawAudio(HumUpload hum, RawInstrument instrument) async {
+    final response = ApiClient.ensureOk(
+      await client.postJson('/api/hum/raw/audio', {
+        'hum': hum.filename,
+        'instrument': instrument.apiName,
+      }),
+    );
+    return response.bodyBytes;
+  }
+
+  @override
+  Future<Uint8List> rawMidi(HumUpload hum) async {
+    final response = ApiClient.ensureOk(
+      await client.postJson('/api/hum/raw/midi', {'hum': hum.filename}),
+    );
+    return response.bodyBytes;
+  }
 
   Map<String, dynamic> _body(
     HumUpload hum,

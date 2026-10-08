@@ -173,6 +173,65 @@ class NotesTests(HumTestCase):
                 self.assertEqual(set(body["sung"][0]), {"midi", "start", "duration"})
 
 
+class RawTests(HumTestCase):
+    """Your hum as hummed: the raw notes, played back, and exported."""
+
+    def test_the_raw_notes_come_with_the_tune_on_the_grid_beside_them(self):
+        body = self.post_json("/api/hum/raw", {"hum": self.uploaded_hum()}).json()
+
+        self.assertEqual(body["notes"][0]["start"], 0)
+        self.assertEqual(set(body["notes"][0]), {"midi", "start", "duration", "velocity"})
+        self.assertEqual(len(body["notes"]), len(body["quantized"]))
+        self.assertIn(body["mode"], ("major", "minor"))
+        self.assertGreater(body["tempo"], 0)
+        self.assertGreater(body["duration"], 0)
+
+    def test_asking_twice_hears_the_hum_once(self):
+        hum = self.uploaded_hum()
+        first = self.post_json("/api/hum/raw", {"hum": hum}).json()
+        saved = self.data / "transcriptions" / (Path(hum).stem + ".json")
+        self.assertTrue(saved.is_file())
+        self.assertEqual(self.post_json("/api/hum/raw", {"hum": hum}).json(), first)
+
+    def test_the_midi_export_is_a_midi_file_with_the_same_notes(self):
+        import pretty_midi
+
+        hum = self.uploaded_hum()
+        notes = self.post_json("/api/hum/raw", {"hum": hum}).json()["notes"]
+        response = self.post_json("/api/hum/raw/midi", {"hum": hum})
+
+        self.assertEqual(response["Content-Type"], "audio/midi")
+        self.assertIn("attachment", response["Content-Disposition"])
+        exported = pretty_midi.PrettyMIDI(io.BytesIO(response.content)).instruments[0].notes
+        self.assertEqual([n.pitch for n in exported], [n["midi"] for n in notes])
+
+    @unittest.skipUnless(can_render(), "needs FluidSynth and a soundfont")
+    def test_both_instruments_play_the_hum_back(self):
+        hum = self.uploaded_hum()
+        duration = self.post_json("/api/hum/raw", {"hum": hum}).json()["duration"]
+        sizes = {}
+        for instrument in ("piano", "synth"):
+            response = self.post_json("/api/hum/raw/audio", {"hum": hum, "instrument": instrument})
+            self.assertEqual(response.status_code, 200, response.content[:200])
+            self.assertEqual(response["Content-Type"], "audio/wav")
+            with wave.open(io.BytesIO(response.content)) as audio:
+                sizes[instrument] = audio.getnframes() / audio.getframerate()
+        for instrument, seconds in sizes.items():
+            with self.subTest(instrument=instrument):  # the whole hum, then each instrument's own ring-out
+                self.assertGreater(seconds, duration)
+                self.assertLess(seconds, duration + 2)
+
+    def test_errors(self):
+        hum = self.uploaded_hum()
+        for url in ("/api/hum/raw", "/api/hum/raw/audio", "/api/hum/raw/midi"):
+            with self.subTest(url=url):
+                self.assertEqual(self.post_json(url, {}).status_code, 400)
+                self.assertEqual(self.post_json(url, {"hum": "gone.wav"}).status_code, 404)
+                self.assertEqual(self.client.get(url).status_code, 405)
+        response = self.post_json("/api/hum/raw/audio", {"hum": hum, "instrument": "kazoo"})
+        self.assertEqual(response.status_code, 400)
+
+
 class EnginesTests(HumTestCase):
     def test_lists_both_engines_with_their_styles(self):
         body = self.client.get("/api/hum/engines").json()

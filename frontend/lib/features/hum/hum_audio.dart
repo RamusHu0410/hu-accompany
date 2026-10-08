@@ -23,6 +23,9 @@ abstract class SongPlayer {
   /// True while a song is playing, false when it ends or is stopped.
   Stream<bool> get playing;
 
+  /// How far into the song playback is, ticking while it plays.
+  Stream<Duration> get position;
+
   Future<void> playWav(Uint8List bytes);
 
   Future<void> playUrl(Uri url);
@@ -63,8 +66,19 @@ class MicRecorder implements HumRecorder {
 }
 
 class JustAudioSongPlayer implements SongPlayer {
+  JustAudioSongPlayer({this.name = 'song'});
+
+  /// Keeps two players' files apart.
+  final String name;
   final AudioPlayer _player = AudioPlayer();
   int _songs = 0;
+
+  @override
+  Stream<Duration> get position => _player.createPositionStream(
+    // Often enough that a note lights up as it starts, not a beat late.
+    minPeriod: const Duration(milliseconds: 30),
+    maxPeriod: const Duration(milliseconds: 60),
+  );
 
   @override
   Stream<bool> get playing => _player.playerStateStream.map(
@@ -76,7 +90,7 @@ class JustAudioSongPlayer implements SongPlayer {
   Future<void> playWav(Uint8List bytes) async {
     // Rotating through a few names, so a new song never reuses the file still playing.
     final folder = await getTemporaryDirectory();
-    final file = File('${folder.path}/hum-song-${_songs++ % 4}.wav');
+    final file = File('${folder.path}/hum-$name-${_songs++ % 4}.wav');
     await file.writeAsBytes(bytes, flush: true);
     await _player.setFilePath(file.path);
     await _player.play();

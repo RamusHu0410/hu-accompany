@@ -18,6 +18,8 @@ void main() {
         repository: repository,
         recorder: recorder,
         player: player,
+        rawPlayer: FakePlayer(),
+        sharer: FakeSharer(),
         maxHum: maxHum,
       );
 

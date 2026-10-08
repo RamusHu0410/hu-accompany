@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:hu_accomponist/features/hum/hum_controller.dart';
 import 'package:hu_accomponist/features/hum/hum_page.dart';
+import 'package:hu_accomponist/integrations/hum/hum_models.dart';
 
 import 'support/hum_fakes.dart';
 
@@ -10,21 +11,25 @@ void main() {
   late FakeRecorder recorder;
   late FakeHumRepository repository;
   late HumController controller;
+  late FakeSharer sharer;
 
   setUp(() {
     recorder = FakeRecorder();
     repository = FakeHumRepository();
+    sharer = FakeSharer();
     controller = HumController(
       repository: repository,
       recorder: recorder,
       player: FakePlayer(),
+      rawPlayer: FakePlayer(),
+      sharer: sharer,
     );
   });
 
   tearDown(() => controller.dispose());
 
   Future<void> show(WidgetTester tester) async {
-    tester.view.physicalSize = const Size(900, 2200);
+    tester.view.physicalSize = const Size(900, 3600);
     tester.view.devicePixelRatio = 2;
     addTearDown(tester.view.reset);
     await tester.pumpWidget(MaterialApp(home: HumPage(controller: controller)));
@@ -125,5 +130,39 @@ void main() {
     expect(recorder.starts, 1);
     expect(repository.uploads, 1);
     expect(find.text('YOUR SONG'), findsOneWidget);
+  });
+
+  testWidgets('play my hum, switch to synth, and export MIDI from the page', (
+    tester,
+  ) async {
+    await show(tester);
+    await hum(tester);
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 20)),
+    );
+    await tester.pump();
+
+    expect(find.text('YOUR HUM, AS HUMMED'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('play-my-hum')));
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 20)),
+    );
+    await tester.pump();
+    expect(repository.rawAudioCalls, [RawInstrument.piano]);
+    expect(find.text('Stop'), findsOneWidget);
+
+    await tester.tap(find.text('Synth'));
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 20)),
+    );
+    await tester.pump();
+    expect(repository.rawAudioCalls.last, RawInstrument.synth);
+
+    await tester.tap(find.text('Export MIDI'));
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 20)),
+    );
+    await tester.pump();
+    expect(sharer.shared.single.$1, 'hum.mid');
   });
 }

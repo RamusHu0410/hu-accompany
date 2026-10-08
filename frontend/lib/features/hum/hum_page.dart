@@ -6,6 +6,7 @@ import 'package:hu_accomponist/features/hum/hum_controller.dart';
 import 'package:hu_accomponist/features/hum/hum_controls.dart';
 import 'package:hu_accomponist/features/hum/hum_notes_view.dart';
 import 'package:hu_accomponist/features/hum/hum_record_button.dart';
+import 'package:hu_accomponist/features/hum/raw_hum_panel.dart';
 import 'package:hu_accomponist/integrations/hum/hum_models.dart';
 import 'package:hu_accomponist/shared/theme/Color_Theme.dart';
 import 'package:hu_accomponist/shared/theme/Design_Tokens.dart';
@@ -82,6 +83,8 @@ class _HumPageState extends State<HumPage> {
             canPlay: c.hasSong && c.phase == HumPhase.idle,
             onToggle: c.togglePlay,
           ),
+          const SizedBox(height: Space.md),
+          RawHumPanel(playback: c.rawPlayback),
           const SizedBox(height: Space.md),
           HumControls(
             engine: c.engine,
