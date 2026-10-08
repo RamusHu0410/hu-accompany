@@ -22,9 +22,33 @@ def convert(xml_path: str, default_bpm: float = DEFAULT_BPM) -> dict:
 
     notes = []
     for part in score.parts:
-        for el in part.flatten().notesAndRests:
+        # stripTies() merges a note tied to its neighbour(s) into a single
+        # note whose duration is the sum of the tied pieces. Without this,
+        # a note held across a barline (or any tie) comes back as two or
+        # more separate notesAndRests entries, so playback re-articulates
+        # what should be one sustained sound -- e.g. a whole note tied to a
+        # quarter becomes a whole note *and* a quarter struck again a beat
+        # later, instead of a single 5-beat note. matchByPitch also folds
+        # away chord ties correctly (each pitch merged independently).
+        try:
+            flat = part.stripTies(matchByPitch=True).flatten()
+        except Exception:
+            # stripTies can choke on malformed OMR output (overlapping
+            # voices, ties with no partner); fall back to the raw stream so
+            # a bad page still yields notes rather than nothing.
+            flat = part.flatten()
+
+        for el in flat.notesAndRests:
             if isinstance(el, m21note.Rest):
                 continue
+            # Grace notes come through with quarterLength 0.0 at the same
+            # offset as the main note they ornament. oemer doesn't reliably
+            # detect grace notes anyway, and a zero-duration event sitting
+            # on top of a real note is an unplayable duplicate on the
+            # timeline, so drop anything without positive duration.
+            if float(el.quarterLength) <= 0 or el.duration.isGrace:
+                continue
+
             start = round(float(el.offset), 4)
             # el.quarterLength already includes augmentation dots
             # (dotted quarter = 1.5, dotted eighth = 0.75, etc.)
