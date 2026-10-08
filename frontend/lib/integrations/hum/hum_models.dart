@@ -1,5 +1,8 @@
-/// Which of the two song makers to use.
+/// Which song maker to use.
 enum HumEngine {
+  /// A genre's band plays the tune as intro, verse, chorus and outro.
+  band('band', 'Band'),
+
   /// A full ensemble arranged around the tune. Best from a clean hum.
   epic('epic', 'Epic'),
 
@@ -49,12 +52,13 @@ class Instrument {
 /// How the song should feel. Mirrors the backend's SongSettings
 /// (backend/hum/engine/talk/settings.py): three dials from 0 to 1 with 0.5
 /// meaning "as hummed", a genre word, the instruments, and how calm or big
-/// each half is.
+/// each half is. [mood] is read by the band engine only.
 class SongSettings {
   final double emotion;
   final double speed;
   final double pitch;
   final String? style;
+  final String? mood;
   final List<Instrument> instruments;
   final int energyStart;
   final int energyEnd;
@@ -64,6 +68,7 @@ class SongSettings {
     this.speed = 0.5,
     this.pitch = 0.5,
     this.style = 'cinematic',
+    this.mood,
     this.instruments = const [
       Instrument(name: 'synth pad', role: 'lead', level: 'normal'),
     ],
@@ -79,6 +84,7 @@ class SongSettings {
       speed: (json['speed'] as num? ?? 0.5).toDouble(),
       pitch: (json['pitch'] as num? ?? 0.5).toDouble(),
       style: json['style'] as String?,
+      mood: json['mood'] as String?,
       instruments: instruments == null
           ? const SongSettings().instruments
           : [
@@ -95,6 +101,7 @@ class SongSettings {
     'speed': speed,
     'pitch': pitch,
     'style': style,
+    'mood': ?mood,
     'instruments': [for (final part in instruments) part.toJson()],
     'energy': {'start': energyStart, 'end': energyEnd},
   };
@@ -105,11 +112,29 @@ class SongSettings {
       speed: speed ?? this.speed,
       pitch: pitch ?? this.pitch,
       style: style,
+      mood: mood,
       instruments: instruments,
       energyStart: energyStart,
       energyEnd: energyEnd,
     );
   }
+
+  SongSettings withStyle(String? style) => _with(style: style, mood: mood);
+
+  /// [mood] null goes back to "as hummed".
+  SongSettings withMood(String? mood) => _with(style: style, mood: mood);
+
+  SongSettings _with({required String? style, required String? mood}) =>
+      SongSettings(
+        emotion: emotion,
+        speed: speed,
+        pitch: pitch,
+        style: style,
+        mood: mood,
+        instruments: instruments,
+        energyStart: energyStart,
+        energyEnd: energyEnd,
+      );
 }
 
 /// What the server found in a hum, and the name to send back to refer to it.
@@ -166,6 +191,13 @@ class HumNote {
     duration: (json['duration'] as num).toDouble(),
     velocity: (json['velocity'] as num? ?? 90).toInt(),
   );
+
+  Map<String, dynamic> toJson() => {
+    'midi': midi,
+    'start': start,
+    'duration': duration,
+    'velocity': velocity,
+  };
 
   double get end => start + duration;
 }

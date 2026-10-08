@@ -3,14 +3,15 @@
 POST /api/hum/upload   multipart `file` (.wav) -> the tune found in the hum, and `filename` to send
                        back to the other routes. 400 {error, code?} when the recording can't give a tune.
 POST /api/hum/song     JSON {hum, settings?, engine?} -> the song as WAV. `hum` is the filename upload
-                       returned, `engine` is "epic" (default) or "simple". 404 when the hum is gone,
+                       returned, `engine` is "band" (default), "epic" or "simple". 404 when the hum is gone,
                        503 when the song couldn't be made on this machine (FluidSynth or a soundfont is missing).
 POST /api/hum/notes    the same body -> {sung, played, contour}, in seconds, for drawing the notes.
 GET  /api/hum/engines  the engines, and the styles each knows.
 
-The two engines make a different kind of song from the same tune: "epic" is the arrangement pipeline
-(hum/engine/audio), a full ensemble that works best from a clean hum; "simple" is the chord-and-style
-accompanist (hum/engine/accompanist, driven by hum/engine/talk/song.py), steadier on a rough one.
+The engines make a different kind of song from the same tune: "band" (hum/song) arranges it for a
+genre's band as intro, verse, chorus and outro, as an editable song project (see views_song.py);
+"epic" is the arrangement pipeline (hum/engine/audio), a full ensemble that works best from a clean hum; "simple" is the chord-and-style accompanist (hum/engine/accompanist, driven by
+hum/engine/talk/song.py), steadier on a rough one.
 """
 
 import json
@@ -22,7 +23,7 @@ from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
 
-from hum import paths
+from hum import band, paths
 from hum.engine.accompanist.music.styles import STYLES as SIMPLE_STYLES
 from hum.engine.audio.arrange import arranged_melody
 from hum.engine.audio.arrange.config import DEFAULT_STYLE, STYLE_ALIASES, STYLES as EPIC_STYLES
@@ -34,10 +35,13 @@ from hum.engine.audio.pipeline import melody_run_for, new_run_dir, rerun
 from hum.engine.talk.settings import SongSettings
 from hum.engine.talk.song import SongError, make_song, song_notes
 from hum.page_settings import settings_from_page, variation_for
+from hum.rawplay import RenderUnavailable
+from hum.song.presets import DEFAULT_MOOD, DEFAULT_PRESET, MOODS, PRESETS
 
 log = logging.getLogger(__name__)
 
-ENGINES = ("epic", "simple")
+ENGINES = ("band", "epic", "simple")
+DEFAULT_ENGINE = "band"
 MAX_UPLOAD_BYTES = 50 * 1024 * 1024
 HUM_GONE = "That hum isn't on the server any more. Hum again."
 # Refusals caused by the recording itself (the user can fix them by humming again): 400.
@@ -75,7 +79,7 @@ def _hum_request(request: HttpRequest):
     hum = paths.saved_hum(data["hum"])
     if hum is None:
         return None, None, error(HUM_GONE, 404, "hum_gone")
-    engine = data.get("engine", "epic")
+    engine = data.get("engine", DEFAULT_ENGINE)
     if engine not in ENGINES:
         return None, None, error(f"engine must be one of {', '.join(ENGINES)}.", 400, "bad_request")
     return data, (hum, engine), None
@@ -142,12 +146,18 @@ def song(request: HttpRequest):
         return failed
     hum, engine = found
     try:
-        wav = _epic_song(hum, data) if engine == "epic" else make_song(str(hum), SongSettings.from_dict(data.get("settings")))
+        if engine == "band":
+            wav = band.render(band.project_for(hum, data.get("settings"))).wav
+        elif engine == "epic":
+            wav = _epic_song(hum, data)
+        else:
+            wav = make_song(str(hum), SongSettings.from_dict(data.get("settings")))
     except ValueError as exc:
         return error(str(exc), 400, "bad_settings")
     except PipelineError as exc:
         return _failure(exc)
-    except SongError as exc:
+    except (SongError, RenderUnavailable) as exc:
+        log.error("song failed (%s): %s", engine, exc)
         return error(str(exc), 503, "song_failed")
     return HttpResponse(wav, content_type="audio/wav", headers={"Cache-Control": "no-store"})
 
@@ -169,6 +179,8 @@ def notes(request: HttpRequest):
         return failed
     hum, engine = found
     try:
+        if engine == "band":
+            return JsonResponse(band.notes_for_graph(hum, band.project_for(hum, data.get("settings"))))
         if engine == "simple":
             return JsonResponse(song_notes(str(hum), SongSettings.from_dict(data.get("settings"))))
         style, settings = settings_from_page(data.get("settings"))
@@ -208,10 +220,12 @@ def engines(request: HttpRequest):
     return JsonResponse(
         {
             "engines": [
+                {"id": "band", "name": "Band", "styles": list(PRESETS), "default_style": DEFAULT_PRESET,
+                 "moods": list(MOODS), "default_mood": DEFAULT_MOOD},
                 {"id": "epic", "name": "Epic", "styles": sorted(EPIC_STYLES), "default_style": DEFAULT_STYLE,
                  "style_aliases": STYLE_ALIASES, "ensembles": sorted(ENSEMBLES)},
                 {"id": "simple", "name": "Simple", "styles": sorted(SIMPLE_STYLES)},
             ],
-            "default": "epic",
+            "default": DEFAULT_ENGINE,
         }
     )

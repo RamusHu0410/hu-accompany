@@ -5,8 +5,11 @@ import 'package:flutter/foundation.dart';
 import 'package:hu_accomponist/features/hum/file_sharer.dart';
 import 'package:hu_accomponist/features/hum/hum_audio.dart';
 import 'package:hu_accomponist/features/hum/raw_playback_controller.dart';
+import 'package:hu_accomponist/features/hum/song_saving.dart';
 import 'package:hu_accomponist/integrations/hum/hum_models.dart';
 import 'package:hu_accomponist/integrations/hum/hum_repository.dart';
+import 'package:hu_accomponist/integrations/hum/saved_hum_store.dart';
+import 'package:hu_accomponist/integrations/hum/song_style.dart';
 import 'package:hu_accomponist/integrations/server/api_client.dart';
 
 /// What the hum page is busy with.
@@ -37,8 +40,10 @@ class HumController extends ChangeNotifier {
     SongPlayer? player,
     SongPlayer? rawPlayer,
     FileSharer sharer = const SystemFileSharer(),
+    SavedHumStore? store,
     this.maxHum = const Duration(seconds: 15),
   }) : _repository = repository ?? const ServerHumRepository(),
+       _store = store ?? FileSavedHumStore(),
        _recorder = recorder ?? MicRecorder(),
        _player = player ?? JustAudioSongPlayer() {
     rawPlayback = RawPlaybackController(
@@ -56,6 +61,7 @@ class HumController extends ChangeNotifier {
   }
 
   final HumRepository _repository;
+  final SavedHumStore _store;
   final HumRecorder _recorder;
   final SongPlayer _player;
   final Duration maxHum;
@@ -67,7 +73,7 @@ class HumController extends ChangeNotifier {
   HumUpload? hum;
   HumNotes notes = const HumNotes();
   SongSettings settings = const SongSettings();
-  HumEngine engine = HumEngine.epic;
+  HumEngine engine = HumEngine.band;
   String? error;
   bool isPlaying = false;
 
@@ -76,6 +82,14 @@ class HumController extends ChangeNotifier {
 
   /// The last song made, so playing it again doesn't ask the server again.
   Uint8List? _song;
+
+  /// The settings and engine [_song] was made with: what Save keeps.
+  (SongSettings, HumEngine)? _songMadeWith;
+
+  bool saving = false;
+
+  /// Whether the song as it is now is already on the shelf.
+  bool savedThisSong = false;
   SongSettings? _previousSettings;
   StreamSubscription<bool>? _playingSub;
   Timer? _maxHumTimer;
@@ -83,6 +97,8 @@ class HumController extends ChangeNotifier {
   bool _disposed = false;
 
   bool get hasSong => _song != null;
+  bool get canSave =>
+      _song != null && phase == HumPhase.idle && !saving && !savedThisSong;
   bool get isBusy => phase != HumPhase.idle;
 
   // ── Humming ──────────────────────────────────────────────────────────
@@ -123,6 +139,7 @@ class HumController extends ChangeNotifier {
       if (job != _job) return;
       hum = upload;
       _song = null;
+      savedThisSong = false;
       notes = const HumNotes();
       unawaited(
         rawPlayback.load(upload),
@@ -144,6 +161,26 @@ class HumController extends ChangeNotifier {
     await _remakeIfHummed();
   }
 
+  /// The band engine's genre.
+  SongGenre? get genre => SongGenre.fromStyle(settings.style);
+
+  /// The band engine's mood; null is "as hummed".
+  SongMood? get mood => SongMood.fromName(settings.mood);
+
+  Future<void> setGenre(SongGenre next) async {
+    if (next == genre) return;
+    settings = settings.withStyle(next.apiName);
+    _changed();
+    await _remakeIfHummed();
+  }
+
+  /// Picking the mood that's already chosen goes back to "as hummed".
+  Future<void> setMood(SongMood? next) async {
+    settings = settings.withMood(next == mood ? null : next?.apiName);
+    _changed();
+    await _remakeIfHummed();
+  }
+
   /// A fader is moving: show it, but wait to make the song until it's let go.
   void moveFader({double? emotion, double? speed, double? pitch}) {
     settings = settings.copyWith(emotion: emotion, speed: speed, pitch: pitch);
@@ -156,6 +193,7 @@ class HumController extends ChangeNotifier {
   Future<void> resetSettings() async {
     settings = SongSettings(
       style: settings.style,
+      mood: settings.mood,
       instruments: settings.instruments,
     );
     _changed();
@@ -184,12 +222,15 @@ class HumController extends ChangeNotifier {
     error = null;
     _changed();
     try {
+      final madeWith = (settings, engine);
       final results = await Future.wait<Object>([
         _repository.song(current, settings, engine),
         _repository.notes(current, settings, engine),
       ]);
       if (job != _job) return;
       _song = results[0] as Uint8List;
+      _songMadeWith = madeWith;
+      savedThisSong = false;
       notes = results[1] as HumNotes;
       phase = HumPhase.idle;
       _changed();
@@ -199,6 +240,40 @@ class HumController extends ChangeNotifier {
       _fail(job, e.message);
     } on Exception catch (e) {
       _fail(job, "Couldn't make the song ($e).");
+    }
+  }
+
+  // ── Keeping it ───────────────────────────────────────────────────────
+
+  /// Saves the song as it is now to the shelf, named for its style and key.
+  /// True when it was saved.
+  Future<bool> save() async {
+    final song = _song, current = hum, madeWith = _songMadeWith;
+    if (!canSave || song == null || current == null || madeWith == null) {
+      return false;
+    }
+    saving = true;
+    _changed();
+    try {
+      final (madeSettings, madeEngine) = madeWith;
+      await _store.save(
+        song,
+        songToSave(
+          song: song,
+          hum: current,
+          settings: madeSettings,
+          engine: madeEngine,
+          sung: notes.sung,
+        ),
+      );
+      savedThisSong = true;
+      return true;
+    } on Exception catch (e) {
+      error = "Couldn't save the song ($e).";
+      return false;
+    } finally {
+      saving = false;
+      _changed();
     }
   }
 
@@ -219,7 +294,9 @@ class HumController extends ChangeNotifier {
       chat.add(ChatMessage(fromUser: false, text: _replyText(turn)));
       if (turn.changesSong) {
         _previousSettings = settings;
-        settings = turn.settings;
+        settings = turn.settings.withMood(
+          settings.mood,
+        ); // talk mode has no moods
       }
       chatBusy = false;
       _changed();

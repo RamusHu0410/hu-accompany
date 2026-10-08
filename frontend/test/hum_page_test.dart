@@ -12,24 +12,27 @@ void main() {
   late FakeHumRepository repository;
   late HumController controller;
   late FakeSharer sharer;
+  late MemorySavedHumStore store;
 
   setUp(() {
     recorder = FakeRecorder();
     repository = FakeHumRepository();
     sharer = FakeSharer();
+    store = MemorySavedHumStore();
     controller = HumController(
       repository: repository,
       recorder: recorder,
       player: FakePlayer(),
       rawPlayer: FakePlayer(),
       sharer: sharer,
+      store: store,
     );
   });
 
   tearDown(() => controller.dispose());
 
   Future<void> show(WidgetTester tester) async {
-    tester.view.physicalSize = const Size(900, 3600);
+    tester.view.physicalSize = const Size(900, 4800);
     tester.view.devicePixelRatio = 2;
     addTearDown(tester.view.reset);
     await tester.pumpWidget(MaterialApp(home: HumPage(controller: controller)));
@@ -60,9 +63,12 @@ void main() {
 
     expect(find.text('G major  ·  97 bpm  ·  9 notes'), findsOneWidget);
     expect(find.text('YOUR SONG'), findsOneWidget);
+    expect(find.text('Band'), findsOneWidget);
     expect(find.text('Epic'), findsOneWidget);
     expect(find.text('Simple'), findsOneWidget);
     expect(find.text('Mood'), findsOneWidget);
+    expect(find.text('GENRE'), findsOneWidget);
+    expect(find.text('Lo-fi'), findsOneWidget);
     expect(find.text('CHANGE IT WITH WORDS'), findsOneWidget);
     expect(find.text('Your notes will show up here'), findsNothing);
   });
@@ -81,6 +87,58 @@ void main() {
     await tester.pump();
 
     expect(repository.songCalls.last.$1.apiName, 'simple');
+  });
+
+  testWidgets('the band engine has genres and moods to pick, the others not', (
+    tester,
+  ) async {
+    await show(tester);
+    await hum(tester);
+
+    await tester.tap(find.byKey(const ValueKey('genre-Lo-fi')));
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 50)),
+    );
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('mood-Chill')));
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 50)),
+    );
+    await tester.pump();
+
+    final (engine, settings) = repository.songCalls.last;
+    expect(engine, HumEngine.band);
+    expect((settings.style, settings.mood), ('lofi', 'chill'));
+    expect(
+      tester
+          .widget<ChoiceChip>(find.byKey(const ValueKey('genre-Lo-fi')))
+          .selected,
+      isTrue,
+    );
+
+    await tester.tap(find.text('Epic'));
+    await tester.pump();
+    expect(find.text('GENRE'), findsNothing);
+  });
+
+  testWidgets('Save keeps the song and says where it went', (tester) async {
+    await show(tester);
+    await hum(tester);
+
+    await tester.tap(find.byKey(const ValueKey('save-song')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(store.songs, hasLength(1));
+    expect(find.text('Saved to your shelf, under Hummed.'), findsOneWidget);
+    expect(find.text('Saved'), findsOneWidget);
+    final button = tester.widget<TextButton>(
+      find.ancestor(
+        of: find.text('Saved'),
+        matching: find.byWidgetPredicate((w) => w is TextButton),
+      ),
+    );
+    expect(button.onPressed, isNull);
   });
 
   testWidgets('a suggestion chip talks to the song and shows the reply', (
