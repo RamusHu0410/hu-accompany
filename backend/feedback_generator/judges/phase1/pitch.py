@@ -18,6 +18,7 @@ from .. import (
     score_falloff,
     severity_for,
 )
+from ..feedbacks import PITCH_OUT_OF_TUNE, PITCH_WRONG_NOTE
 
 NAME = "pitch"
 PHASE = 1
@@ -41,9 +42,9 @@ def _finding(ctx: PhraseContext, expected: ExpectedNote, user: UserNote) -> Opti
     user_name = hz_to_note_name(user.pitch_hz)
     expected_name = hz_to_note_name(expected.pitch_hz)
     if user_name == expected_name:
-        message = f"This note was played slightly {'sharp' if cents > 0 else 'flat'}."
+        message, suggestion = PITCH_OUT_OF_TUNE["sharp" if cents > 0 else "flat"].render()
     else:
-        message = f"Wrong note — you played {user_name} instead of {expected_name}."
+        message, suggestion = PITCH_WRONG_NOTE.render(user_note=user_name, expected_note=expected_name)
 
     return Finding(
         bars=ctx.bar(expected.start_time_ms),
@@ -58,7 +59,7 @@ def _finding(ctx: PhraseContext, expected: ExpectedNote, user: UserNote) -> Opti
             "user_hz": user.pitch_hz,
             "expected_note": expected_name,
             "user_note": user_name,
-            "suggestion": "Practice this transition slowly and focus on the correct note.",
+            "suggestion": suggestion,
         },
     )
 

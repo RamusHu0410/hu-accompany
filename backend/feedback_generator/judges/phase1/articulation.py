@@ -16,6 +16,7 @@ from .. import (
     UserNote,
     score_falloff,
 )
+from ..feedbacks import ARTICULATION
 
 NAME = "articulation"
 PHASE = 1
@@ -64,11 +65,7 @@ def _finding(ctx: PhraseContext, expected: ExpectedNote, user: UserNote, marking
     if verdict is None:
         return None
     severity, confidence = verdict
-
-    if marking == "staccato":
-        message = "This note was held too long for the marked staccato articulation."
-    else:
-        message = f"This note was cut short for the marked {marking} articulation."
+    message, suggestion = ARTICULATION[marking].render()
 
     return Finding(
         bars=ctx.bar(expected.start_time_ms),
@@ -80,7 +77,7 @@ def _finding(ctx: PhraseContext, expected: ExpectedNote, user: UserNote, marking
             "note_id": expected.note_id,
             "marking": marking,
             "ratio": round(ratio, 3),
-            "suggestion": f"Practice this note in isolation with the marked {marking} articulation before returning to full tempo.",
+            "suggestion": suggestion,
         },
     )
 

@@ -1,9 +1,10 @@
 """Judges: one module per feedback dimension.
 
-Every judge owns one slice of the assessment -- its own error detection, its
-own 0-100 rating, and its own prose. Nothing outside `judges/` writes
-feedback text; orchestrator.py only wires judges together and summarizer.py
-only aggregates what they produced.
+Every judge owns one slice of the assessment -- its own error detection and
+its own 0-100 rating. The prose it emits lives in feedbacks.py, which every
+judge imports its messages and suggestions from. Nothing outside `judges/`
+writes feedback text; orchestrator.py only wires judges together and
+summarizer.py only aggregates what they produced.
 
 Judges are split by when they run:
 

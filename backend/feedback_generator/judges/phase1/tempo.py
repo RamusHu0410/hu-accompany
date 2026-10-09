@@ -18,6 +18,7 @@ from .. import (
     score_falloff,
     severity_for,
 )
+from ..feedbacks import TEMPO_DRIFT
 from .rhythm import onset_thresholds
 
 NAME = "tempo"
@@ -47,19 +48,19 @@ def judge(ctx: PhraseContext) -> JudgeResult:
     findings: List[Finding] = []
     if severity is not None:
         direction = "slowing" if drift_ms > 0 else "rushing"
-        verb = "slows down" if drift_ms > 0 else "rushes"
+        message, suggestion = TEMPO_DRIFT[direction].render()
         findings.append(
             Finding(
                 bars=ctx.bar(matched[0][0].start_time_ms),
                 category=NAME,
                 severity=severity,
                 confidence=confidence_for(drift_abs, minor, major),
-                message=f"The tempo gradually {verb} across the phrase.",
+                message=message,
                 details={
                     "drift_ms": round(drift_ms, 1),
                     "direction": direction,
                     "through_bar": ctx.bar(matched[-1][0].start_time_ms),
-                    "suggestion": "Practice the phrase with a metronome, paying close attention to keeping a steady tempo through to the end.",
+                    "suggestion": suggestion,
                 },
             )
         )

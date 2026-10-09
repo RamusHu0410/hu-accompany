@@ -23,6 +23,7 @@ from .. import (
     score_falloff,
     severity_for,
 )
+from ..feedbacks import RHYTHM_DURATION, RHYTHM_ONSET
 
 NAME = "rhythm"
 PHASE = 1
@@ -60,18 +61,19 @@ def _onset_finding(ctx: PhraseContext, expected: ExpectedNote, user: UserNote) -
         return None
 
     direction = "late" if diff_ms > 0 else "early"
+    message, suggestion = RHYTHM_ONSET[direction].render()
     return Finding(
         bars=ctx.bar(expected.start_time_ms),
         category=NAME,
         severity=severity,
         confidence=confidence_for(diff_abs, minor, major),
-        message=f"This note came in {direction}, disrupting the rhythm.",
+        message=message,
         details={
             "note_id": expected.note_id,
             "issue": "onset",
             "diff_ms": round(diff_ms, 1),
             "direction": direction,
-            "suggestion": "Practice this passage with a metronome, focusing on landing the note exactly on the beat.",
+            "suggestion": suggestion,
         },
     )
 
@@ -86,10 +88,8 @@ def _duration_finding(ctx: PhraseContext, expected: ExpectedNote, user: UserNote
     if severity is None:
         return None
 
-    if diff_ms > 0:
-        direction, message = "too_long", "This note was held longer than written."
-    else:
-        direction, message = "too_short", "This note was cut short compared to what's written."
+    direction = "too_long" if diff_ms > 0 else "too_short"
+    message, suggestion = RHYTHM_DURATION[direction].render()
 
     return Finding(
         bars=ctx.bar(expected.start_time_ms),
@@ -103,7 +103,7 @@ def _duration_finding(ctx: PhraseContext, expected: ExpectedNote, user: UserNote
             "diff_ms": round(diff_ms, 1),
             "pct": round(diff_abs / expected.duration_ms, 3),
             "direction": direction,
-            "suggestion": "Slow down and count out this note's full written duration before returning to full tempo.",
+            "suggestion": suggestion,
         },
     )
 

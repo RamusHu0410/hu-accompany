@@ -9,6 +9,7 @@ zero there). Scoring it a third time here would triple-penalize it.
 from typing import List
 
 from .. import Finding, JudgeResult, PhraseContext, hz_to_note_name
+from ..feedbacks import NOTES_EXTRA, NOTES_MISSING
 
 NAME = "notes"
 PHASE = 1
@@ -18,37 +19,39 @@ def judge(ctx: PhraseContext) -> JudgeResult:
     findings: List[Finding] = []
 
     for expected in ctx.missing:
+        message, suggestion = NOTES_MISSING.render()
         findings.append(
             Finding(
                 bars=ctx.bar(expected.start_time_ms),
                 category=NAME,
                 severity="major",
                 confidence=1.0,
-                message="This note was not played.",
+                message=message,
                 details={
                     "note_id": expected.note_id,
                     "issue": "missing_note",
                     "expected_hz": expected.pitch_hz,
                     "expected_note": hz_to_note_name(expected.pitch_hz),
-                    "suggestion": "Go through this passage slowly, note-by-note, to make sure this note is included.",
+                    "suggestion": suggestion,
                 },
             )
         )
 
     for user in ctx.extra:
+        message, suggestion = NOTES_EXTRA.render()
         findings.append(
             Finding(
                 bars=ctx.bar(user.start_time_ms),
                 category=NAME,
                 severity="major",
                 confidence=1.0,
-                message="An extra note was played that isn't in the score.",
+                message=message,
                 details={
                     "note_id": user.note_id,
                     "issue": "extra_note",
                     "user_hz": user.pitch_hz,
                     "user_note": hz_to_note_name(user.pitch_hz),
-                    "suggestion": "Review the written notes here closely and avoid adding notes that aren't written.",
+                    "suggestion": suggestion,
                 },
             )
         )

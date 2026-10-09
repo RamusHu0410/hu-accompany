@@ -16,6 +16,7 @@ feedback_generator/
   judges/           all feedback text and all 0-100 ratings live here
     __init__.py     shared notes/context/Finding types, pitch + bar math,
                     thresholds, judge registry
+    feedbacks.py    every message + suggestion a judge can emit
     phase1/         one phrase at a time
       __init__.py     JUDGES = run order
       pitch.py        intonation, wrong notes
@@ -30,7 +31,9 @@ feedback_generator/
       era.py          style-period performance practice
 ```
 
-- Each judge owns one dimension: its detection, its rating, its wording.
+- Each judge owns one dimension: its detection and its rating. Its wording
+  lives in `judges/feedbacks.py`, which the judge imports -- reword there,
+  not in the judge.
 - Judge contract, same in both phases: `NAME`, `PHASE` (1 or 2),
   `judge(ctx) -> JudgeResult`. Phase 1 gets a `PhraseContext` (that phrase's
   aligned notes), phase 2 a `PieceContext` (every stored phrase, aggregated
@@ -38,7 +41,7 @@ feedback_generator/
 - Nothing outside `judges/` writes feedback text; nothing outside
   `summarizer.py` aggregates across phrases.
 - Adding a dimension = one new file in `judges/phase1/` or `judges/phase2/`
-  + one entry in that package's `JUDGES`.
+  + one entry in that package's `JUDGES` + its text in `judges/feedbacks.py`.
 
 ## 2. Storage
 
