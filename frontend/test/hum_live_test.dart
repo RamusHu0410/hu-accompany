@@ -5,7 +5,7 @@
 //       HUM_WAV=../backend/hum/tests/fixtures/hum_sample.wav flutter test test/hum_live_test.dart
 //
 // It checks the app's side of the contract against the backend's real answers:
-// upload, both engines' songs and notes, and a typed command.
+// upload, every engine's songs and notes, the band project, and a typed chat message.
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -95,14 +95,51 @@ void main() {
         },
       );
 
-      test('a typed command is answered, keys or no keys', () async {
-        final turn = await repository.talk(
-          'make it faster',
-          const SongSettings(),
+      test(
+        'the band song is a project that renders, edits and charts',
+        () async {
+          final project = await repository.project(
+            hum,
+            const SongSettings(style: 'lofi'),
+          );
+          expect(project.preset, 'lofi');
+          expect(project.track('melody'), isNotNull);
+
+          final audio = await repository.projectAudio(project);
+          expect(String.fromCharCodes(audio.take(4)), 'RIFF');
+
+          final edited = await repository.editProject(project, [
+            {'action': 'change_volume', 'part': 'drums', 'direction': 'down'},
+            {
+              'action': 'set_instrument',
+              'part': 'chords',
+              'instrument': 'strings',
+            },
+          ]);
+          expect(edited.label, 'drums quieter, chords on strings');
+          expect(
+            edited.project.track('drums')!.volume,
+            lessThan(project.track('drums')!.volume),
+          );
+
+          final graph = await repository.projectNotes(edited.project);
+          expect(graph.played, isNotEmpty);
+        },
+      );
+
+      test('a chat message is answered, keys or no keys', () async {
+        final project = await repository.project(hum, const SongSettings());
+        final reply = await repository.chat(
+          'make the drums softer',
+          project,
+          canUndo: false,
+          canRedo: false,
         );
 
-        expect(turn.reply, isNotEmpty);
-        expect(turn.speechId, isNotEmpty);
+        // with keys: an edit (or a question); without: a reply naming the missing key
+        expect(reply.reply, isNotEmpty);
+        expect(reply.speechId, isNotEmpty);
+        if (reply.intent == 'error') expect(reply.reply, contains('API_KEY'));
       });
 
       test('the backend explains a hum that has no tune', () async {

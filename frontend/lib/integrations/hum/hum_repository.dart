@@ -1,7 +1,9 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:hu_accomponist/integrations/hum/chat_models.dart';
 import 'package:hu_accomponist/integrations/hum/hum_models.dart';
+import 'package:hu_accomponist/integrations/hum/song_project.dart';
 import 'package:hu_accomponist/integrations/server/api_client.dart';
 
 /// The hum feature's calls to the backend (backend/hum/README.md).
@@ -25,15 +27,39 @@ abstract class HumRepository {
     HumEngine engine,
   );
 
-  /// One typed command, and what it did to the settings.
-  Future<TalkTurn> talk(
+  /// The hum arranged by the band engine, as an editable project.
+  Future<SongProject> project(HumUpload hum, SongSettings settings);
+
+  /// A project mixed as WAV bytes. Only parts that changed are rendered again.
+  Future<Uint8List> projectAudio(SongProject project);
+
+  /// The hum and the project's melody, for the notes graph.
+  Future<HumNotes> projectNotes(SongProject project);
+
+  /// Edits made by the app's own controls (no chat), e.g. a new genre.
+  Future<EditResult> editProject(
+    SongProject project,
+    List<Map<String, dynamic>> edits,
+  );
+
+  /// One typed chat message, and what it did to the song.
+  Future<ChatReply> chat(
     String text,
-    SongSettings settings, {
-    SongSettings? previous,
+    SongProject project, {
+    required bool canUndo,
+    required bool canRedo,
   });
 
-  /// Where a reply's speech (MP3) can be streamed from.
-  Future<Uri> speechUrl(String speechId);
+  /// One spoken chat message (a WAV recording).
+  Future<ChatReply> chatVoice(
+    String wavPath,
+    SongProject project, {
+    required bool canUndo,
+    required bool canRedo,
+  });
+
+  /// Where a chat reply's speech (MP3) can be streamed from.
+  Future<Uri> chatSpeechUrl(String speechId);
 
   /// The hum exactly as hummed, with no quantizing or arrangement.
   Future<RawHum> raw(HumUpload hum);
@@ -96,24 +122,97 @@ class ServerHumRepository implements HumRepository {
   }
 
   @override
-  Future<TalkTurn> talk(
-    String text,
-    SongSettings settings, {
-    SongSettings? previous,
-  }) async {
+  Future<SongProject> project(HumUpload hum, SongSettings settings) async {
     final response = ApiClient.ensureOk(
-      await client.postJson('/api/hum/talk', {
-        'text': text,
+      await client.postJson('/api/hum/project', {
+        'hum': hum.filename,
         'settings': settings.toJson(),
-        if (previous != null) 'previous': previous.toJson(),
-      }),
+      }, timeout: songTimeout),
     );
-    return TalkTurn.fromJson(_json(response.bodyBytes));
+    return SongProject.fromJson(
+      _json(response.bodyBytes)['project'] as Map<String, dynamic>,
+    );
   }
 
   @override
-  Future<Uri> speechUrl(String speechId) =>
-      client.resolve('/api/hum/talk/speech/$speechId');
+  Future<Uint8List> projectAudio(SongProject project) async {
+    final response = ApiClient.ensureOk(
+      await client.postJson('/api/hum/project/audio', {
+        'project': project.toJson(),
+      }, timeout: songTimeout),
+    );
+    return response.bodyBytes;
+  }
+
+  @override
+  Future<HumNotes> projectNotes(SongProject project) async {
+    final response = ApiClient.ensureOk(
+      await client.postJson('/api/hum/project/notes', {
+        'project': project.toJson(),
+      }),
+    );
+    return HumNotes.fromJson(_json(response.bodyBytes));
+  }
+
+  @override
+  Future<EditResult> editProject(
+    SongProject project,
+    List<Map<String, dynamic>> edits,
+  ) async {
+    final response = ApiClient.ensureOk(
+      await client.postJson('/api/hum/project/edit', {
+        'project': project.toJson(),
+        'edits': edits,
+      }, timeout: songTimeout),
+    );
+    return EditResult.fromJson(_json(response.bodyBytes));
+  }
+
+  @override
+  Future<ChatReply> chat(
+    String text,
+    SongProject project, {
+    required bool canUndo,
+    required bool canRedo,
+  }) async {
+    final response = ApiClient.ensureOk(
+      await client.postJson('/api/hum/chat', {
+        'text': text,
+        'project': project.toJson(),
+        'can_undo': canUndo,
+        'can_redo': canRedo,
+      }, timeout: songTimeout),
+    );
+    return ChatReply.fromJson(_json(response.bodyBytes));
+  }
+
+  @override
+  Future<ChatReply> chatVoice(
+    String wavPath,
+    SongProject project, {
+    required bool canUndo,
+    required bool canRedo,
+  }) async {
+    final response = ApiClient.ensureOk(
+      await client.postFile(
+        '/api/hum/chat',
+        field: 'audio',
+        filePath: wavPath,
+        fields: {
+          'state': jsonEncode({
+            'project': project.toJson(),
+            'can_undo': canUndo,
+            'can_redo': canRedo,
+          }),
+        },
+      ),
+    );
+    return ChatReply.fromJson(_json(response.bodyBytes));
+  }
+
+  @override
+  Future<Uri> chatSpeechUrl(String speechId) =>
+      client.resolve('/api/hum/chat/speech/$speechId');
 
   @override
   Future<RawHum> raw(HumUpload hum) async {

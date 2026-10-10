@@ -1,5 +1,5 @@
-"""The hum app's HTTP layer: upload, both engines, the notes graph, and talk mode with fake Gemini and
-ElevenLabs. The engines themselves are tested by the pytest suites next to this file.
+"""The hum app's HTTP layer: upload, the engines, the notes graph, the raw hum and the song project.
+The chat is in test_api_chat.py. The engines themselves are tested by the pytest suites next to this file.
 
 Run with `python manage.py test hum`. Songs are rendered with FluidSynth, so those tests skip on a
 machine without it or a soundfont.
@@ -7,7 +7,6 @@ machine without it or a soundfont.
 
 import io
 import json
-import os
 import shutil
 import tempfile
 import unittest
@@ -17,10 +16,8 @@ from pathlib import Path
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import SimpleTestCase, override_settings
 
-from hum import paths, talk_views
+from hum import paths
 from hum.engine.accompanist.audio.render import find_soundfont
-from hum.engine.talk.commands import Command
-from hum.tests.talk.talk_fakes import FakeEars, FakeGemini, fake_services, write_hum
 
 HUM_SAMPLE = Path(__file__).parent / "fixtures" / "hum_sample.wav"
 
@@ -308,86 +305,3 @@ class EnginesTests(HumTestCase):
         self.assertIn("cinematic", engines["epic"]["styles"])
         self.assertIn("jazz", engines["simple"]["styles"])
         self.assertEqual(body["default"], "band")
-
-
-class TalkTests(HumTestCase):
-    def setUp(self):
-        super().setUp()
-        self.addCleanup(talk_views.reset_services)
-
-    def use(self, **fakes):
-        talk_views.reset_services(fake_services(**fakes))
-
-    def test_typed_command_changes_the_settings(self):
-        self.use()
-        response = self.post_json("/api/hum/talk", {"text": "make it faster", "settings": {"speed": 0.5}})
-        self.assertEqual(response.status_code, 200)
-        body = response.json()
-        self.assertEqual(body["intent"], "adjust")
-        self.assertAlmostEqual(body["settings"]["speed"], 0.7)
-        self.assertEqual(body["changed"], ["speed"])
-        self.assertTrue(body["reply"])
-        self.assertTrue(body["speech_id"])
-
-    def test_spoken_command_is_heard_first(self):
-        self.use(ears=FakeEars("make it faster"))
-        response = self.client.post(
-            "/api/hum/talk",
-            {"audio": _named(io.BytesIO(b"fake audio"), "talk.wav"), "state": json.dumps({"settings": {"speed": 0.5}})},
-        )
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()["heard"], "make it faster")
-
-    def test_undo_goes_back_to_the_previous_settings(self):
-        self.use(gemini=FakeGemini(Command(intent="undo", reply="Back it goes.")))
-        response = self.post_json(
-            "/api/hum/talk", {"text": "undo", "settings": {"speed": 0.7}, "previous": {"speed": 0.5}}
-        )
-        self.assertAlmostEqual(response.json()["settings"]["speed"], 0.5)
-
-    def test_a_failing_service_leaves_the_settings_alone(self):
-        self.use(gemini=FakeGemini(error=RuntimeError("quota")))
-        response = self.post_json("/api/hum/talk", {"text": "faster", "settings": {"speed": 0.5}})
-        self.assertEqual(response.status_code, 200)
-        body = response.json()
-        self.assertEqual(body["intent"], "error")
-        self.assertEqual(body["settings"]["speed"], 0.5)
-
-    def test_bad_requests(self):
-        self.use()
-        self.assertEqual(self.post_json("/api/hum/talk", {}).status_code, 400)
-        self.assertEqual(self.post_json("/api/hum/talk", {"text": "hi", "settings": {"speed": "x"}}).status_code, 400)
-        self.assertEqual(self.client.post("/api/hum/talk", "nope", content_type="application/json").status_code, 400)
-
-    def test_reply_is_spoken_as_streamed_mp3(self):
-        self.use()
-        speech_id = self.post_json("/api/hum/talk", {"text": "faster"}).json()["speech_id"]
-        response = self.client.get(f"/api/hum/talk/speech/{speech_id}")
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response["Content-Type"], "audio/mpeg")
-        self.assertEqual(b"".join(response.streaming_content), b"ID3-first-chunk-rest-of-the-mp3")
-
-    def test_an_unknown_reply_is_expired(self):
-        self.use()
-        self.assertEqual(self.client.get("/api/hum/talk/speech/nope").status_code, 404)
-
-    def test_a_missing_key_is_said_plainly(self):
-        with _no_keys():
-            talk_views.reset_services()
-            response = self.post_json("/api/hum/talk", {"text": "faster"})
-        self.assertEqual(response.status_code, 200)
-        body = response.json()
-        self.assertEqual(body["intent"], "error")
-        self.assertEqual(body["settings"]["speed"], 0.5)
-
-
-class _no_keys:
-    """Runs a block as if no API keys were set."""
-
-    def __enter__(self):
-        self._saved = {key: os.environ.pop(key, None) for key in ("GEMINI_API_KEY", "ELEVENLABS_API_KEY")}
-
-    def __exit__(self, *exc):
-        for key, value in self._saved.items():
-            if value is not None:
-                os.environ[key] = value

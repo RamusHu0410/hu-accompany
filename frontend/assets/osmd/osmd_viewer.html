@@ -2,43 +2,68 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+  <!-- The page does its own pinch zoom (re-laying the music out at the new size), so the
+       browser's is off. -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <style>
     html, body { margin: 0; padding: 0; background: transparent; }
+    body {
+      touch-action: pan-x pan-y;          /* one finger scrolls; pinches come to us */
+      -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
+    }
+    body.inking { touch-action: none; }   /* one finger draws; two fingers scroll and zoom */
+    #page { position: relative; transform-origin: 0 0; }
     #score { padding: 8px 4px 24px; }
+    #ink { position: absolute; left: 0; top: 0; pointer-events: none; overflow: visible; }
+    #ink path { fill: none; stroke-linecap: round; stroke-linejoin: round; }
   </style>
   <!-- Bundled locally (OSMD 2.2.0, BSD-3-Clause, see LICENSE.txt) so the
        score renders without network access. -->
   <script src="opensheetmusicdisplay.min.js"></script>
 </head>
 <body>
-  <div id="score"></div>
+  <div id="page"><div id="score"></div><svg id="ink" xmlns="http://www.w3.org/2000/svg"></svg></div>
   <script>
-    // Bridge between Flutter (score_osmd_view.dart) and OSMD. Every message
-    // back to Flutter is JSON: {type: 'bridgeReady' | 'loaded' | 'error',
-    // payload?: {...}}.
+    // Bridge between Flutter (score_osmd_view.dart) and OSMD. Every message back to Flutter is
+    // JSON: {type: 'bridgeReady' | 'loaded' | 'error' | 'ink' | 'zoom', payload?: {...}}.
+    //
+    // Pen ink lives here, inside the scrolled page, so it moves with the music. Each stroke is
+    // pinned to the bar it starts on (its measure and staff), so when the music is laid out again
+    // (zoom, rotating the phone, a wider screen) the ink is redrawn on the same bar even if the
+    // lines wrap differently. Across the bar a point is a share of the bar's width (bars stretch
+    // to fill their line); up and down it's in staff units (which scale exactly with the zoom).
     (function () {
       function post(type, payload) {
         FlutterBridge.postMessage(JSON.stringify({ type: type, payload: payload }));
       }
 
       var osmd = new opensheetmusicdisplay.OpenSheetMusicDisplay('score', {
-        // Resizing is handled below so the zoom is refitted first.
-        autoResize: false,
+        autoResize: false,  // resizing is handled below so the zoom is refitted first
         backend: 'svg',
         drawTitle: true,
         drawPartNames: false,
       });
+      var page = document.getElementById('page');
+      var ink = document.getElementById('ink');
       var colored = [];
       var loaded = false;
 
-      // OSMD's zoom 1.0 is sized for a desktop page; on a phone that makes
-      // glyphs and titles roughly twice too big, with one bar per line.
-      // Scale so a line of music is laid out as if on a page this wide.
+      // ── Zoom ──────────────────────────────────────────────────────────
+      // OSMD's zoom 1.0 is sized for a desktop page; on a phone that makes glyphs roughly twice
+      // too big. The fitted zoom lays a line out as if on a page PAGE_WIDTH_PX wide; the
+      // listener's pinch multiplies it (userScale), and it carries over when the phone turns.
       var PAGE_WIDTH_PX = 720;
+      var MIN_SCALE = 0.5, MAX_SCALE = 3;
+      var userScale = 1;
       function fitZoom() {
         var width = document.getElementById('score').clientWidth || window.innerWidth;
-        osmd.zoom = Math.max(0.4, Math.min(1, width / PAGE_WIDTH_PX));
+        osmd.zoom = Math.max(0.3, Math.min(1, width / PAGE_WIDTH_PX)) * userScale;
+      }
+
+      function render() {
+        osmd.render();
+        boxes = null;
+        drawInk();
       }
 
       var resizeTimer;
@@ -46,11 +71,250 @@
         clearTimeout(resizeTimer);
         resizeTimer = setTimeout(function () {
           if (!loaded) return;
+          var keep = anchorAt(focusPoint(window.innerWidth / 2, 0));
           fitZoom();
-          osmd.render();
+          render();
+          scrollToAnchor(keep, window.innerWidth / 2, 0);
         }, 150);
       });
 
+      // ── Where bars are ────────────────────────────────────────────────
+      function unitPx() { return 10 * osmd.zoom; }
+
+      // The rendered music's top-left, in page pixels.
+      function origin() {
+        var svg = document.querySelector('#score svg');
+        if (!svg) return { x: 0, y: 0 };
+        var a = svg.getBoundingClientRect(), b = page.getBoundingClientRect();
+        var scale = currentPreviewScale();
+        return { x: (a.left - b.left) / scale, y: (a.top - b.top) / scale };
+      }
+
+      var boxes = null;  // every measure of every staff, in page pixels (until the next render)
+      function measureBoxes() {
+        if (boxes) return boxes;
+        boxes = [];
+        var list = (osmd.GraphicSheet && osmd.GraphicSheet.MeasureList) || [];
+        var o = origin(), u = unitPx();
+        list.forEach(function (staves, m) {
+          (staves || []).forEach(function (measure, s) {
+            if (!measure || !measure.PositionAndShape) return;
+            var ps = measure.PositionAndShape, at = ps.AbsolutePosition;
+            boxes.push({
+              m: m, s: s,
+              ax: o.x + at.x * u, ay: o.y + at.y * u,  // the anchor: OSMD's own position of the bar
+              left: o.x + (at.x + ps.BorderLeft) * u, right: o.x + (at.x + ps.BorderRight) * u,
+              top: o.y + (at.y + ps.BorderTop) * u, bottom: o.y + (at.y + ps.BorderBottom) * u,
+            });
+          });
+        });
+        return boxes;
+      }
+
+      function boxOf(m, s) {
+        var all = measureBoxes();
+        for (var i = 0; i < all.length; i++) if (all[i].m === m && all[i].s === s) return all[i];
+        return null;
+      }
+
+      // The bar nearest a page point, and the point relative to it: x as a share of the bar's
+      // width from its left edge, y in staff units from the bar's own position.
+      function anchorAt(p) {
+        var best = null, bestD = Infinity;
+        measureBoxes().forEach(function (b) {
+          var dx = Math.max(b.left - p.x, 0, p.x - b.right), dy = Math.max(b.top - p.y, 0, p.y - b.bottom);
+          var d = dx * dx + dy * dy;
+          if (d < bestD) { bestD = d; best = b; }
+        });
+        if (!best) return null;
+        return { m: best.m, s: best.s, x: toShare(best, p.x), y: (p.y - best.ay) / unitPx() };
+      }
+
+      function pointOf(anchor) {
+        var b = anchor && boxOf(anchor.m, anchor.s);
+        if (!b) return null;
+        return { x: fromShare(b, anchor.x), y: b.ay + anchor.y * unitPx() };
+      }
+
+      function toShare(b, x) { return (x - b.left) / Math.max(1, b.right - b.left); }
+      function fromShare(b, share) { return b.left + share * (b.right - b.left); }
+
+      // A screen point (from a touch) in page pixels.
+      function focusPoint(clientX, clientY) {
+        var b = page.getBoundingClientRect(), scale = currentPreviewScale();
+        return { x: (clientX - b.left) / scale, y: (clientY - b.top) / scale };
+      }
+
+      // Scrolls so the anchor is back under the same spot on screen.
+      function scrollToAnchor(anchor, clientX, clientY) {
+        var p = pointOf(anchor);
+        if (!p) return;
+        var b = page.getBoundingClientRect();
+        window.scrollBy(p.x - (clientX - b.left), p.y - (clientY - b.top));
+      }
+
+      // ── Ink ───────────────────────────────────────────────────────────
+      // A stroke: {m, s, color, width (px at zoom 1), pts: [[x, y], ...] placed as anchorAt says}.
+      var strokes = [];
+      var undoStack = [];  // {add: stroke} | {erase: [[index, stroke], ...]} | {clear: [strokes]}
+      var mode = 'off', penColor = '#C9A227', penWidth = 3, eraserRadius = 14;
+      var NS = 'http://www.w3.org/2000/svg';
+
+      function pathFor(stroke) {
+        var b = boxOf(stroke.m, stroke.s);
+        if (!b) return null;
+        var u = unitPx(), d = '';
+        stroke.pts.forEach(function (pt, i) {
+          d += (i ? 'L' : 'M') + fromShare(b, pt[0]).toFixed(1) + ' ' + (b.ay + pt[1] * u).toFixed(1);
+        });
+        if (stroke.pts.length === 1) d += 'l0.01 0';  // a dot
+        var path = document.createElementNS(NS, 'path');
+        path.setAttribute('d', d);
+        path.setAttribute('stroke', stroke.color);
+        path.setAttribute('stroke-width', (stroke.width * osmd.zoom * 1.6).toFixed(2));
+        return path;
+      }
+
+      function drawInk() {
+        ink.setAttribute('width', page.scrollWidth);
+        ink.setAttribute('height', page.scrollHeight);
+        while (ink.firstChild) ink.removeChild(ink.firstChild);
+        if (!loaded) return;
+        strokes.forEach(function (stroke) {
+          var path = pathFor(stroke);
+          if (path) ink.appendChild(path);
+        });
+      }
+
+      function inkChanged() {
+        drawInk();
+        post('ink', { canUndo: undoStack.length > 0, strokes: strokes });
+      }
+
+      var drawing = null;  // {stroke, path, anchorBox}
+      function startStroke(p) {
+        var a = anchorAt(p);
+        if (!a) return;
+        var stroke = { m: a.m, s: a.s, color: penColor, width: penWidth, pts: [[a.x, a.y]] };
+        drawing = { stroke: stroke, path: pathFor(stroke) };
+        if (drawing.path) ink.appendChild(drawing.path);
+      }
+
+      function extendStroke(p) {
+        if (!drawing) return;
+        var b = boxOf(drawing.stroke.m, drawing.stroke.s), u = unitPx();
+        drawing.stroke.pts.push([toShare(b, p.x), (p.y - b.ay) / u]);
+        drawing.path.setAttribute('d', drawing.path.getAttribute('d') + 'L' + p.x.toFixed(1) + ' ' + p.y.toFixed(1));
+      }
+
+      function endStroke() {
+        if (!drawing) return;
+        strokes.push(drawing.stroke);
+        undoStack.push({ add: drawing.stroke });
+        drawing = null;
+        inkChanged();
+      }
+
+      function dropStroke() {  // a second finger landed: that was the start of a scroll, not ink
+        if (drawing && drawing.path) ink.removeChild(drawing.path);
+        drawing = null;
+      }
+
+      var erased = null;  // what this eraser swipe has taken, as one undo step
+      function eraseAt(p) {
+        var reach = eraserRadius;
+        for (var i = strokes.length - 1; i >= 0; i--) {
+          var stroke = strokes[i], b = boxOf(stroke.m, stroke.s);
+          if (!b) continue;
+          var u = unitPx(), hitR = reach + stroke.width * osmd.zoom;
+          var hit = stroke.pts.some(function (pt) {
+            var dx = fromShare(b, pt[0]) - p.x, dy = b.ay + pt[1] * u - p.y;
+            return dx * dx + dy * dy <= hitR * hitR;
+          });
+          if (hit) {
+            erased = erased || [];
+            erased.push([i, stroke]);
+            strokes.splice(i, 1);
+            drawInk();
+          }
+        }
+      }
+
+      function endErase() {
+        if (erased && erased.length) undoStack.push({ erase: erased });
+        if (erased) inkChanged();
+        erased = null;
+      }
+
+      // ── Touch: draw, scroll, zoom ─────────────────────────────────────
+      var pinch = null;  // {dist, mid, scrollX, scrollY, anchor}
+      var previewScale = 1;
+      function currentPreviewScale() { return previewScale; }
+
+      function mid(t) { return { x: (t[0].clientX + t[1].clientX) / 2, y: (t[0].clientY + t[1].clientY) / 2 }; }
+      function dist(t) { return Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY) || 1; }
+
+      document.addEventListener('touchstart', function (e) {
+        if (!loaded) return;
+        if (e.touches.length >= 2) {
+          e.preventDefault();
+          dropStroke();
+          endErase();
+          var m = mid(e.touches);
+          pinch = { dist: dist(e.touches), mid: m, last: m, anchor: anchorAt(focusPoint(m.x, m.y)) };
+          var f = focusPoint(m.x, m.y);
+          page.style.transformOrigin = f.x + 'px ' + f.y + 'px';
+          return;
+        }
+        if (mode === 'off' || pinch) return;
+        e.preventDefault();
+        var p = focusPoint(e.touches[0].clientX, e.touches[0].clientY);
+        if (mode === 'pen') startStroke(p); else { erased = []; eraseAt(p); }
+      }, { passive: false });
+
+      document.addEventListener('touchmove', function (e) {
+        if (!loaded) return;
+        if (pinch && e.touches.length >= 2) {
+          e.preventDefault();
+          var m = mid(e.touches);
+          window.scrollBy(pinch.last.x - m.x, pinch.last.y - m.y);  // two fingers pan, in any mode
+          pinch.last = m;
+          previewScale = Math.max(MIN_SCALE / userScale, Math.min(MAX_SCALE / userScale, dist(e.touches) / pinch.dist));
+          page.style.transform = 'scale(' + previewScale + ')';
+          return;
+        }
+        if (mode === 'off' || pinch) return;
+        e.preventDefault();
+        var p = focusPoint(e.touches[0].clientX, e.touches[0].clientY);
+        if (mode === 'pen') extendStroke(p); else eraseAt(p);
+      }, { passive: false });
+
+      function touchEnd(e) {
+        if (pinch) {
+          if (e.touches.length < 2) finishPinch();
+          return;
+        }
+        if (e.touches.length > 0) return;
+        if (mode === 'pen') endStroke(); else if (mode === 'eraser') endErase();
+      }
+      document.addEventListener('touchend', touchEnd);
+      document.addEventListener('touchcancel', touchEnd);
+
+      function finishPinch() {
+        var p = pinch;
+        pinch = null;
+        var scale = previewScale;
+        previewScale = 1;
+        page.style.transform = '';
+        if (Math.abs(scale - 1) < 0.03) return;
+        userScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, userScale * scale));
+        fitZoom();
+        render();  // laid out again at the new size: crisp, and the lines wrap to the screen
+        scrollToAnchor(p.anchor, p.last.x, p.last.y);
+        post('zoom', { scale: userScale });
+      }
+
+      // ── Notes ─────────────────────────────────────────────────────────
       // Notes of one measure, flattened across staves, in the order
       // NoteRef(measure, voiceEntry, noteIndex) addresses them.
       function voiceEntriesOf(measureIndex) {
@@ -69,11 +333,14 @@
         loadScore: function (xml) {
           colored = [];
           loaded = false;
+          strokes = [];
+          undoStack = [];
+          drawInk();
           osmd.load(xml)
             .then(function () {
-              fitZoom();
-              osmd.render();
               loaded = true;
+              fitZoom();
+              render();
               post('loaded');
             })
             .catch(function (e) { post('error', { message: String(e && e.message || e) }); });
@@ -87,13 +354,49 @@
             note.sourceNote.NoteheadColor = hex;
             colored.push(note.sourceNote);
           });
-          osmd.render();
+          render();
         },
 
         resetColors: function () {
           colored.forEach(function (sourceNote) { sourceNote.NoteheadColor = undefined; });
           colored = [];
-          osmd.render();
+          render();
+        },
+
+        // mode: 'off' | 'pen' | 'eraser'. Width is the pen's size in the app.
+        setInkMode: function (newMode, color, width) {
+          mode = newMode;
+          if (color) penColor = color;
+          if (width) penWidth = width;
+          document.body.classList.toggle('inking', mode !== 'off');
+        },
+
+        // Strokes saved for this score (as sent in an 'ink' message), after loadScore.
+        setInk: function (saved) {
+          strokes = Array.isArray(saved) ? saved : [];
+          undoStack = [];
+          drawInk();
+        },
+
+        undoInk: function () {
+          var step = undoStack.pop();
+          if (!step) return;
+          if (step.add) strokes.splice(strokes.indexOf(step.add), 1);
+          if (step.erase) step.erase.slice().reverse().forEach(function (e) { strokes.splice(e[0], 0, e[1]); });
+          if (step.clear) strokes = step.clear;
+          inkChanged();
+        },
+
+        clearInk: function () {
+          if (!strokes.length) return;
+          undoStack.push({ clear: strokes });
+          strokes = [];
+          inkChanged();
+        },
+
+        setZoom: function (scale) {
+          userScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, scale || 1));
+          if (loaded) { fitZoom(); render(); }
         },
       };
 

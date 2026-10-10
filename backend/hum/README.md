@@ -1,24 +1,25 @@
 # hum: hum a tune, get a song
 
-Brought over from the ECKO website's Flask backend. A user hums, the server finds the notes, turns
-them into a song with one of three engines, and lets the user reshape it by typing or saying what they
-want ("make it faster", "add a violin").
+Brought over from the ECKO website's Flask backend, then grown. A user hums, the server finds the
+notes, turns them into a song with one of three engines, and lets the user edit the band song by
+typing or saying what they want ("softer drums", "make it jazz", "a different chorus").
 
 ## Layout
 
 | Where | What |
 | --- | --- |
-| `views.py`, `views_raw.py`, `views_song.py`, `talk_views.py`, `urls.py` | The HTTP layer (Django). Everything under `/api/hum/`. |
+| `views.py`, `views_raw.py`, `views_song.py`, `views_chat.py`, `urls.py` | The HTTP layer (Django). Everything under `/api/hum/`. |
 | `transcription.py` | The hum as notes, kept two ways: `raw` exactly as hummed, and `quantized()` on the beat grid in the key. |
 | `rawplay.py` | "Play back my hum": the raw notes on piano or synth, and as MIDI. |
 | `song/` | The **band** engine: presets, chords, parts, the intro/verse/chorus/outro arranger, the song project model and the stem renderer. |
 | `band.py` | The band engine as the views use it (where its files live, the notes graph). |
+| `chat/` | The chat: Gemini turns words into edits (`commands.py`, `interpreter.py`), `executor.py` applies them to the song project, `turn.py` runs a whole turn. |
 | `page_settings.py` | The app's song settings, translated for the epic engine. |
 | `paths.py` | Where hums and songs are kept (`backend/hum_data/`, never served by URL). |
 | `engine/audio/intake/` | Hum to notes: cleans the WAV and finds notes, tempo, key and tuning. |
 | `engine/audio/arrange/`, `pipeline.py` | The **epic** engine: a full ensemble arranged around the tune. |
 | `engine/accompanist/`, `engine/talk/song.py` | The **simple** engine: chords and a style around the tune. |
-| `engine/talk/` | Talk mode: Gemini works out what was asked, ElevenLabs hears and speaks it. |
+| `engine/talk/` | The simple engine's song maker and its settings, plus the API keys, ElevenLabs speech to text and text to speech, and the reply store the chat uses. |
 | `tests/` | Pytest suites for the engines, and `test_api.py` for the HTTP layer. |
 
 The engine code is plain Python with no web framework in it. Only the `views*.py` files, `band.py`
@@ -32,8 +33,9 @@ and `paths.py` know about Django.
 3. A General MIDI soundfont at `hum/engine/accompanist/soundfonts/FluidR3_GM.sf2` (148 MB, so it is
    git-ignored; copy it in by hand, or set `ECKO_SOUNDFONT`). Without it songs still render, but with
    the small retro Homebrew soundfont and they won't sound like instruments.
-4. For talk mode, put `GEMINI_API_KEY` and `ELEVENLABS_API_KEY` in `backend/.env` (see
-   `.env.example`). Without them everything else works; talk replies say which key is missing.
+4. For the chat, put `GEMINI_API_KEY` and `ELEVENLABS_API_KEY` in `backend/.env` (see
+   `.env.example`). Without them everything else works; chat replies say which key is missing, and
+   without a working ElevenLabs key the app answers in text only.
 
 ## Endpoints
 
@@ -50,13 +52,25 @@ and `paths.py` know about Django.
 | `POST /api/hum/project/audio` | JSON `{project}` returns it mixed as WAV. Only tracks whose notes, instrument or tempo changed are rendered again (`X-Rendered-Tracks` names them). |
 | `POST /api/hum/project/midi` | JSON `{project}` returns every track as `song.mid`. |
 | `GET /api/hum/presets` | The band engine's genres (with each one's instruments) and moods. |
-| `POST /api/hum/talk` | JSON `{text, settings?, previous?, character?}` (typed), or multipart `audio` + `state` (spoken). Returns `{heard, intent, settings, changed, understood, reply, error, speech_id}`. |
-| `GET /api/hum/talk/speech/<speech_id>` | The reply spoken, streamed as MP3. |
+| `POST /api/hum/project/edit` | JSON `{project, edits}` applies edits without Gemini (the app's genre and mood chips). Returns `{project, changed, mixed, label, refused}`. |
+| `POST /api/hum/project/notes` | JSON `{project}` returns `{sung, played}` for the graph of an edited song. |
+| `POST /api/hum/chat` | JSON `{text, project, can_undo?, can_redo?}` (typed), or multipart `audio` + `state` (spoken). Returns `{heard, intent, reply, project, changed, mixed, label, error, speech_id}`; `project` is null when nothing changed. Undo and redo are the app's (it keeps the history). |
+| `GET /api/hum/chat/speech/<speech_id>` | The reply spoken, streamed as MP3. |
 
 `settings` (all optional): `emotion`, `speed`, `pitch` from 0 to 1 (0.5 keeps the hum as it was),
 `style` (a genre word or null), `mood` (band only: `dark`, `chill`, `bright`, `hype`), `instruments` (a list of `{name, role: lead|background, level:
-soft|normal|loud, section: all|start|end}`) and `energy` (`{start, end}`, -2 to 2). Talk mode changes
-these, and the app sends the result back with the next song request.
+soft|normal|loud, section: all|start|end}`) and `energy` (`{start, end}`, -2 to 2). They choose how a
+song is first made; after that, the band song is edited as a project (chat, chips, undo).
+
+## The chat
+
+Gemini gets a few lines about the song with every message (`chat/summary.py`) and must answer with
+edits from a closed list (`chat/commands.py`): tempo, key, genre, mood, an instrument, a part's
+volume, mute or solo, effects, adding or removing a part, a section played differently, a calmer or
+bigger verse or chorus, undo and redo. A request that could mean two things gets one short question
+back; one no edit can do gets an offer of what can. A rate limit is tried once more after a pause.
+Mixer edits render nothing again; the others re-arrange from the hum and only re-render the parts
+whose sound changed. The melody stays on top: no part is turned up past it.
 
 ## The engines
 
@@ -70,7 +84,7 @@ these, and the app sends the result back with the next song request.
 ## Tests
 
 ```bash
-python manage.py test hum        # the HTTP layer (talk mode runs on fake Gemini and ElevenLabs)
+python manage.py test hum        # the HTTP layer (the chat runs on fake Gemini and ElevenLabs)
 python -m pytest                 # the engines
 ```
 

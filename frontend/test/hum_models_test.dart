@@ -67,30 +67,4 @@ void main() {
     expect(notes.isEmpty, isFalse);
     expect(const HumNotes().isEmpty, isTrue);
   });
-
-  test('a talk answer says whether the song needs remaking', () {
-    final changed = TalkTurn.fromJson({
-      'heard': 'faster',
-      'intent': 'adjust',
-      'settings': {'speed': 0.7},
-      'changed': ['speed'],
-      'understood': <String>[],
-      'reply': 'Quicker!',
-      'error': null,
-      'speech_id': 'abc',
-    });
-    final chatter = TalkTurn.fromJson({
-      'heard': 'hi',
-      'intent': 'off_topic',
-      'settings': <String, dynamic>{},
-      'changed': <String>[],
-      'reply': 'Music only!',
-      'speech_id': 'def',
-    });
-
-    expect(changed.changesSong, isTrue);
-    expect(changed.settings.speed, 0.7);
-    expect(chatter.changesSong, isFalse);
-    expect(chatter.error, isNull);
-  });
 }

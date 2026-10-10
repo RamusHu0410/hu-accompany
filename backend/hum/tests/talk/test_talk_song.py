@@ -6,7 +6,7 @@ import shutil
 import pretty_midi
 import pytest
 from hum.engine.accompanist.music.styles import STYLES
-from hum.tests.talk.talk_fakes import write_hum
+from hum.tests.hum_maker import write_hum
 
 from hum.engine.talk.settings import DEFAULT_LEAD, PIANO, Part, SongSettings
 from hum.engine.talk.song import (

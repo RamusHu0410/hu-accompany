@@ -4,7 +4,7 @@ import pytest
 
 from hum.transcription import transcribe_hum
 
-SAMPLE = Path(__file__).parents[1] / "fixtures" / "hum_sample.wav"
+SAMPLE = Path(__file__).parent / "fixtures" / "hum_sample.wav"
 
 
 @pytest.fixture(scope="session")

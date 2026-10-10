@@ -7,6 +7,7 @@ import 'package:hu_accomponist/features/hum/hum_controls.dart';
 import 'package:hu_accomponist/features/hum/hum_notes_view.dart';
 import 'package:hu_accomponist/features/hum/hum_record_button.dart';
 import 'package:hu_accomponist/features/hum/raw_hum_panel.dart';
+import 'package:hu_accomponist/features/hum/song_edit_bar.dart';
 import 'package:hu_accomponist/features/hum/song_style_picker.dart';
 import 'package:hu_accomponist/features/shelf/Shelf_Page.dart';
 import 'package:hu_accomponist/integrations/hum/hum_models.dart';
@@ -106,9 +107,21 @@ class _HumPageState extends State<HumPage> {
             saved: c.savedThisSong,
             onSave: c.canSave ? _save : null,
           ),
+          if (c.engine == HumEngine.band && (c.canUndo || c.canRedo))
+            SongEditBar(
+              undoLabel: c.undoLabel,
+              redoLabel: c.redoLabel,
+              enabled: c.phase == HumPhase.idle,
+              onUndo: c.undo,
+              onRedo: c.redo,
+            ),
           const SizedBox(height: Space.md),
           RawHumPanel(playback: c.rawPlayback),
           const SizedBox(height: Space.md),
+          if (c.notice != null) ...[
+            EngineNoticeCard(text: c.notice!, onDismiss: c.dismissNotice),
+            const SizedBox(height: Space.md),
+          ],
           HumControls(
             engine: c.engine,
             settings: c.settings,
@@ -128,7 +141,7 @@ class _HumPageState extends State<HumPage> {
             ),
           ],
           const SizedBox(height: Space.md),
-          HumChat(messages: c.chat, busy: c.chatBusy, onSend: c.send),
+          HumChat(chat: c.chat),
         ],
       ],
     );

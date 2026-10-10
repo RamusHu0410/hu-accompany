@@ -1,8 +1,7 @@
-"""The song's settings and the plain arithmetic that changes them.
+"""The song settings the app sends with every song request, read and checked.
 
-Same three dials as the main app's "Your song" panel (useSongSettings.ts): each runs from
-0 (moody / slower / lower) to 1 (bright / faster / higher), with 0.5 in the middle.
-Gemini only says which way and how much; the numbers are always worked out here.
+Three dials, each from 0 (moody / slower / lower) to 1 (bright / faster / higher), with 0.5 in
+the middle; a style word; and (for the simple and epic engines) a short list of instruments.
 
 The song also has a short list of instruments. Exactly one is the lead: it plays the tune
 and the chords over the whole song. The others play softly underneath (see song.py).
@@ -13,11 +12,9 @@ import math
 import re
 from dataclasses import asdict, dataclass, replace
 
-from .commands import Adjustment, Change, Command, Energy
 
 DIALS = ("emotion", "speed", "pitch")
 MIDDLE = 0.5
-STEPS = {"slight": 0.1, "moderate": 0.2, "strong": 0.35}
 ROLES = ("lead", "background")
 LEVELS = ("soft", "normal", "loud")  # quietest first
 SECTIONS = ("all", "start", "end")
@@ -86,40 +83,6 @@ def clean_label(text) -> str | None:
     return label if LABEL_PATTERN.fullmatch(label) else None
 
 
-def move_dial(value: float, direction: str, amount: str) -> float:
-    if direction == "reset":
-        return MIDDLE
-    if amount == "max":
-        return 1.0 if direction == "up" else 0.0
-    step = STEPS[amount] if direction == "up" else -STEPS[amount]
-    return round(min(1.0, max(0.0, value + step)), 2)
-
-
-def apply_command(settings: SongSettings, command: Command) -> SongSettings:
-    """The settings after Gemini's changes, once edits.check has made them safe."""
-    dials = {name: getattr(settings, name) for name in DIALS}
-    for change in command.adjustments:
-        dials[change.setting] = move_dial(dials[change.setting], change.direction, change.amount)
-    style = clean_label(command.style) or settings.style
-    instruments = edit_instruments(settings.instruments, command)
-    return replace(settings, **dials, style=style, instruments=instruments, energy=move_energy(settings.energy, command.energy))
-
-
-def edit_instruments(parts: tuple[Part, ...], command: Command) -> tuple[Part, ...]:
-    """Removals and swaps first, then changes, then additions. The names were checked by edits.check."""
-    swaps = {swap.old: swap.new for swap in command.replace}
-    parts = [replace(part, name=swaps.get(part.name, part.name)) for part in parts if part.name not in command.remove]
-    wanted = None  # an instrument asked to take the lead
-    for change in command.change:
-        parts = [_changed(part, change) if part.name == change.instrument else part for part in parts]
-        wanted = change.instrument if change.lead else wanted
-    for new in command.add:
-        if new.instrument not in [part.name for part in parts]:
-            parts.append(Part(new.instrument, new.role, new.level, new.section))
-            wanted = new.instrument if new.role == "lead" else wanted
-    return with_one_lead(parts[:MAX_INSTRUMENTS], wanted)
-
-
 def with_one_lead(parts, wanted: str | None = None) -> tuple[Part, ...]:
     """Exactly one lead, playing the whole song: the one just asked for, else the current lead, else
     the first instrument that can carry a tune. Nothing left that can? The default synth returns as lead."""
@@ -129,32 +92,6 @@ def with_one_lead(parts, wanted: str | None = None) -> tuple[Part, ...]:
     if lead is None:
         return (DEFAULT_LEAD, *(replace(part, role="background") for part in parts))
     return tuple(replace(part, role="lead", section="all") if part.name == lead else replace(part, role="background") for part in parts)
-
-
-def move_energy(energy: tuple[int, int], moves: list[Energy]) -> tuple[int, int]:
-    start, end = energy
-    for move in moves:
-        step = 1 if move.direction == "up" else -1
-        if move.section == "start":
-            start = max(-MAX_ENERGY, min(MAX_ENERGY, start + step))
-        else:
-            end = max(-MAX_ENERGY, min(MAX_ENERGY, end + step))
-    return start, end
-
-
-def changed_fields(before: SongSettings, after: SongSettings) -> list[str]:
-    return [name for name in (*DIALS, "style", "instruments", "energy") if getattr(before, name) != getattr(after, name)]
-
-
-def blocked_adjustments(before: SongSettings, command: Command) -> list[Adjustment]:
-    """Changes that did nothing because the dial was already at that end (or already normal)."""
-    return [c for c in command.adjustments if move_dial(getattr(before, c.setting), c.direction, c.amount) == getattr(before, c.setting)]
-
-
-def _changed(part: Part, change: Change) -> Part:
-    step = {"softer": -1, "louder": 1}.get(change.level, 0)
-    level = LEVELS[max(0, min(len(LEVELS) - 1, LEVELS.index(part.level) + step))]
-    return replace(part, level=level, section=change.section or part.section)
 
 
 def _read_dial(value, name: str) -> float:

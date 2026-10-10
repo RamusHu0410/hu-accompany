@@ -21,6 +21,8 @@ void main() {
         recorder: recorder,
         player: player,
         rawPlayer: FakePlayer(),
+        chatRecorder: FakeRecorder(),
+        voicePlayer: FakePlayer(),
         sharer: FakeSharer(),
         store: store,
         maxHum: maxHum,
@@ -42,20 +44,27 @@ void main() {
   }
 
   group('humming', () {
-    test('a hum becomes a song that plays, with its notes to draw', () async {
-      await controller.startHum();
-      expect(controller.phase, HumPhase.recording);
-      expect(recorder.starts, 1);
+    test(
+      'a hum becomes a band song that plays, with its notes to draw',
+      () async {
+        await controller.startHum();
+        expect(controller.phase, HumPhase.recording);
+        expect(recorder.starts, 1);
 
-      await controller.stopHum();
+        await controller.stopHum();
 
-      expect(controller.phase, HumPhase.idle);
-      expect(controller.hum?.filename, 'hum-1.wav');
-      expect(controller.notes.sung, hasLength(1));
-      expect(player.played, hasLength(1));
-      expect(controller.error, isNull);
-      expect(repository.songCalls.single.$1, HumEngine.band);
-    });
+        expect(controller.phase, HumPhase.idle);
+        expect(controller.hum?.filename, 'hum-1.wav');
+        expect(controller.notes.sung, hasLength(1));
+        expect(player.played, hasLength(1));
+        expect(controller.error, isNull);
+        expect(controller.engine, HumEngine.band);
+        expect(repository.projectCalls, hasLength(1)); // arranged once...
+        expect(repository.renders, hasLength(1)); // ...and rendered
+        expect(repository.songCalls, isEmpty);
+        expect(controller.notes.played, hasLength(3));
+      },
+    );
 
     test('says so when the microphone is off, and does not record', () async {
       recorder.allowed = false;
@@ -127,17 +136,19 @@ void main() {
 
       expect(controller.engine, HumEngine.simple);
       expect(repository.songCalls, isEmpty);
+      expect(repository.projectCalls, isEmpty);
     });
 
     test(
       'a fader shows its value at once, and remakes the song when let go',
       () async {
         await hum();
+        await controller.setEngine(HumEngine.epic); // Band has no faders
         controller.moveFader(speed: 0.9);
         controller.moveFader(speed: 0.95);
 
         expect(controller.settings.speed, 0.95);
-        expect(repository.songCalls, hasLength(1));
+        expect(repository.songCalls, hasLength(1)); // the epic song
 
         await controller.commitSettings();
 
@@ -146,55 +157,20 @@ void main() {
       },
     );
 
-    test('picking a genre remakes the song in it', () async {
-      await hum();
-      await controller.setGenre(SongGenre.lofi);
-
-      expect(controller.genre, SongGenre.lofi);
-      expect(repository.songCalls.last.$2.style, 'lofi');
-      expect(player.played, hasLength(2));
-
-      await controller.setGenre(
-        SongGenre.lofi,
-      ); // already chosen: nothing to do
-      expect(repository.songCalls, hasLength(2));
-    });
-
     test(
-      'a mood is sent with the song, and picking it again clears it',
+      'a genre picked before humming is the one the hum is arranged in',
       () async {
+        await controller.setGenre(SongGenre.lofi);
         await hum();
-        await controller.setMood(SongMood.hype);
 
-        expect(controller.mood, SongMood.hype);
-        expect(repository.songCalls.last.$2.toJson()['mood'], 'hype');
-
-        await controller.setMood(SongMood.hype);
-
-        expect(controller.mood, isNull);
-        expect(
-          repository.songCalls.last.$2.toJson().containsKey('mood'),
-          isFalse,
-        );
+        expect(controller.genre, SongGenre.lofi);
+        expect(repository.projectCalls.single.style, 'lofi');
       },
     );
 
-    test('reset keeps the genre and the mood', () async {
-      await hum();
-      await controller.setGenre(SongGenre.jazz);
-      await controller.setMood(SongMood.dark);
-      controller.moveFader(speed: 0.9);
-      await controller.resetSettings();
-
-      expect(
-        (controller.genre, controller.mood),
-        (SongGenre.jazz, SongMood.dark),
-      );
-      expect(controller.settings.speed, 0.5);
-    });
-
     test('reset puts the faders back in the middle', () async {
       await hum();
+      await controller.setEngine(HumEngine.epic);
       controller.moveFader(speed: 0.9, pitch: 0.1);
       await controller.resetSettings();
 
@@ -256,7 +232,7 @@ void main() {
     test('a changed song can be saved again, as a new one', () async {
       await hum();
       await controller.save();
-      await controller.setGenre(SongGenre.lofi);
+      await controller.setGenre(SongGenre.lofi); // an edit of the band song
 
       expect(controller.canSave, isTrue);
       await controller.save();
@@ -290,7 +266,7 @@ void main() {
       await player.stop();
       await controller.togglePlay();
 
-      expect(repository.songCalls, hasLength(1));
+      expect(repository.renders, hasLength(1));
       expect(player.played, hasLength(2));
     });
 
@@ -305,82 +281,4 @@ void main() {
       expect(controller.isPlaying, isFalse);
     });
   });
-
-  group('chat', () {
-    test(
-      'a command that changes the song updates the settings and remakes it',
-      () async {
-        await hum();
-        await controller.send('make it faster');
-
-        expect(controller.chat.map((m) => m.fromUser), [true, false]);
-        expect(controller.chat.last.text, 'A little quicker now!');
-        expect(controller.settings.speed, 0.7);
-        expect(repository.songCalls, hasLength(2));
-        expect(repository.songCalls.last.$2.speed, 0.7);
-      },
-    );
-
-    test(
-      'a chat command keeps the mood the server does not know about',
-      () async {
-        // Talk mode's settings have no mood: the server sends them back without one.
-        repository.onTalk = (text, settings) => FakeHumRepository.faster(
-          text,
-          SongSettings.fromJson(settings.toJson()..remove('mood')),
-        );
-        await hum();
-        await controller.setMood(SongMood.chill);
-        await controller.send('make it faster');
-
-        expect(controller.settings.speed, 0.7);
-        expect(controller.mood, SongMood.chill);
-      },
-    );
-
-    test('small talk gets a reply and leaves the song alone', () async {
-      repository.onTalk = FakeHumRepository.chatter;
-      await hum();
-      await controller.send('how are you?');
-
-      expect(controller.chat.last.text, 'I only do music.');
-      expect(repository.songCalls, hasLength(1));
-      expect(controller.settings.speed, 0.5);
-    });
-
-    test(
-      'works before there is a hum, just without a song to remake',
-      () async {
-        await controller.send('make it faster');
-
-        expect(controller.settings.speed, 0.7);
-        expect(repository.songCalls, isEmpty);
-      },
-    );
-
-    test('a server error becomes a reply, not a crash', () async {
-      repository.talkError = const ApiExceptionStub(
-        'The voice service is down.',
-      );
-      await controller.send('faster');
-
-      expect(controller.chat.last.fromUser, isFalse);
-      expect(controller.chat.last.text, isNotEmpty);
-      expect(controller.chatBusy, isFalse);
-    });
-
-    test('blank messages are ignored', () async {
-      await controller.send('   ');
-      expect(controller.chat, isEmpty);
-      expect(repository.talkTexts, isEmpty);
-    });
-  });
-}
-
-/// Any error that isn't the app's own ApiException.
-class ApiExceptionStub implements Exception {
-  const ApiExceptionStub(this.message);
-  final String message;
-  @override
-  String toString() => message;
 }

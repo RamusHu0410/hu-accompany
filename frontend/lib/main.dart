@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:hu_accomponist/features/practice/Draggable_Recorder_Button.dart';
 import 'package:hu_accomponist/features/practice/Drawing_Overlay.dart';
+import 'package:hu_accomponist/integrations/scores/score_ink_store.dart';
 import 'package:hu_accomponist/features/search/Music_Library_Page.dart';
 import 'package:hu_accomponist/features/practice/score_osmd_view.dart';
 import 'package:hu_accomponist/integrations/scores/score_models.dart';
@@ -20,7 +21,6 @@ import 'package:hu_accomponist/features/practice/Exercise_Display.dart';
 import 'package:hu_accomponist/features/practice/exercise_picker.dart';
 import 'package:hu_accomponist/features/practice/Exercise_Session.dart';
 import 'package:hu_accomponist/integrations/audio/Rust_Bridge.dart';
-
 
 // Re-exported so anything that already reached for PhraseFeedback through
 // main.dart keeps compiling after the enum moved to its own file.
@@ -55,9 +55,7 @@ class HuAccumponistApp extends StatelessWidget {
       theme: ThemeData(
         brightness: Brightness.light,
         scaffoldBackgroundColor: PracticePalette.ivory,
-        colorScheme: const ColorScheme.light(
-          primary: PracticePalette.gold,
-        ),
+        colorScheme: const ColorScheme.light(primary: PracticePalette.gold),
         // Every platform's default route animation is replaced with one
         // fade-through, so moving between screens feels like the same app
         // regardless of which device it is running on.
@@ -225,11 +223,7 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
   /// `piece` as optional metadata and stores it
   /// as-is, so an empty date is honest; a fabricated one would be written
   /// into every stored phrase file.
-  PieceInfo _piece = const PieceInfo(
-    title: '',
-    composer: '',
-    composedDate: '',
-  );
+  PieceInfo _piece = const PieceInfo(title: '', composer: '', composedDate: '');
 
   // Null until a score has been picked from the library.
   LoadedScore? _score;
@@ -239,10 +233,19 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
   // WebView instead of rebuilding it.
   final ScoreOsmdController _osmd = ScoreOsmdController();
 
+  // Pen ink drawn on each score, kept between visits.
+  final ScoreInkStore _inkStore = const ScoreInkStore();
+
+  /// Ink goes on the score itself (scrolling and zooming with it) when a
+  /// score is showing; an exercise keeps the drawing overlay.
+  bool get _inkOnScore => _exercise == null && _hasScore;
+
   // Swaps in a new score, or clears it if [selected] is null.
   void _setScore(LoadedScore? selected) {
     if (selected != null) _endExercise();
     _score = selected;
+    _osmd.setInk('[]'); // until this score's own ink is read
+    if (selected != null) _loadInk(selected.summary.id);
     _piece = selected == null
         ? const PieceInfo(title: '', composer: '', composedDate: '')
         : PieceInfo(
@@ -250,6 +253,30 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
             composer: selected.summary.composer,
             composedDate: '',
           );
+  }
+
+  Future<void> _loadInk(String scoreId) async {
+    final saved = await _inkStore.load(scoreId);
+    if (mounted && _score?.summary.id == scoreId) _osmd.setInk(saved);
+  }
+
+  /// Changes the pen tools and tells the score page what a touch now does.
+  void _setPen(VoidCallback change) {
+    setState(change);
+    _osmd.setInkMode(
+      _isErasing
+          ? InkMode.eraser
+          : _isDrawingMode
+          ? InkMode.pen
+          : InkMode.off,
+      color: _penColor,
+      width: _penSize,
+    );
+  }
+
+  void _clearAnnotations() {
+    _drawing.clear();
+    _osmd.clearInk();
   }
 
   // ── Exercises ──────────────────────────────────────────────────────
@@ -310,13 +337,17 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
   void dispose() {
     _exercise?.dispose();
     _drawing.dispose();
+    _osmd.canUndoInk.dispose();
     super.dispose();
   }
 
   @override
   void initState() {
     super.initState();
-
+    _osmd.onInkChanged = (strokes) {
+      final id = _score?.summary.id;
+      if (id != null) _inkStore.save(id, strokes);
+    };
     _setScore(widget.selected);
   }
 
@@ -366,7 +397,7 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
           Navigator.pop(context);
           _goToNavPage();
         },
-        onClearAnnotations: _drawing.clear,
+        onClearAnnotations: _clearAnnotations,
         onOpenExercises: () {
           Navigator.pop(context);
           _openExercisePicker();
@@ -398,14 +429,14 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
             // ─────────────────────────────────────────────
             Positioned.fill(
               child: Padding(
-                // Keep the score clear of the top tools and bottom actions,
-                // while using nearly the entire available width on a phone.
-                padding: const EdgeInsets.fromLTRB(
-                  Space.sm,
-                  72,
-                  Space.sm,
-                  82,
-                ),
+                // Upright, the tools sit above and below the score, which
+                // uses nearly the whole width. Turned sideways (as many
+                // players hold a phone on a stand), they move to the sides
+                // and the score gets nearly the whole height.
+                padding:
+                    MediaQuery.orientationOf(context) == Orientation.landscape
+                    ? const EdgeInsets.fromLTRB(76, Space.xs, 76, Space.xs)
+                    : const EdgeInsets.fromLTRB(Space.sm, 72, Space.sm, 82),
                 child: Container(
                   decoration: BoxDecoration(
                     color: PracticePalette.paper,
@@ -500,15 +531,16 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
             // ─────────────────────────────────────────────
             // DRAWING OVERLAY
             // ─────────────────────────────────────────────
-            Positioned.fill(
-              child: Drawing_Overlay(
-                controller: _drawing,
-                isDrawingMode: _isDrawingMode,
-                isErasing: _isErasing,
-                penColor: _penColor,
-                penSize: _penSize,
+            if (_exercise != null)
+              Positioned.fill(
+                child: Drawing_Overlay(
+                  controller: _drawing,
+                  isDrawingMode: _isDrawingMode,
+                  isErasing: _isErasing,
+                  penColor: _penColor,
+                  penSize: _penSize,
+                ),
               ),
-            ),
 
             // ─────────────────────────────────────────────
             // SETTINGS
@@ -537,7 +569,7 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
                     active: _isDrawingMode,
                     color: PracticePalette.gold,
                     onTap: () {
-                      setState(() {
+                      _setPen(() {
                         _isDrawingMode = !_isDrawingMode;
                         if (_isDrawingMode) {
                           _isErasing = false;
@@ -547,13 +579,15 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
                   ),
                   const SizedBox(width: Space.xs),
                   AnimatedBuilder(
-                    animation: _drawing,
+                    animation: Listenable.merge([_drawing, _osmd.canUndoInk]),
                     builder: (_, _) => PracticeToolButton(
                       icon: Icons.undo_rounded,
                       active: false,
                       color: PracticePalette.gold,
-                      enabled: _drawing.canUndo,
-                      onTap: _drawing.undo,
+                      enabled: _inkOnScore
+                          ? _osmd.canUndoInk.value
+                          : _drawing.canUndo,
+                      onTap: _inkOnScore ? _osmd.undoInk : _drawing.undo,
                     ),
                   ),
                   const SizedBox(width: Space.xs),
@@ -596,19 +630,19 @@ class _ScoreViewerPageState extends State<ScoreViewerPage> {
                       penSize: _penSize,
                       isErasing: _isErasing,
                       onColorSelected: (color) {
-                        setState(() {
+                        _setPen(() {
                           _penColor = color;
                           _isErasing = false;
                           _isDrawingMode = true;
                         });
                       },
                       onSizeChanged: (size) {
-                        setState(() {
+                        _setPen(() {
                           _penSize = size;
                         });
                       },
                       onEraserToggled: () {
-                        setState(() {
+                        _setPen(() {
                           _isErasing = !_isErasing;
                           if (_isErasing) _isDrawingMode = false;
                         });
