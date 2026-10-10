@@ -1,0 +1,806 @@
+{
+  "phrase": 1,
+  "timing": {
+    "bpm": 120.0,
+    "time_signature": "4/4"
+  },
+  "piece": {
+    "title": "12_melody_over_chords_comp"
+  },
+  "expected_notes": [
+    {
+      "note_id": 1,
+      "pitch_hz": 130.813,
+      "start_time_ms": 500,
+      "end_time_ms": 1260,
+      "duration_ms": 760,
+      "vibrato_depth": null,
+      "pedal_action": null,
+      "has_accent": null,
+      "markings": null
+    },
+    {
+      "note_id": 2,
+      "pitch_hz": 164.814,
+      "start_time_ms": 500,
+      "end_time_ms": 1260,
+      "duration_ms": 760,
+      "vibrato_depth": null,
+      "pedal_action": null,
+      "has_accent": null,
+      "markings": null
+    },
+    {
+      "note_id": 3,
+      "pitch_hz": 195.998,
+      "start_time_ms": 500,
+      "end_time_ms": 1260,
+      "duration_ms": 760,
+      "vibrato_depth": null,
+      "pedal_action": null,
+      "has_accent": null,
+      "markings": null
+    },
+    {
+      "note_id": 4,
+      "pitch_hz": 329.628,
+      "start_time_ms": 500,
+      "end_time_ms": 860,
+      "duration_ms": 360,
+      "vibrato_depth": null,
+      "pedal_action": null,
+      "has_accent": null,
+      "markings": null
+    },
+    {
+      "note_id": 5,
+      "pitch_hz": 329.628,
+      "start_time_ms": 900,
+      "end_time_ms": 1260,
+      "duration_ms": 360,
+      "vibrato_depth": null,
+      "pedal_action": null,
+      "has_accent": null,
+      "markings": null
+    },
+    {
+      "note_id": 6,
+      "pitch_hz": 97.999,
+      "start_time_ms": 1300,
+      "end_time_ms": 2060,
+      "duration_ms": 760,
+      "vibrato_depth": null,
+      "pedal_action": null,
+      "has_accent": null,
+      "markings": null
+    },
+    {
+      "note_id": 7,
+      "pitch_hz": 123.471,
+      "start_time_ms": 1300,
+      "end_time_ms": 2060,
+      "duration_ms": 760,
+      "vibrato_depth": null,
+      "pedal_action": null,
+      "has_accent": null,
+      "markings": null
+    },
+    {
+      "note_id": 8,
+      "pitch_hz": 146.832,
+      "start_time_ms": 1300,
+      "end_time_ms": 2060,
+      "duration_ms": 760,
+      "vibrato_depth": null,
+      "pedal_action": null,
+      "has_accent": null,
+      "markings": null
+    },
+    {
+      "note_id": 9,
+      "pitch_hz": 349.228,
+      "start_time_ms": 1300,
+      "end_time_ms": 1660,
+      "duration_ms": 360,
+      "vibrato_depth": null,
+      "pedal_action": null,
+      "has_accent": null,
+      "markings": null
+    },
+    {
+      "note_id": 10,
+      "pitch_hz": 391.995,
+      "start_time_ms": 1700,
+      "end_time_ms": 2060,
+      "duration_ms": 360,
+      "vibrato_depth": null,
+      "pedal_action": null,
+      "has_accent": null,
+      "markings": null
+    },
+    {
+      "note_id": 11,
+      "pitch_hz": 130.813,
+      "start_time_ms": 2100,
+      "end_time_ms": 2860,
+      "duration_ms": 760,
+      "vibrato_depth": null,
+      "pedal_action": null,
+      "has_accent": null,
+      "markings": null
+    },
+    {
+      "note_id": 12,
+      "pitch_hz": 164.814,
+      "start_time_ms": 2100,
+      "end_time_ms": 2860,
+      "duration_ms": 760,
+      "vibrato_depth": null,
+      "pedal_action": null,
+      "has_accent": null,
+      "markings": null
+    },
+    {
+      "note_id": 13,
+      "pitch_hz": 195.998,
+      "start_time_ms": 2100,
+      "end_time_ms": 2860,
+      "duration_ms": 760,
+      "vibrato_depth": null,
+      "pedal_action": null,
+      "has_accent": null,
+      "markings": null
+    },
+    {
+      "note_id": 14,
+      "pitch_hz": 391.995,
+      "start_time_ms": 2100,
+      "end_time_ms": 2460,
+      "duration_ms": 360,
+      "vibrato_depth": null,
+      "pedal_action": null,
+      "has_accent": null,
+      "markings": null
+    },
+    {
+      "note_id": 15,
+      "pitch_hz": 349.228,
+      "start_time_ms": 2500,
+      "end_time_ms": 2860,
+      "duration_ms": 360,
+      "vibrato_depth": null,
+      "pedal_action": null,
+      "has_accent": null,
+      "markings": null
+    },
+    {
+      "note_id": 16,
+      "pitch_hz": 97.999,
+      "start_time_ms": 2900,
+      "end_time_ms": 3660,
+      "duration_ms": 760,
+      "vibrato_depth": null,
+      "pedal_action": null,
+      "has_accent": null,
+      "markings": null
+    },
+    {
+      "note_id": 17,
+      "pitch_hz": 123.471,
+      "start_time_ms": 2900,
+      "end_time_ms": 3660,
+      "duration_ms": 760,
+      "vibrato_depth": null,
+      "pedal_action": null,
+      "has_accent": null,
+      "markings": null
+    },
+    {
+      "note_id": 18,
+      "pitch_hz": 146.832,
+      "start_time_ms": 2900,
+      "end_time_ms": 3660,
+      "duration_ms": 760,
+      "vibrato_depth": null,
+      "pedal_action": null,
+      "has_accent": null,
+      "markings": null
+    },
+    {
+      "note_id": 19,
+      "pitch_hz": 329.628,
+      "start_time_ms": 2900,
+      "end_time_ms": 3260,
+      "duration_ms": 360,
+      "vibrato_depth": null,
+      "pedal_action": null,
+      "has_accent": null,
+      "markings": null
+    },
+    {
+      "note_id": 20,
+      "pitch_hz": 293.665,
+      "start_time_ms": 3300,
+      "end_time_ms": 3660,
+      "duration_ms": 360,
+      "vibrato_depth": null,
+      "pedal_action": null,
+      "has_accent": null,
+      "markings": null
+    },
+    {
+      "note_id": 21,
+      "pitch_hz": 130.813,
+      "start_time_ms": 3700,
+      "end_time_ms": 4460,
+      "duration_ms": 760,
+      "vibrato_depth": null,
+      "pedal_action": null,
+      "has_accent": null,
+      "markings": null
+    },
+    {
+      "note_id": 22,
+      "pitch_hz": 164.814,
+      "start_time_ms": 3700,
+      "end_time_ms": 4460,
+      "duration_ms": 760,
+      "vibrato_depth": null,
+      "pedal_action": null,
+      "has_accent": null,
+      "markings": null
+    },
+    {
+      "note_id": 23,
+      "pitch_hz": 195.998,
+      "start_time_ms": 3700,
+      "end_time_ms": 4460,
+      "duration_ms": 760,
+      "vibrato_depth": null,
+      "pedal_action": null,
+      "has_accent": null,
+      "markings": null
+    },
+    {
+      "note_id": 24,
+      "pitch_hz": 261.626,
+      "start_time_ms": 3700,
+      "end_time_ms": 4060,
+      "duration_ms": 360,
+      "vibrato_depth": null,
+      "pedal_action": null,
+      "has_accent": null,
+      "markings": null
+    },
+    {
+      "note_id": 25,
+      "pitch_hz": 261.626,
+      "start_time_ms": 4100,
+      "end_time_ms": 4460,
+      "duration_ms": 360,
+      "vibrato_depth": null,
+      "pedal_action": null,
+      "has_accent": null,
+      "markings": null
+    },
+    {
+      "note_id": 26,
+      "pitch_hz": 87.307,
+      "start_time_ms": 4500,
+      "end_time_ms": 5260,
+      "duration_ms": 760,
+      "vibrato_depth": null,
+      "pedal_action": null,
+      "has_accent": null,
+      "markings": null
+    },
+    {
+      "note_id": 27,
+      "pitch_hz": 110.0,
+      "start_time_ms": 4500,
+      "end_time_ms": 5260,
+      "duration_ms": 760,
+      "vibrato_depth": null,
+      "pedal_action": null,
+      "has_accent": null,
+      "markings": null
+    },
+    {
+      "note_id": 28,
+      "pitch_hz": 130.813,
+      "start_time_ms": 4500,
+      "end_time_ms": 5260,
+      "duration_ms": 760,
+      "vibrato_depth": null,
+      "pedal_action": null,
+      "has_accent": null,
+      "markings": null
+    },
+    {
+      "note_id": 29,
+      "pitch_hz": 293.665,
+      "start_time_ms": 4500,
+      "end_time_ms": 4860,
+      "duration_ms": 360,
+      "vibrato_depth": null,
+      "pedal_action": null,
+      "has_accent": null,
+      "markings": null
+    },
+    {
+      "note_id": 30,
+      "pitch_hz": 329.628,
+      "start_time_ms": 4900,
+      "end_time_ms": 5260,
+      "duration_ms": 360,
+      "vibrato_depth": null,
+      "pedal_action": null,
+      "has_accent": null,
+      "markings": null
+    },
+    {
+      "note_id": 31,
+      "pitch_hz": 97.999,
+      "start_time_ms": 5300,
+      "end_time_ms": 6060,
+      "duration_ms": 760,
+      "vibrato_depth": null,
+      "pedal_action": null,
+      "has_accent": null,
+      "markings": null
+    },
+    {
+      "note_id": 32,
+      "pitch_hz": 123.471,
+      "start_time_ms": 5300,
+      "end_time_ms": 6060,
+      "duration_ms": 760,
+      "vibrato_depth": null,
+      "pedal_action": null,
+      "has_accent": null,
+      "markings": null
+    },
+    {
+      "note_id": 33,
+      "pitch_hz": 146.832,
+      "start_time_ms": 5300,
+      "end_time_ms": 6060,
+      "duration_ms": 760,
+      "vibrato_depth": null,
+      "pedal_action": null,
+      "has_accent": null,
+      "markings": null
+    },
+    {
+      "note_id": 34,
+      "pitch_hz": 329.628,
+      "start_time_ms": 5300,
+      "end_time_ms": 5660,
+      "duration_ms": 360,
+      "vibrato_depth": null,
+      "pedal_action": null,
+      "has_accent": null,
+      "markings": null
+    },
+    {
+      "note_id": 35,
+      "pitch_hz": 293.665,
+      "start_time_ms": 5700,
+      "end_time_ms": 6060,
+      "duration_ms": 360,
+      "vibrato_depth": null,
+      "pedal_action": null,
+      "has_accent": null,
+      "markings": null
+    },
+    {
+      "note_id": 36,
+      "pitch_hz": 130.813,
+      "start_time_ms": 6100,
+      "end_time_ms": 6860,
+      "duration_ms": 760,
+      "vibrato_depth": null,
+      "pedal_action": null,
+      "has_accent": null,
+      "markings": null
+    },
+    {
+      "note_id": 37,
+      "pitch_hz": 164.814,
+      "start_time_ms": 6100,
+      "end_time_ms": 6860,
+      "duration_ms": 760,
+      "vibrato_depth": null,
+      "pedal_action": null,
+      "has_accent": null,
+      "markings": null
+    },
+    {
+      "note_id": 38,
+      "pitch_hz": 195.998,
+      "start_time_ms": 6100,
+      "end_time_ms": 6860,
+      "duration_ms": 760,
+      "vibrato_depth": null,
+      "pedal_action": null,
+      "has_accent": null,
+      "markings": null
+    },
+    {
+      "note_id": 39,
+      "pitch_hz": 293.665,
+      "start_time_ms": 6100,
+      "end_time_ms": 6460,
+      "duration_ms": 360,
+      "vibrato_depth": null,
+      "pedal_action": null,
+      "has_accent": null,
+      "markings": null
+    },
+    {
+      "note_id": 40,
+      "pitch_hz": 293.665,
+      "start_time_ms": 6500,
+      "end_time_ms": 6860,
+      "duration_ms": 360,
+      "vibrato_depth": null,
+      "pedal_action": null,
+      "has_accent": null,
+      "markings": null
+    },
+    {
+      "note_id": 41,
+      "pitch_hz": 130.813,
+      "start_time_ms": 6900,
+      "end_time_ms": 7660,
+      "duration_ms": 760,
+      "vibrato_depth": null,
+      "pedal_action": null,
+      "has_accent": null,
+      "markings": null
+    },
+    {
+      "note_id": 42,
+      "pitch_hz": 164.814,
+      "start_time_ms": 6900,
+      "end_time_ms": 7660,
+      "duration_ms": 760,
+      "vibrato_depth": null,
+      "pedal_action": null,
+      "has_accent": null,
+      "markings": null
+    },
+    {
+      "note_id": 43,
+      "pitch_hz": 195.998,
+      "start_time_ms": 6900,
+      "end_time_ms": 7660,
+      "duration_ms": 760,
+      "vibrato_depth": null,
+      "pedal_action": null,
+      "has_accent": null,
+      "markings": null
+    },
+    {
+      "note_id": 44,
+      "pitch_hz": 261.626,
+      "start_time_ms": 6900,
+      "end_time_ms": 7260,
+      "duration_ms": 360,
+      "vibrato_depth": null,
+      "pedal_action": null,
+      "has_accent": null,
+      "markings": null
+    }
+  ],
+  "user_notes": [
+    {
+      "note_id": 4,
+      "pitch_hz": 330.5414769025976,
+      "start_time_ms": 500.0,
+      "end_time_ms": 883.1293,
+      "duration_ms": 383.12924
+    },
+    {
+      "note_id": 1,
+      "pitch_hz": 132.21659076103904,
+      "start_time_ms": 523.22,
+      "end_time_ms": 1231.4286,
+      "duration_ms": 708.2086
+    },
+    {
+      "note_id": 5,
+      "pitch_hz": 330.54864303175515,
+      "start_time_ms": 883.1293,
+      "end_time_ms": 1277.8685,
+      "duration_ms": 394.73926
+    },
+    {
+      "note_id": 2,
+      "pitch_hz": 165.26197855197248,
+      "start_time_ms": 511.60995,
+      "end_time_ms": 1231.4286,
+      "duration_ms": 719.8186
+    },
+    {
+      "note_id": 9,
+      "pitch_hz": 349.4657258675147,
+      "start_time_ms": 1312.6985,
+      "end_time_ms": 1672.6077,
+      "duration_ms": 359.90918
+    },
+    {
+      "note_id": 3,
+      "pitch_hz": 197.11055655501715,
+      "start_time_ms": 523.22,
+      "end_time_ms": 2078.9568,
+      "duration_ms": 1555.7369
+    },
+    {
+      "note_id": 10,
+      "pitch_hz": 393.7415375907288,
+      "start_time_ms": 1707.4376,
+      "end_time_ms": 2078.9568,
+      "duration_ms": 371.5193
+    },
+    {
+      "note_id": 8,
+      "pitch_hz": 147.46111135483352,
+      "start_time_ms": 1312.6985,
+      "end_time_ms": 2020.907,
+      "duration_ms": 708.2085
+    },
+    {
+      "note_id": 7,
+      "pitch_hz": 124.02689779452777,
+      "start_time_ms": 1335.9183,
+      "end_time_ms": 2020.907,
+      "duration_ms": 684.98865
+    },
+    {
+      "note_id": 6,
+      "pitch_hz": 98.34379347142297,
+      "start_time_ms": 1335.9183,
+      "end_time_ms": 2044.1271,
+      "duration_ms": 708.20874
+    },
+    {
+      "note_id": 14,
+      "pitch_hz": 394.2790506463129,
+      "start_time_ms": 2078.9568,
+      "end_time_ms": 2264.7166,
+      "duration_ms": 185.75977
+    },
+    {
+      "note_id": 15,
+      "pitch_hz": 350.78758490154,
+      "start_time_ms": 2508.526,
+      "end_time_ms": 2845.2153,
+      "duration_ms": 336.68945
+    },
+    {
+      "note_id": 11,
+      "pitch_hz": 131.65161130404476,
+      "start_time_ms": 2137.0066,
+      "end_time_ms": 2821.9954,
+      "duration_ms": 684.9888
+    },
+    {
+      "note_id": 12,
+      "pitch_hz": 165.30034806162914,
+      "start_time_ms": 2113.7866,
+      "end_time_ms": 2798.7754,
+      "duration_ms": 684.9888
+    },
+    {
+      "note_id": 13,
+      "pitch_hz": 196.65253829047094,
+      "start_time_ms": 2113.7866,
+      "end_time_ms": 2821.9954,
+      "duration_ms": 708.20874
+    },
+    {
+      "note_id": 19,
+      "pitch_hz": 329.38034947325207,
+      "start_time_ms": 2891.655,
+      "end_time_ms": 3263.1746,
+      "duration_ms": 371.51953
+    },
+    {
+      "note_id": 20,
+      "pitch_hz": 294.54845286266215,
+      "start_time_ms": 3286.3943,
+      "end_time_ms": 3669.5237,
+      "duration_ms": 383.1294
+    },
+    {
+      "note_id": 17,
+      "pitch_hz": 123.62841393011439,
+      "start_time_ms": 2938.095,
+      "end_time_ms": 3611.4739,
+      "duration_ms": 673.3789
+    },
+    {
+      "note_id": 18,
+      "pitch_hz": 147.4488656989863,
+      "start_time_ms": 2914.875,
+      "end_time_ms": 3623.0837,
+      "duration_ms": 708.20874
+    },
+    {
+      "note_id": 24,
+      "pitch_hz": 262.8163663296746,
+      "start_time_ms": 3692.7437,
+      "end_time_ms": 4075.8728,
+      "duration_ms": 383.12915
+    },
+    {
+      "note_id": 16,
+      "pitch_hz": 98.44538810804858,
+      "start_time_ms": 2938.095,
+      "end_time_ms": 3669.5237,
+      "duration_ms": 731.4287
+    },
+    {
+      "note_id": 21,
+      "pitch_hz": 131.4166906384496,
+      "start_time_ms": 3739.1833,
+      "end_time_ms": 4424.1724,
+      "duration_ms": 684.9888
+    },
+    {
+      "note_id": 22,
+      "pitch_hz": 165.30118489299073,
+      "start_time_ms": 3727.5735,
+      "end_time_ms": 4424.1724,
+      "duration_ms": 696.59863
+    },
+    {
+      "note_id": 23,
+      "pitch_hz": 197.09649549081175,
+      "start_time_ms": 3739.1833,
+      "end_time_ms": 4435.782,
+      "duration_ms": 696.59863
+    },
+    {
+      "note_id": 29,
+      "pitch_hz": 294.3735519411526,
+      "start_time_ms": 4493.832,
+      "end_time_ms": 4865.3516,
+      "duration_ms": 371.51953
+    },
+    {
+      "note_id": 30,
+      "pitch_hz": 330.7136838590431,
+      "start_time_ms": 4900.1816,
+      "end_time_ms": 5283.3105,
+      "duration_ms": 383.1289
+    },
+    {
+      "note_id": 25,
+      "pitch_hz": 260.878253386809,
+      "start_time_ms": 4075.8728,
+      "end_time_ms": 4493.8325,
+      "duration_ms": 417.95947
+    },
+    {
+      "note_id": 26,
+      "pitch_hz": 86.37919833922004,
+      "start_time_ms": 4528.662,
+      "end_time_ms": 5225.2607,
+      "duration_ms": 696.59863
+    },
+    {
+      "note_id": 27,
+      "pitch_hz": 110.24109059439316,
+      "start_time_ms": 4528.662,
+      "end_time_ms": 5248.481,
+      "duration_ms": 719.81885
+    },
+    {
+      "note_id": 28,
+      "pitch_hz": 132.22814801414125,
+      "start_time_ms": 4517.0522,
+      "end_time_ms": 5202.041,
+      "duration_ms": 684.9888
+    },
+    {
+      "note_id": 35,
+      "pitch_hz": 294.4879004138788,
+      "start_time_ms": 5689.6597,
+      "end_time_ms": 6072.789,
+      "duration_ms": 383.1294
+    },
+    {
+      "note_id": 34,
+      "pitch_hz": 329.92966783162956,
+      "start_time_ms": 5283.3105,
+      "end_time_ms": 5666.44,
+      "duration_ms": 383.1294
+    },
+    {
+      "note_id": 33,
+      "pitch_hz": 147.26844403031086,
+      "start_time_ms": 5306.531,
+      "end_time_ms": 6026.349,
+      "duration_ms": 719.81836
+    },
+    {
+      "note_id": 32,
+      "pitch_hz": 123.471,
+      "start_time_ms": 5341.3604,
+      "end_time_ms": 6014.7393,
+      "duration_ms": 673.3789
+    },
+    {
+      "note_id": 39,
+      "pitch_hz": 294.431436488094,
+      "start_time_ms": 6072.789,
+      "end_time_ms": 6479.138,
+      "duration_ms": 406.34912
+    },
+    {
+      "note_id": 36,
+      "pitch_hz": 131.50693861903906,
+      "start_time_ms": 6142.449,
+      "end_time_ms": 6827.438,
+      "duration_ms": 684.9888
+    },
+    {
+      "note_id": 37,
+      "pitch_hz": 165.82971475648824,
+      "start_time_ms": 6142.449,
+      "end_time_ms": 6873.8774,
+      "duration_ms": 731.4282
+    },
+    {
+      "note_id": 38,
+      "pitch_hz": 196.2664657918984,
+      "start_time_ms": 6107.619,
+      "end_time_ms": 6873.8774,
+      "duration_ms": 766.2583
+    },
+    {
+      "note_id": 40,
+      "pitch_hz": 294.4161651168201,
+      "start_time_ms": 6490.7485,
+      "end_time_ms": 6862.2676,
+      "duration_ms": 371.51904
+    },
+    {
+      "note_id": 31,
+      "pitch_hz": 98.18497489334328,
+      "start_time_ms": 5329.7505,
+      "end_time_ms": 6815.8276,
+      "duration_ms": 1486.0771
+    },
+    {
+      "note_id": 44,
+      "pitch_hz": 262.83194114371554,
+      "start_time_ms": 6897.0977,
+      "end_time_ms": 7326.667,
+      "duration_ms": 429.56934
+    },
+    {
+      "note_id": 42,
+      "pitch_hz": 165.15786508404366,
+      "start_time_ms": 6920.3174,
+      "end_time_ms": 7918.776,
+      "duration_ms": 998.4585
+    },
+    {
+      "note_id": 43,
+      "pitch_hz": 197.15619293600497,
+      "start_time_ms": 6920.3174,
+      "end_time_ms": 7941.9956,
+      "duration_ms": 1021.6782
+    },
+    {
+      "note_id": 41,
+      "pitch_hz": 131.4366382451824,
+      "start_time_ms": 6920.3174,
+      "end_time_ms": 7930.3857,
+      "duration_ms": 1010.06836
+    }
+  ]
+}
