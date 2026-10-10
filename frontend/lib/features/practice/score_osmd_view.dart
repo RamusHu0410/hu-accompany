@@ -23,8 +23,15 @@ class NoteRef {
   };
 }
 
-/// Drives the OSMD WebView: loads MusicXML, and colors or resets individual
-/// notes without re-fetching or re-navigating anything. Calls made before
+/// What a touch on the score does. With [InkMode.pen] or [InkMode.eraser],
+/// one finger draws or erases and two fingers scroll and zoom; with
+/// [InkMode.off], one finger scrolls. Pinching zooms in every mode.
+enum InkMode { off, pen, eraser }
+
+/// Drives the OSMD WebView: loads MusicXML, colors or resets individual
+/// notes, and holds the pen ink drawn on the score (inside the page, so it
+/// scrolls and zooms with the music), without re-fetching or re-navigating
+/// anything. Calls made before
 /// the page's JS bridge (`window.OSMDBridge`) has announced itself ready
 /// are queued and flushed once the 'bridgeReady' message arrives — NOT
 /// just once WebView's onPageFinished fires, since the OSMD script may
@@ -33,6 +40,16 @@ class ScoreOsmdController {
   WebViewController? _web;
   bool _bridgeReady = false;
   final List<String> _pendingCalls = [];
+
+  /// Whether there's ink to undo on the score.
+  final ValueNotifier<bool> canUndoInk = ValueNotifier(false);
+
+  /// Called with the score's strokes (JSON) whenever the ink changes, so
+  /// they can be kept for next time.
+  void Function(String strokesJson)? onInkChanged;
+
+  /// The ink the next loaded score starts with (see [setInk]).
+  String _inkJson = '[]';
 
   /// A freshly attached WebView has not loaded the bridge yet, so calls
   /// queue until its own 'bridgeReady' arrives.
@@ -66,8 +83,37 @@ class ScoreOsmdController {
 
   Future<void> loadScore(String musicXml) async {
     final encoded = jsonEncode(musicXml);
-    _call('OSMDBridge.loadScore($encoded);');
+    canUndoInk.value = false;
+    _call('OSMDBridge.loadScore($encoded); OSMDBridge.setInk($_inkJson);');
   }
+
+  /// The strokes to show on the score (JSON, as [onInkChanged] gave them).
+  /// Set it before or after the score loads; a new score should start with
+  /// '[]' until its own ink is known.
+  void setInk(String strokesJson) {
+    _inkJson = strokesJson;
+    canUndoInk.value = false;
+    _call('OSMDBridge.setInk($strokesJson);');
+  }
+
+  void setInkMode(InkMode mode, {Color? color, double? width}) {
+    final hex = color == null ? 'null' : '"${_hex(color)}"';
+    _call('OSMDBridge.setInkMode("${mode.name}", $hex, ${width ?? 'null'});');
+  }
+
+  void undoInk() => _call('OSMDBridge.undoInk();');
+
+  void clearInk() => _call('OSMDBridge.clearInk();');
+
+  void _inkMessage(Map<String, dynamic>? payload) {
+    if (payload == null) return;
+    canUndoInk.value = payload['canUndo'] == true;
+    _inkJson = jsonEncode(payload['strokes'] ?? const []);
+    onInkChanged?.call(_inkJson);
+  }
+
+  static String _hex(Color color) =>
+      '#${color.toARGB32().toRadixString(16).padLeft(8, '0').substring(2)}';
 
   /// Colors the given notes (e.g. ones flagged as wrong by your audio
   /// analysis) — defaults to red. Call [resetColors] to clear all of them.
@@ -76,8 +122,7 @@ class ScoreOsmdController {
     Color color = const Color(0xFFE53935),
   }) async {
     if (notes.isEmpty) return;
-    final hex =
-        '#${color.toARGB32().toRadixString(16).padLeft(8, '0').substring(2)}';
+    final hex = _hex(color);
     final refsJson = jsonEncode(notes.map((n) => n.toJson()).toList());
     _call('OSMDBridge.colorNotes($refsJson, "$hex");');
   }
@@ -171,6 +216,9 @@ class _ScoreOsmdViewState extends State<ScoreOsmdView> {
         break;
       case 'loaded':
         if (mounted) setState(() => _loading = false);
+        break;
+      case 'ink':
+        widget.controller._inkMessage(data['payload'] as Map<String, dynamic>?);
         break;
       case 'error':
         if (mounted) {
