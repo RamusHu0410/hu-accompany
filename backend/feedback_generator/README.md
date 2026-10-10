@@ -24,7 +24,7 @@ feedback_generator/
       tempo.py        pulse drift across a phrase
       articulation.py staccato / legato / marcato vs. markings
       notes.py        notes not played, notes not written
-      dynamics.py     no loudness data upstream -- scores null, says nothing
+      dynamics.py     loudness from user notes' `volume` vs. written dynamics
       pedaling.py     no pedal data upstream -- scores null, says nothing
     phase2/         the whole session at once
       __init__.py     JUDGES = run order
@@ -94,9 +94,18 @@ Phase-1 file:
 - `details` carries the numbers behind the call (cents, ms, ratio) plus a
   `suggestion`.
 - A `null` score means that judge had nothing to measure, and it drops out
-  of `overall` instead of counting as zero. `dynamics` and `pedaling` are
-  always null: no note schema upstream (mobile app / native_ffi /
-  pdf_processor) carries loudness or pedal events.
+  of `overall` instead of counting as zero. `pedaling` is always null: no
+  note schema upstream (mobile app / native_ffi / pdf_processor) carries
+  pedal events. `dynamics` is null only when no user note carries a
+  `volume` (native_ffi's 0-1 dB-spaced loudness, see
+  `rust_samples/README.md`).
+- Dynamics only compares notes within the phrase, because `volume` depends
+  on the device: written level changes (p -> f) and cresc./dim. must move
+  the right way, accents (`has_accent`, sf/sfz/fp) must stand out, and any
+  other note must stay near the level around it. Levels come from
+  `markings` and carry forward until the next one. Findings carry
+  `details.issue` = `contrast` / `hairpin` / `accent` / `evenness`, plus
+  `change_db`.
 
 ## 3. Quick test
 

@@ -40,6 +40,10 @@ GROUP_IMPORTANCE = {
     "rhythm/duration": 0.9,
     "notes/extra_note": 0.9,
     "articulation": 0.7,
+    "dynamics/contrast": 0.9,
+    "dynamics/hairpin": 0.8,
+    "dynamics/accent": 0.7,
+    "dynamics/evenness": 0.6,
 }
 
 # Which 0-100 dimension(s) each group reflects, used to avoid praising a
@@ -52,6 +56,10 @@ GROUP_TO_SCORE_DIMENSION = {
     "notes/extra_note": {"pitch", "rhythm"},
     "articulation": {"articulation"},
     "tempo": {"tempo"},
+    "dynamics/contrast": {"dynamics"},
+    "dynamics/hairpin": {"dynamics"},
+    "dynamics/accent": {"dynamics"},
+    "dynamics/evenness": {"dynamics"},
 }
 
 POSITIVE_TEMPLATES = {
@@ -94,6 +102,22 @@ def _group_message(key: str, count: int) -> tuple:
         "tempo": (
             f"The tempo drifts across {count} phrases." if plural else "The tempo drifts across one phrase.",
             "Practice those phrases with a metronome, paying close attention to keeping a steady tempo through to the end.",
+        ),
+        "dynamics/contrast": (
+            f"{count} written dynamic changes didn't come through clearly." if plural else "One written dynamic change didn't come through clearly.",
+            "Exaggerate each marked change in volume at first, then refine it once the contrast is there.",
+        ),
+        "dynamics/hairpin": (
+            f"{count} crescendos or diminuendos didn't grow or fade enough." if plural else "One crescendo or diminuendo didn't grow or fade enough.",
+            "Play those passages slowly, making each note a little louder (or softer) than the one before.",
+        ),
+        "dynamics/accent": (
+            f"{count} accents didn't stand out from the notes around them." if plural else "One accent didn't stand out from the notes around it.",
+            "Give each accented note clearly more weight than its neighbours.",
+        ),
+        "dynamics/evenness": (
+            f"{count} notes jumped out louder or softer than the notes around them." if plural else "One note jumped out louder or softer than the notes around it.",
+            "Play the affected bars slowly at one steady volume, listening for any note that stands out.",
         ),
     }
     return templates.get(

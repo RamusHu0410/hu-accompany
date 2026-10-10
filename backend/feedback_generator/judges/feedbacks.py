@@ -99,9 +99,75 @@ NOTES_EXTRA = Feedback(
 )
 
 
-# --- dynamics.py / pedaling.py ------------------------------------------------
+# --- dynamics.py --------------------------------------------------------------
 #
-# No entries yet: neither judge has data to comment on (see their modules).
+# Every group is keyed (direction, outcome): outcome "weak" = moved the right
+# way but not far enough, "missing" = no audible change or the wrong way.
+
+DYNAMICS_CONTRAST = {  # a new written level, e.g. p -> f. {marking}, {previous}
+    ("louder", "weak"): Feedback(
+        "The {marking} here was only slightly louder than the {previous} before it.",
+        "Exaggerate the change at first: play the {previous} clearly softer and arrive at the {marking} with real weight.",
+    ),
+    ("louder", "missing"): Feedback(
+        "The {marking} here wasn't played louder than the {previous} before it.",
+        "Mark the change to {marking} in your mind before you reach it, and play the bars around it slowly, listening for the jump in volume.",
+    ),
+    ("softer", "weak"): Feedback(
+        "The {marking} here was only slightly softer than the {previous} before it.",
+        "Exaggerate the change at first: drop right down to the {marking} and keep it there.",
+    ),
+    ("softer", "missing"): Feedback(
+        "The {marking} here wasn't played softer than the {previous} before it.",
+        "Mark the change to {marking} in your mind before you reach it, and play the bars around it slowly, listening for the drop in volume.",
+    ),
+}
+
+DYNAMICS_HAIRPIN = {  # a written crescendo / diminuendo
+    ("louder", "weak"): Feedback(
+        "The crescendo here only grew slightly.",
+        "Start the crescendo softer than feels natural so there is room to grow, and spread the growth evenly to its end.",
+    ),
+    ("louder", "missing"): Feedback(
+        "The crescendo here didn't get louder.",
+        "Play this passage slowly and make each note a little louder than the one before it.",
+    ),
+    ("softer", "weak"): Feedback(
+        "The diminuendo here only faded slightly.",
+        "Keep letting the sound fall away all the way to the end of the diminuendo instead of levelling off.",
+    ),
+    ("softer", "missing"): Feedback(
+        "The diminuendo here didn't get softer.",
+        "Play this passage slowly and make each note a little softer than the one before it.",
+    ),
+}
+
+DYNAMICS_ACCENT = {  # an accent / sf / sfz note
+    ("louder", "weak"): Feedback(
+        "This accent was only slightly stronger than the notes around it.",
+        "Give the accented note more weight and keep the notes around it lighter so it stands out.",
+    ),
+    ("louder", "missing"): Feedback(
+        "This accent didn't stand out from the notes around it.",
+        "Practise this spot slowly, playing the accented note clearly louder than its neighbours.",
+    ),
+}
+
+DYNAMICS_UNEVEN = {  # an unmarked note that jumps out of the surrounding level
+    "louder": Feedback(
+        "This note stood out louder than the notes around it.",
+        "Play this passage slowly at one steady volume, listening for any note that pokes out.",
+    ),
+    "softer": Feedback(
+        "This note dropped noticeably softer than the notes around it.",
+        "Play this passage slowly at one steady volume, making sure this note speaks as fully as its neighbours.",
+    ),
+}
+
+
+# --- pedaling.py --------------------------------------------------------------
+#
+# No entries yet: the judge has no pedal data to comment on (see its module).
 
 
 # --- phase2/era.py ------------------------------------------------------------

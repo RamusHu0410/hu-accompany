@@ -64,6 +64,7 @@ def _parse_expected_note(raw: dict) -> ExpectedNote:
 
 def _parse_user_note(raw: dict) -> UserNote:
     try:
+        volume = raw.get("volume")
         return UserNote(
             pitch_hz=raw["pitch_hz"],
             start_time_ms=raw["start_time_ms"],
@@ -71,6 +72,7 @@ def _parse_user_note(raw: dict) -> UserNote:
             duration_ms=raw["duration_ms"],
             note_id=raw.get("note_id"),
             has_accent=raw.get("has_accent"),
+            volume=float(volume) if volume is not None else None,
         )
     except KeyError as e:
         raise InvalidNoteData(f"user note is missing required field: {e.args[0]}") from e

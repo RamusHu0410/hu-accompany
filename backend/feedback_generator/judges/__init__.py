@@ -52,7 +52,12 @@ class ExpectedNote:
 
 @dataclass
 class UserNote:
-    """A single note detected from the user's recording of the phrase."""
+    """A single note detected from the user's recording of the phrase.
+
+    `volume` is native_ffi's loudness reading: 0.0 (-60 dBFS or quieter) to
+    1.0 (full scale), spaced in decibels (each 0.1 = 6 dB). It is relative
+    to the device and microphone, so only differences between notes mean
+    anything. None when the client didn't send one."""
 
     pitch_hz: float
     start_time_ms: float
@@ -60,6 +65,7 @@ class UserNote:
     duration_ms: float
     note_id: Optional[int] = None
     has_accent: Optional[bool] = None
+    volume: Optional[float] = None
 
 
 # --- Judge input / output -----------------------------------------------------
