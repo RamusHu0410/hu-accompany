@@ -6,13 +6,11 @@
 from django.urls import path, include
 from django.conf import settings
 from django.urls import re_path
-from django.views.static import serve
+from server import views
 
 urlpatterns = [
     path("", include("api.urls")),
     path("", include("scores.urls")),
     path("", include("hum.urls")),
-    re_path(r'^storage/(?P<path>.*)$', serve, {
-        'document_root': settings.BASE_DIR / 'storage',
-    }),
+    re_path(r'^storage/(?P<path>.*)$', views.storage),
 ]

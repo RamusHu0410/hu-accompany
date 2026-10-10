@@ -1,0 +1,44 @@
+# What the deployed server needs: the apps in server/urls.py (api, scores, hum, quiz) and
+# feedback_generator. Derived from the imports those packages actually make.
+#
+# NOT here, on purpose (requirements.txt still has them for local work on the old PDF pipeline):
+# oemer, opencv, pyvips, pytesseract, pdfplumber, PyMuPDF, zeroconf. The live routes no longer
+# import pdf_processor / image_enhancer, and zeroconf is only used by `runserver` (api/mdns.py).
+#
+# Install in two steps (basic-pitch's normal install pulls in TensorFlow, which this app doesn't use;
+# it runs basic-pitch's ONNX model with onnxruntime):
+#   pip install -r requirements-prod.txt
+#   pip install --no-deps basic-pitch
+#
+# System packages needed besides these: fluidsynth and a General MIDI soundfont (see hum/README.md).
+#
+# Unpinned for now. Once the Docker image builds, freeze the working set into a lock file.
+
+# Web
+django>=6.1.1
+gunicorn
+python-dotenv
+psycopg[binary]>=3.2.0
+
+# Hum -> song (hum/engine)
+numpy
+scipy
+music21
+pydantic
+librosa
+soundfile
+pretty-midi
+mido
+pedalboard
+av
+arvo
+
+# Talk mode: Gemini works out what was asked, ElevenLabs hears and speaks it
+google-genai
+elevenlabs
+
+# What basic-pitch needs once it is installed with --no-deps
+mir-eval
+resampy
+scikit-learn
+onnxruntime

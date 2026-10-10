@@ -2,15 +2,24 @@ import os
 from pathlib import Path
 from dotenv import load_dotenv
 
+from server.config import build_settings
+
 load_dotenv()
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "dev-secret-key-change-in-production")
-
-DEBUG = os.environ.get("DEBUG", "True") == "True"
-
-ALLOWED_HOSTS = ["*"]
+# Development by default; production when DJANGO_ENV=production or on Cloud Run (K_SERVICE).
+# See server/config.py for what each mode requires.
+_config = build_settings(os.environ)
+IS_PRODUCTION = _config["IS_PRODUCTION"]
+SECRET_KEY = _config["SECRET_KEY"]
+DEBUG = _config["DEBUG"]
+ALLOWED_HOSTS = _config["ALLOWED_HOSTS"]
+SECURE_PROXY_SSL_HEADER = _config["SECURE_PROXY_SSL_HEADER"]
+# The shared key the app sends in X-App-Key, and the per-minute limits (0 = off).
+APP_API_KEY = _config["APP_API_KEY"]
+RATE_LIMIT_HUM_PER_MINUTE = _config["RATE_LIMIT_HUM_PER_MINUTE"]
+RATE_LIMIT_DEFAULT_PER_MINUTE = _config["RATE_LIMIT_DEFAULT_PER_MINUTE"]
 
 INSTALLED_APPS = [
     "django.contrib.contenttypes",
@@ -28,7 +37,11 @@ STORAGE_ROOT = BASE_DIR / "storage"
 # server/urls.py serves publicly.
 HUM_DATA_DIR = Path(os.environ.get("HUM_DATA_DIR", BASE_DIR / "hum_data"))
 
+# Order matters (server/middleware.py): health check, rate limit, app key, then Django.
 MIDDLEWARE = [
+    "server.middleware.HealthCheckMiddleware",
+    "server.middleware.RateLimitMiddleware",
+    "server.middleware.AppKeyMiddleware",
     "django.middleware.common.CommonMiddleware",
 ]
 
