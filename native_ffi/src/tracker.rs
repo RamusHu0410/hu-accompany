@@ -74,20 +74,14 @@ pub struct Thresholds {
     /// Minimum Detection::confidence to start / keep a note.
     pub start_confidence: f32,
     pub sustain_confidence: f32,
-    /// A note's start and end are stamped where its confidence crosses this
-    /// share of its own peak (0 = off: stamp the first frame that passed or
-    /// failed the absolute rules). Those can't place the edges: the network
-    /// starts to rise ~30 ms before a note does, and sustain_confidence sits
-    /// at its output on silence, so the note only fails them once the release
-    /// has fully faded, ~100 ms (in a room's noise: much more) after. Crossing
-    /// the same level on both edges keeps the duration right, which the
-    /// backend judges against the written one (15% off is a finding).
-    /// Only the stamps change; notes start and close by the absolute rules,
-    /// so a flickering note is not split in two.
-    pub edge_relative: f32,
-    /// Per-frame decay of the recent peak the end is measured against, so a note
-    /// that dies away slowly is followed, and only a sharp drop (a release) ends it.
-    pub peak_decay: f32,
+    /// A playing note also needs this fraction of the highest confidence it
+    /// reached. After a key is released the network keeps a faint reading
+    /// while the string decays; a loud note falling to a quarter of its peak
+    /// has ended, while a quiet chord note steady at a low reading has not.
+    pub sustain_peak_fraction: f32,
+    /// Added to every note start: the evidence source's measured timing lead
+    /// (the network's frames read a note ~24 ms before the key is struck).
+    pub onset_shift_ms: f32,
 }
 
 impl Thresholds {
@@ -102,8 +96,8 @@ impl Thresholds {
         start_share: START_SHARE,
         start_confidence: 0.0,
         sustain_confidence: 0.0,
-        edge_relative: 0.0,
-        peak_decay: 1.0,
+        sustain_peak_fraction: 0.0,
+        onset_shift_ms: 0.0,
     };
     /// For run_onnx::neural_evidence. From the offline prototype: a note is
     /// there when its key reads >= 0.15 and >= 1.5x each non-expected
@@ -114,15 +108,16 @@ impl Thresholds {
     pub const NEURAL: Self = Self {
         on_frames: 2,
         on_window: 4,
-        off_frames: 4,
+        off_frames: 8,
         start_dominance_single: 1.5,
         start_dominance_chord: 1.5,
         sustain_dominance: 1.0,
         start_share: 0.0,
         start_confidence: 0.15,
         sustain_confidence: 0.1,
-        edge_relative: 0.75,
-        peak_decay: 0.984,
+        sustain_peak_fraction: 0.5,
+        // Median onset error on the exactly-timed rendered piano set was -24 ms.
+        onset_shift_ms: 24.0,
     };
 }
 
@@ -166,25 +161,8 @@ struct Track {
     needs_attack: bool,
     /// Quietest level since listening began (0 once the pitch fell silent).
     min_level: f32,
-    /// Recent peak of Detection::confidence while heard (see Thresholds::edge_relative).
+    /// Highest evidence confidence since this note (candidate) began.
     peak_confidence: f32,
-    /// The first RISE_FRAMES heard frames of this candidate, with their confidence.
-    rise: Vec<(Frame, f32)>,
-}
-
-/// How the score's clock relates to the stream's (sample 0 = mic opened).
-#[derive(Clone, Copy, Debug, PartialEq)]
-enum Clock {
-    /// Score time = stream time.
-    Stream,
-    /// Score time 0 is wherever the player's first note starts. Until that
-    /// note is heard, only the opening notes are listened for, at any time.
-    AwaitingFirstNote,
-    /// The first note was heard: score time = stream time - `offset_ms`.
-    /// Tracks keep stream time; the offset is applied when a note is reported,
-    /// so it can still be refined: `refine` is the first note, whose start
-    /// is only stamped for good once its attack is over (RISE_FRAMES).
-    Anchored { offset_ms: f32, refine: Option<usize> },
 }
 
 pub struct NoteTracker {
@@ -291,7 +269,9 @@ impl NoteTracker {
         (0..self.notes.len())
             .filter(|&i| {
                 let (open, close) = self.window(i);
-                let listening = open <= now_ms && now_ms <= close && now_ms < self.handover_ms[i];
+                // A note heard and ended is done: one record per score note, so a
+                // decaying tail or a flicker can't open a second one.
+                let listening = open <= now_ms && now_ms <= close && now_ms < self.handover_ms[i] && !self.ended[i];
                 listening || self.is_playing(i)
             })
             .collect()
@@ -343,7 +323,11 @@ impl NoteTracker {
             let playing = track.state.is_some();
             let needed = if playing { th.sustain_dominance } else { start_needed };
             let share_needed = if playing { 0.0 } else { th.start_share };
-            let confidence_needed = if playing { th.sustain_confidence } else { th.start_confidence };
+            let confidence_needed = if playing {
+                th.sustain_confidence.max(track.peak_confidence * th.sustain_peak_fraction)
+            } else {
+                th.start_confidence
+            };
             let mut heard = evidence
                 .filter(|d| d.dominance >= needed && d.share >= share_needed && d.confidence >= confidence_needed)
                 .map(|d| d.pitch_hz);
@@ -373,17 +357,17 @@ impl NoteTracker {
                         track.first_present = frame; // a new candidate begins
                         track.pitches.clear();
                         track.peak_confidence = 0.0;
-                        track.rise.clear();
                     }
-                    if track.rise.len() < RISE_FRAMES {
-                        track.rise.push((frame, evidence.map_or(0.0, |d| d.confidence)));
+                    if let Some(d) = evidence {
+                        track.peak_confidence = track.peak_confidence.max(d.confidence);
                     }
                     track.recent = (track.recent << 1) | 1;
                     track.absent_run = 0;
                     track.pitches.push(hz);
                     if track.state.is_none() && (track.recent & window).count_ones() >= th.on_frames {
-                        track.state = Some(NoteState::Playing { start_ms: track.first_present.end_ms });
-                        started.push((i, track.first_present.end_ms));
+                        let start_ms = track.first_present.end_ms + th.onset_shift_ms;
+                        track.state = Some(NoteState::Playing { start_ms });
+                        started.push((i, start_ms));
                     }
                 }
                 None => {
@@ -550,6 +534,52 @@ mod tests {
         // 3 missing frames (15 ms) in the middle, e.g. a reverb flicker.
         let out = run(&mut tr, 0.0, 1000.0, |_, t| (0.0..500.0).contains(&t) && !(200.0..215.0).contains(&t));
         assert_eq!(out.len(), 1, "dropout split the note: {out:?}");
+    }
+
+    /// Drives the tracker with network-style evidence: confidence `c(t)`.
+    fn run_confidence(tracker: &mut NoteTracker, to_ms: f32, c: impl Fn(f32) -> f32) -> Vec<Notes> {
+        let mut out = Vec::new();
+        let mut t = 0.0;
+        while t < to_ms {
+            let conf = c(t);
+            let evidence = Some(Detection { pitch_hz: 440.0, dominance: f32::INFINITY, attack_level: 1.0, share: 1.0, confidence: conf });
+            let obs: Vec<_> = tracker.candidates(t).into_iter().map(|i| (i, evidence)).collect();
+            out.extend(tracker.update(Frame::at(t), &obs));
+            t += HOP_MS;
+        }
+        out.extend(tracker.finish(to_ms));
+        out
+    }
+
+    #[test]
+    fn test_neural_note_ends_when_it_drops_well_below_its_own_peak() {
+        // Loud note released at 500 ms: the network's reading falls from 0.9
+        // to a lingering 0.25 (string decay), not to zero.
+        let mut tr = NoteTracker::with_thresholds(&[note(1, 440.0, 0.0, 500.0)], Thresholds::NEURAL);
+        let out = run_confidence(&mut tr, 1500.0, |t| if t < 500.0 { 0.9 } else if t < 900.0 { 0.25 } else { 0.0 });
+        assert_eq!(out.len(), 1, "{out:?}");
+        assert!((out[0].end_time_ms.unwrap() - 500.0).abs() <= 2.0 * HOP_MS, "ended at {:?}", out[0].end_time_ms);
+    }
+
+    #[test]
+    fn test_neural_onsets_are_shifted_by_the_measured_network_lead() {
+        let mut tr = NoteTracker::with_thresholds(&[note(1, 440.0, 0.0, 500.0)], Thresholds::NEURAL);
+        let out = run_confidence(&mut tr, 1000.0, |t| if (100.0..500.0).contains(&t) { 0.9 } else { 0.0 });
+        assert_eq!(out[0].start_time_ms, Some(100.0 + Thresholds::NEURAL.onset_shift_ms));
+        assert!(Thresholds::NEURAL.onset_shift_ms > 0.0 && Thresholds::DSP.onset_shift_ms == 0.0);
+    }
+
+    #[test]
+    fn test_quiet_neural_note_is_not_split() {
+        // Quiet chord note: steady 0.25 with brief dips to 0.12.
+        let mut tr = NoteTracker::with_thresholds(&[note(1, 440.0, 0.0, 800.0)], Thresholds::NEURAL);
+        let out = run_confidence(&mut tr, 1500.0, |t| match t {
+            t if t >= 800.0 => 0.0,
+            t if (t / HOP_MS) as u32 % 7 == 0 => 0.12,
+            _ => 0.25,
+        });
+        assert_eq!(out.len(), 1, "split: {out:?}");
+        assert!((out[0].end_time_ms.unwrap() - 800.0).abs() <= 2.0 * HOP_MS, "ended at {:?}", out[0].end_time_ms);
     }
 
     #[test]
