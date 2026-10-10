@@ -63,6 +63,7 @@ class Section:
     start_bar: int
     bars: int
     intensity: int = 1
+    variation: int = 0  # 0 is the arrangement as first made; each "play it differently" adds one
 
     @property
     def start(self) -> float:
@@ -91,6 +92,13 @@ class Project:
     swing: float = 0.5  # where the off-beat eighth falls: 0.5 is straight, 0.66 a full shuffle
     transpose: int = 0  # semitones the whole song sits from the hum's own key
     hum_tempo: float = 0.0  # the tempo the hum was sung at; 0 when unknown
+    # What the song was arranged with besides genre and mood, so it can be arranged again without
+    # losing earlier edits: a tempo multiplier, each half's energy, the pad (None: the genre decides),
+    # and the parts taken out.
+    speed: float = 1.0
+    energy: list[int] = field(default_factory=lambda: [0, 0])
+    pad: bool | None = None
+    removed: list[str] = field(default_factory=list)
     phrase: list[Note] = field(default_factory=list)
     sections: list[Section] = field(default_factory=list)
     chords: list[ChordSymbol] = field(default_factory=list)
@@ -146,6 +154,10 @@ class Project:
                 swing=_number(data.get("swing", 0.5), 0.5, 0.75),
                 transpose=int(_number(data.get("transpose", 0), -24, 24)),
                 hum_tempo=_number(data.get("hum_tempo", 0.0), 0, 300),
+                speed=_number(data.get("speed", 1.0), 0.25, 4),
+                energy=[int(_number(e, -MAX_INTENSITY, MAX_INTENSITY)) for e in data.get("energy", [0, 0])][:2],
+                pad=None if data.get("pad") is None else bool(data["pad"]),
+                removed=[_one_of(r, ROLES) for r in data.get("removed", [])],
                 phrase=[_note(n) for n in data.get("phrase", [])],
                 sections=[_section(s) for s in data.get("sections", [])],
                 chords=[ChordSymbol(int(c["bar"]), int(c["root"]) % 12, str(c["quality"]), str(c["degree"]))
@@ -189,6 +201,7 @@ def _section(data: dict) -> Section:
         start_bar=int(_number(data["start_bar"], 0, 10_000)),
         bars=int(_number(data["bars"], 1, 10_000)),
         intensity=int(_number(data.get("intensity", 1), 0, MAX_INTENSITY)),
+        variation=int(_number(data.get("variation", 0), 0, 1000)),
     )
 
 

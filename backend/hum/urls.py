@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import talk_views, views, views_raw, views_song
+from . import views, views_chat, views_raw, views_song
 
 urlpatterns = [
     path("api/hum/upload", views.upload),
@@ -13,7 +13,9 @@ urlpatterns = [
     path("api/hum/project", views_song.project),
     path("api/hum/project/audio", views_song.project_audio),
     path("api/hum/project/midi", views_song.project_midi),
+    path("api/hum/project/edit", views_chat.edit),
+    path("api/hum/project/notes", views_chat.notes),
     path("api/hum/presets", views_song.presets),
-    path("api/hum/talk", talk_views.talk),
-    path("api/hum/talk/speech/<str:reply_id>", talk_views.speech),
+    path("api/hum/chat", views_chat.chat),
+    path("api/hum/chat/speech/<str:reply_id>", views_chat.speech),
 ]

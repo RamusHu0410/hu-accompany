@@ -24,6 +24,8 @@ void main() {
       recorder: recorder,
       player: FakePlayer(),
       rawPlayer: FakePlayer(),
+      chatRecorder: FakeRecorder(),
+      voicePlayer: FakePlayer(),
       sharer: sharer,
       store: store,
     );
@@ -36,6 +38,15 @@ void main() {
     tester.view.devicePixelRatio = 2;
     addTearDown(tester.view.reset);
     await tester.pumpWidget(MaterialApp(home: HumPage(controller: controller)));
+  }
+
+  /// Lets the fakes answer, then draws the result.
+  Future<void> settle(WidgetTester tester) async {
+    await tester.pump();
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 50)),
+    );
+    await tester.pump();
   }
 
   Future<void> hum(WidgetTester tester) async {
@@ -66,7 +77,8 @@ void main() {
     expect(find.text('Band'), findsOneWidget);
     expect(find.text('Epic'), findsOneWidget);
     expect(find.text('Simple'), findsOneWidget);
-    expect(find.text('Mood'), findsOneWidget);
+    expect(find.text('Mood'), findsNothing); // Band has no faders
+    expect(find.byKey(const ValueKey('engine-summary')), findsOneWidget);
     expect(find.text('GENRE'), findsOneWidget);
     expect(find.text('Lo-fi'), findsOneWidget);
     expect(find.text('CHANGE IT WITH WORDS'), findsOneWidget);
@@ -96,19 +108,18 @@ void main() {
     await hum(tester);
 
     await tester.tap(find.byKey(const ValueKey('genre-Lo-fi')));
-    await tester.runAsync(
-      () => Future<void>.delayed(const Duration(milliseconds: 50)),
-    );
-    await tester.pump();
+    await settle(tester);
     await tester.tap(find.byKey(const ValueKey('mood-Chill')));
-    await tester.runAsync(
-      () => Future<void>.delayed(const Duration(milliseconds: 50)),
-    );
-    await tester.pump();
+    await settle(tester);
 
-    final (engine, settings) = repository.songCalls.last;
-    expect(engine, HumEngine.band);
-    expect((settings.style, settings.mood), ('lofi', 'chill'));
+    // both edit the band song, one undoable step each
+    expect(repository.editCalls.map((e) => e.single['action']), [
+      'set_genre',
+      'set_mood',
+    ]);
+    expect(controller.band.project!.preset, 'lofi');
+    expect(controller.band.project!.mood, 'chill');
+    expect(find.text('Undo: chill now'), findsOneWidget);
     expect(
       tester
           .widget<ChoiceChip>(find.byKey(const ValueKey('genre-Lo-fi')))
@@ -141,20 +152,75 @@ void main() {
     expect(button.onPressed, isNull);
   });
 
-  testWidgets('a suggestion chip talks to the song and shows the reply', (
+  testWidgets('a suggestion edits the song, and the edit can be undone', (
     tester,
   ) async {
     await show(tester);
     await hum(tester);
 
-    await tester.tap(find.text('Make it faster'));
-    await tester.runAsync(
-      () => Future<void>.delayed(const Duration(milliseconds: 50)),
-    );
-    await tester.pump();
+    await tester.tap(find.text('Softer drums'));
+    await settle(tester);
 
-    expect(repository.talkTexts, ['Make it faster']);
-    expect(find.text('A little quicker now!'), findsOneWidget);
+    expect(repository.chatTexts, ['Softer drums']);
+    expect(find.text('Drums are softer now.'), findsOneWidget);
+    expect(find.text('Undo: drums quieter'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('undo')));
+    await settle(tester);
+    expect(controller.band.project!.track('drums')!.volume, 0.6);
+    expect(find.text('Redo: drums quieter'), findsOneWidget);
+  });
+
+  testWidgets('Compare explains all three engines', (tester) async {
+    await show(tester);
+    await hum(tester);
+
+    await tester.tap(find.text('Compare'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Three ways to make your song'), findsOneWidget);
+    expect(find.text('Chat edits: yes.'), findsOneWidget);
+    expect(
+      find.text('Chat edits: no. Chatting switches to Band.'),
+      findsNWidgets(2),
+    );
+  });
+
+  testWidgets('Epic and Simple have faders; Band has genres and moods', (
+    tester,
+  ) async {
+    await show(tester);
+    await hum(tester);
+    await tester.tap(find.text('Epic'));
+    await settle(tester);
+
+    expect(find.text('Mood'), findsOneWidget);
+    expect(find.text('Reset'), findsOneWidget);
+    expect(find.text('GENRE'), findsNothing);
+  });
+
+  testWidgets('chatting on Epic switches to Band and says so on the page', (
+    tester,
+  ) async {
+    await show(tester);
+    await hum(tester);
+    await tester.tap(find.text('Epic'));
+    await settle(tester);
+
+    await tester.enterText(find.byType(TextField), 'softer drums');
+    await tester.testTextInput.receiveAction(TextInputAction.send);
+    await settle(tester);
+
+    expect(controller.engine, HumEngine.band);
+    expect(find.byKey(const ValueKey('engine-notice')), findsOneWidget);
+    expect(
+      find.textContaining('Switched to Band so I can make that change'),
+      findsNWidgets(2),
+    ); // the card and the chat
+
+    await tester.tap(find.byTooltip('Dismiss'));
+    await tester.pump();
+    expect(find.byKey(const ValueKey('engine-notice')), findsNothing);
   });
 
   testWidgets('a hum the server refuses shows why', (tester) async {
@@ -222,5 +288,26 @@ void main() {
     );
     await tester.pump();
     expect(sharer.shared.single.$1, 'hum.mid');
+  });
+
+  testWidgets('everything fits a small phone, edits and notices included', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(750, 5200); // 375 points wide
+    tester.view.devicePixelRatio = 2;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(MaterialApp(home: HumPage(controller: controller)));
+    await hum(tester);
+
+    await tester.tap(find.text('Epic'));
+    await settle(tester);
+    await tester.enterText(find.byType(TextField), 'softer drums');
+    await tester.testTextInput.receiveAction(TextInputAction.send);
+    await settle(tester);
+    await tester.tap(find.byKey(const ValueKey('undo')));
+    await settle(tester); // both undo and redo have labels now
+
+    expect(find.byKey(const ValueKey('engine-notice')), findsOneWidget);
+    expect(tester.takeException(), isNull); // no overflow anywhere
   });
 }

@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
 
+import 'package:hu_accomponist/features/hum/engine_compare_sheet.dart';
+import 'package:hu_accomponist/features/hum/engine_guide.dart';
 import 'package:hu_accomponist/integrations/hum/hum_models.dart';
 import 'package:hu_accomponist/shared/theme/Color_Theme.dart';
 import 'package:hu_accomponist/shared/theme/Design_Tokens.dart';
 
-/// "Your song": which engine makes it, and the three faders that shape it.
-/// Moving a fader only reports the value; the song is remade when it is let go.
+/// "Your song": which engine makes it (with what each one does), and for
+/// Epic and Simple the three faders that shape it. Moving a fader only
+/// reports the value; the song is remade when it is let go. Band is shaped by
+/// its genre and mood and by chat instead.
 class HumControls extends StatelessWidget {
   const HumControls({
     super.key,
@@ -46,7 +50,7 @@ class HumControls extends StatelessWidget {
                 style: TextButton.styleFrom(
                   foregroundColor: PracticePalette.gold,
                 ),
-                child: const Text('Reset'),
+                child: Text(engine == HumEngine.band ? 'Start over' : 'Reset'),
               ),
             ],
           ),
@@ -65,31 +69,57 @@ class HumControls extends StatelessWidget {
               side: const BorderSide(color: PracticePalette.lightGold),
             ),
           ),
-          const SizedBox(height: Space.sm),
-          _Fader(
-            label: 'Mood',
-            low: 'Moody',
-            high: 'Bright',
-            value: settings.emotion,
-            onChanged: (v) => onFader(emotion: v),
-            onChangeEnd: onFaderEnd,
+          const SizedBox(height: Space.xs),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Text(
+                  engine.summary,
+                  key: const ValueKey('engine-summary'),
+                  style: const TextStyle(
+                    color: PracticePalette.mutedBrown,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+              TextButton(
+                onPressed: () => showEngineComparison(context, engine),
+                style: TextButton.styleFrom(
+                  foregroundColor: PracticePalette.gold,
+                  visualDensity: VisualDensity.compact,
+                ),
+                child: const Text('Compare'),
+              ),
+            ],
           ),
-          _Fader(
-            label: 'Speed',
-            low: 'Slower',
-            high: 'Faster',
-            value: settings.speed,
-            onChanged: (v) => onFader(speed: v),
-            onChangeEnd: onFaderEnd,
-          ),
-          _Fader(
-            label: 'Pitch',
-            low: 'Lower',
-            high: 'Higher',
-            value: settings.pitch,
-            onChanged: (v) => onFader(pitch: v),
-            onChangeEnd: onFaderEnd,
-          ),
+          if (engine != HumEngine.band) ...[
+            const SizedBox(height: Space.sm),
+            _Fader(
+              label: 'Mood',
+              low: 'Moody',
+              high: 'Bright',
+              value: settings.emotion,
+              onChanged: (v) => onFader(emotion: v),
+              onChangeEnd: onFaderEnd,
+            ),
+            _Fader(
+              label: 'Speed',
+              low: 'Slower',
+              high: 'Faster',
+              value: settings.speed,
+              onChanged: (v) => onFader(speed: v),
+              onChangeEnd: onFaderEnd,
+            ),
+            _Fader(
+              label: 'Pitch',
+              low: 'Lower',
+              high: 'Higher',
+              value: settings.pitch,
+              onChanged: (v) => onFader(pitch: v),
+              onChangeEnd: onFaderEnd,
+            ),
+          ],
         ],
       ),
     );

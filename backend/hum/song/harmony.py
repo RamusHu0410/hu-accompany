@@ -38,6 +38,7 @@ TEMPLATE_BONUS = 0.12
 HOME_BONUS = 0.45  # the first and last bar at home
 REPEAT_PENALTY = 0.15
 MOOD_BONUS = 0.12
+AVOID_PENALTY = 0.6  # enough to change a close call, not to put a chord under notes it clashes with
 GOOD_STEPS = {
     ("V", "I"): 0.35, ("V", "i"): 0.35, ("IV", "V"): 0.2, ("iv", "V"): 0.2, ("ii", "V"): 0.25,
     ("vi", "IV"): 0.12, ("IV", "I"): 0.12, ("iv", "i"): 0.12, ("VI", "VII"): 0.15, ("VII", "i"): 0.2,
@@ -75,11 +76,17 @@ def chord_by_degree(tonic_pc: int, mode: str, degree: str) -> Chord:
     return next(c for c in key_chords(tonic_pc, mode) if c.degree == degree)
 
 
-def progression(melody: list[Note], bars: int, tonic_pc: int, mode: str, preset: Preset, mood: Mood) -> list[Chord]:
+def progression(melody: list[Note], bars: int, tonic_pc: int, mode: str, preset: Preset, mood: Mood,
+                avoid: list[Chord] | None = None) -> list[Chord]:
     """One chord per bar for `bars` bars of `melody` (beats from bar 0), in the plain triad form;
-    `colored` adds the genre's sevenths or power chords."""
+    `colored` adds the genre's sevenths or power chords. `avoid` is a progression to move away from
+    (a section played differently): its chord in each bar costs AVOID_PENALTY there, so the result
+    changes where the tune allows another chord and keeps the same chord where only it fits."""
     candidates = key_chords(tonic_pc, mode)
     fit = [[_fit(melody, bar, chord) for chord in candidates] for bar in range(bars)]
+    if avoid:
+        for bar in range(bars):
+            fit[bar][candidates.index(avoid[bar])] -= AVOID_PENALTY
     best = None
     for template in preset.progressions.get(mode, ((),)):
         score, chords = _best_path(candidates, fit, template, mode, mood)

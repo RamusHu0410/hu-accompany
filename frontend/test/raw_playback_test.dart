@@ -182,7 +182,10 @@ void main() {
         recorder: FakeRecorder(),
         player: songPlayer,
         rawPlayer: rawPlayer,
+        chatRecorder: FakeRecorder(),
+        voicePlayer: FakePlayer(),
         sharer: sharer,
+        store: MemorySavedHumStore(),
       );
     });
 
