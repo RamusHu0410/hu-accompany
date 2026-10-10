@@ -41,6 +41,13 @@ pub struct Notes {
     pub pedal_action: Option<String>,
     pub has_accent: Option<bool>,
     pub markings: Option<String>,
+
+    /// How loudly the note was played: 0.0 (at or below -60 dBFS) to 1.0
+    /// (full scale), spaced in decibels (see volume.rs). The loudest 50 ms
+    /// of the note's span. Relative to this microphone and device, not a
+    /// calibrated level, so mapping it to pp..ff is the backend's job.
+    /// `None` on score notes, and on a played note whose audio isn't logged.
+    pub volume: Option<f32>,
 }
 
 #[derive(Debug, Deserialize, Clone)]

@@ -68,7 +68,7 @@ class PhraseUploadService {
       'timing': {'bpm': bpm, 'time_signature': timeSignature},
       'piece': piece.toJson(),
       'expected_notes': expectedNotes,
-      'user_notes': userNotes.map(_userNoteToJson).toList(),
+      'user_notes': userNotes.map(userNoteToJson).toList(),
       if (barBoxes != null) 'bar_boxes': barBoxes,
     });
 
@@ -161,10 +161,13 @@ class PhraseUploadService {
   /// to 0 with a diagnostic, since the backend sorts on start_time_ms and
   /// cannot order a null.
   ///
-  /// `note_id` and `has_accent` are optional (`raw.get`) and are sent only
-  /// when Rust supplied them. `isEnd` is a stream-control flag marking the
+  /// `note_id`, `has_accent` and `volume` are optional (`raw.get`) and are
+  /// sent only when Rust supplied them. `volume` is how loudly the note was
+  /// played, 0.0..1.0 (native_ffi/src/volume.rs); the backend does not judge
+  /// dynamics from it yet. `isEnd` is a stream-control flag marking the
   /// last note of a phrase, not performance data, so it is not sent.
-  static Map<String, dynamic> _userNoteToJson(Notes note) {
+  @visibleForTesting
+  static Map<String, dynamic> userNoteToJson(Notes note) {
     final start = note.startTimeMs;
     final end = note.endTimeMs;
     final duration = note.durationMs;
@@ -190,6 +193,7 @@ class PhraseUploadService {
       'end_time_ms': resolvedEnd,
       'duration_ms': resolvedDuration,
       if (note.hasAccent != null) 'has_accent': note.hasAccent,
+      if (note.volume != null) 'volume': note.volume,
     };
   }
 }

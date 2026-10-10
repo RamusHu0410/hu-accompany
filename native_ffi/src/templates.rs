@@ -105,6 +105,7 @@ mod tests {
             pedal_action: None,
             has_accent: None,
             markings: None,
+            volume: None,
         }
     }
 

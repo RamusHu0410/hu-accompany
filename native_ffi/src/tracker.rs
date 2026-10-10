@@ -252,7 +252,8 @@ impl NoteTracker {
             .collect()
     }
 
-    fn offset_ms(&self) -> f32 {
+    /// Score time = stream time - this. Callers that look the audio up by stream time need it.
+    pub fn offset_ms(&self) -> f32 {
         match self.clock {
             Clock::Anchored { offset_ms, .. } => offset_ms,
             _ => 0.0,
@@ -482,6 +483,7 @@ impl NoteTracker {
             pedal_action: None,
             has_accent: None,
             markings: None,
+            volume: None,
         })
     }
 }
@@ -509,6 +511,7 @@ mod tests {
             pedal_action: None,
             has_accent: None,
             markings: None,
+            volume: None,
         }
     }
 

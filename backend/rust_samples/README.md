@@ -19,7 +19,8 @@ Each element is one detected note, sent **once, when it ends**:
 ```json
 {"note_id": 1, "pitch_hz": 262.8, "start_time_ms": 500.0, "end_time_ms": 743.8,
  "duration_ms": 243.8, "is_end": false,
- "vibrato_depth": null, "pedal_action": null, "has_accent": null, "markings": null}
+ "vibrato_depth": null, "pedal_action": null, "has_accent": null, "markings": null,
+ "volume": 0.641}
 ```
 
 - `note_id` is the **score** note the detector matched, not a running counter.
@@ -29,6 +30,11 @@ Each element is one detected note, sent **once, when it ends**:
 - In real detector output `start_time_ms`, `end_time_ms` and `duration_ms` are always numbers.
   The Rust type is `Option<f32>`, so they can be `null` in the type, but `tracker.rs` always fills them.
 - `vibrato_depth`, `pedal_action`, `has_accent` and `markings` are `null` today.
+- `volume` is how loudly the note was played, **0.0 to 1.0, spaced in decibels**: 0.0 is -60 dBFS or quieter,
+  1.0 is full scale (so 0.5 is -30 dBFS, and each 0.1 is 6 dB). It is the loudest 50 ms inside the note's span.
+  It is relative to this microphone and device, not a calibrated loudness, so pp..ff has to be worked out against
+  the player's own range and the score's markings in Python. It is `null` on score notes.
+  Known limit: in legato playing the window can include the previous note's ring-out, so a soft note after a loud one reads high.
 
 ## Compatibility with the Python backend
 
@@ -36,7 +42,7 @@ Checked against `feedback_generator.judge_phrase` (the function behind the view)
 
 | Case | Result |
 |---|---|
-| Rust JSON sent as-is (extra keys `is_end`, `vibrato_depth`, …) | Accepted; extra keys are ignored. |
+| Rust JSON sent as-is (extra keys `is_end`, `vibrato_depth`, `volume`, …) | Accepted; extra keys are ignored. `volume` does not affect any score yet (`dynamics` is still `null`). |
 | Mapped the way the Dart app does it (`build_request.py`) | Accepted. Scale: overall 99; chords clip: overall 99. |
 | `user_notes` empty (silence) | Accepted; every expected note is reported missing, overall 0. |
 | A note with `null` `start_time_ms` or `duration_ms` | **`TypeError` inside `judge_phrase`, which the view returns as HTTP 500, not 400.** |
@@ -73,6 +79,11 @@ python rust_samples/build_request.py rust_samples/01_scale_solo.rust_output.json
 
 ## Provenance
 
-Generated 2026-10-10 from `origin/main` @ `284faec6` (`native_ffi` exported with `git archive`, release build,
-default detector settings: neural evidence on, score clock anchored to the first note heard).
-Re-run after changing the detector, since the numbers depend on it. The output shape depends only on `native_ffi/src/models.rs`.
+Generated 2026-10-10 by `dump_json` (release build, default detector settings: neural evidence on, score clock
+anchored to the first note heard) from `native_ffi` at `9e14b3a6` with `tracker.rs` restored to upstream's
+`284faec6` version and the `volume` field added (uncommitted at the time). Re-run after changing the detector,
+since the numbers depend on it. The output shape depends only on `native_ffi/src/models.rs`.
+
+Check on whether `volume` follows dynamics: `fixtures/piano/rendered/05_dynamics_solo` is rendered at MIDI velocities
+35 to 110. All 12 notes were detected and volume correlated 0.85 with velocity (velocity 35-40 read 0.35-0.38,
+105-110 read 0.68-0.69). Good enough for "louder or softer than before", not for exact levels.

@@ -499,308 +499,352 @@
       "pitch_hz": 330.5414769025976,
       "start_time_ms": 500.0,
       "end_time_ms": 883.1293,
-      "duration_ms": 383.12924
+      "duration_ms": 383.12924,
+      "volume": 0.67710143
     },
     {
       "note_id": 1,
       "pitch_hz": 132.21659076103904,
       "start_time_ms": 523.22,
       "end_time_ms": 1231.4286,
-      "duration_ms": 708.2086
+      "duration_ms": 708.2086,
+      "volume": 0.67710143
     },
     {
       "note_id": 5,
       "pitch_hz": 330.54864303175515,
       "start_time_ms": 883.1293,
       "end_time_ms": 1277.8685,
-      "duration_ms": 394.73926
+      "duration_ms": 394.73926,
+      "volume": 0.67195475
     },
     {
       "note_id": 2,
       "pitch_hz": 165.26197855197248,
       "start_time_ms": 511.60995,
       "end_time_ms": 1231.4286,
-      "duration_ms": 719.8186
+      "duration_ms": 719.8186,
+      "volume": 0.67710143
     },
     {
       "note_id": 9,
       "pitch_hz": 349.4657258675147,
       "start_time_ms": 1312.6985,
       "end_time_ms": 1672.6077,
-      "duration_ms": 359.90918
+      "duration_ms": 359.90918,
+      "volume": 0.6738852
     },
     {
       "note_id": 3,
       "pitch_hz": 197.11055655501715,
       "start_time_ms": 523.22,
       "end_time_ms": 2078.9568,
-      "duration_ms": 1555.7369
+      "duration_ms": 1555.7369,
+      "volume": 0.67710143
     },
     {
       "note_id": 10,
       "pitch_hz": 393.7415375907288,
       "start_time_ms": 1707.4376,
       "end_time_ms": 2078.9568,
-      "duration_ms": 371.5193
+      "duration_ms": 371.5193,
+      "volume": 0.6544739
     },
     {
       "note_id": 8,
       "pitch_hz": 147.46111135483352,
       "start_time_ms": 1312.6985,
       "end_time_ms": 2020.907,
-      "duration_ms": 708.2085
+      "duration_ms": 708.2085,
+      "volume": 0.6738852
     },
     {
       "note_id": 7,
       "pitch_hz": 124.02689779452777,
       "start_time_ms": 1335.9183,
       "end_time_ms": 2020.907,
-      "duration_ms": 684.98865
+      "duration_ms": 684.98865,
+      "volume": 0.6738852
     },
     {
       "note_id": 6,
       "pitch_hz": 98.34379347142297,
       "start_time_ms": 1335.9183,
       "end_time_ms": 2044.1271,
-      "duration_ms": 708.20874
+      "duration_ms": 708.20874,
+      "volume": 0.6738852
     },
     {
       "note_id": 14,
       "pitch_hz": 394.2790506463129,
       "start_time_ms": 2078.9568,
       "end_time_ms": 2264.7166,
-      "duration_ms": 185.75977
+      "duration_ms": 185.75977,
+      "volume": 0.64262897
     },
     {
       "note_id": 15,
       "pitch_hz": 350.78758490154,
       "start_time_ms": 2508.526,
       "end_time_ms": 2845.2153,
-      "duration_ms": 336.68945
+      "duration_ms": 336.68945,
+      "volume": 0.6535657
     },
     {
       "note_id": 11,
       "pitch_hz": 131.65161130404476,
       "start_time_ms": 2137.0066,
       "end_time_ms": 2821.9954,
-      "duration_ms": 684.9888
+      "duration_ms": 684.9888,
+      "volume": 0.6535657
     },
     {
       "note_id": 12,
       "pitch_hz": 165.30034806162914,
       "start_time_ms": 2113.7866,
       "end_time_ms": 2798.7754,
-      "duration_ms": 684.9888
+      "duration_ms": 684.9888,
+      "volume": 0.6535657
     },
     {
       "note_id": 13,
       "pitch_hz": 196.65253829047094,
       "start_time_ms": 2113.7866,
       "end_time_ms": 2821.9954,
-      "duration_ms": 708.20874
+      "duration_ms": 708.20874,
+      "volume": 0.6535657
     },
     {
       "note_id": 19,
       "pitch_hz": 329.38034947325207,
       "start_time_ms": 2891.655,
       "end_time_ms": 3263.1746,
-      "duration_ms": 371.51953
+      "duration_ms": 371.51953,
+      "volume": 0.69136786
     },
     {
       "note_id": 20,
       "pitch_hz": 294.54845286266215,
       "start_time_ms": 3286.3943,
       "end_time_ms": 3669.5237,
-      "duration_ms": 383.1294
+      "duration_ms": 383.1294,
+      "volume": 0.6849045
     },
     {
       "note_id": 17,
       "pitch_hz": 123.62841393011439,
       "start_time_ms": 2938.095,
       "end_time_ms": 3611.4739,
-      "duration_ms": 673.3789
+      "duration_ms": 673.3789,
+      "volume": 0.69136786
     },
     {
       "note_id": 18,
       "pitch_hz": 147.4488656989863,
       "start_time_ms": 2914.875,
       "end_time_ms": 3623.0837,
-      "duration_ms": 708.20874
+      "duration_ms": 708.20874,
+      "volume": 0.69136786
     },
     {
       "note_id": 24,
       "pitch_hz": 262.8163663296746,
       "start_time_ms": 3692.7437,
       "end_time_ms": 4075.8728,
-      "duration_ms": 383.12915
+      "duration_ms": 383.12915,
+      "volume": 0.67042816
     },
     {
       "note_id": 16,
       "pitch_hz": 98.44538810804858,
       "start_time_ms": 2938.095,
       "end_time_ms": 3669.5237,
-      "duration_ms": 731.4287
+      "duration_ms": 731.4287,
+      "volume": 0.69136786
     },
     {
       "note_id": 21,
       "pitch_hz": 131.4166906384496,
       "start_time_ms": 3739.1833,
       "end_time_ms": 4424.1724,
-      "duration_ms": 684.9888
+      "duration_ms": 684.9888,
+      "volume": 0.67042816
     },
     {
       "note_id": 22,
       "pitch_hz": 165.30118489299073,
       "start_time_ms": 3727.5735,
       "end_time_ms": 4424.1724,
-      "duration_ms": 696.59863
+      "duration_ms": 696.59863,
+      "volume": 0.67042816
     },
     {
       "note_id": 23,
       "pitch_hz": 197.09649549081175,
       "start_time_ms": 3739.1833,
       "end_time_ms": 4435.782,
-      "duration_ms": 696.59863
+      "duration_ms": 696.59863,
+      "volume": 0.67042816
     },
     {
       "note_id": 29,
       "pitch_hz": 294.3735519411526,
       "start_time_ms": 4493.832,
       "end_time_ms": 4865.3516,
-      "duration_ms": 371.51953
+      "duration_ms": 371.51953,
+      "volume": 0.69569945
     },
     {
       "note_id": 30,
       "pitch_hz": 330.7136838590431,
       "start_time_ms": 4900.1816,
       "end_time_ms": 5283.3105,
-      "duration_ms": 383.1289
+      "duration_ms": 383.1289,
+      "volume": 0.67627025
     },
     {
       "note_id": 25,
       "pitch_hz": 260.878253386809,
       "start_time_ms": 4075.8728,
       "end_time_ms": 4493.8325,
-      "duration_ms": 417.95947
+      "duration_ms": 417.95947,
+      "volume": 0.68647486
     },
     {
       "note_id": 26,
       "pitch_hz": 86.37919833922004,
       "start_time_ms": 4528.662,
       "end_time_ms": 5225.2607,
-      "duration_ms": 696.59863
+      "duration_ms": 696.59863,
+      "volume": 0.69569945
     },
     {
       "note_id": 27,
       "pitch_hz": 110.24109059439316,
       "start_time_ms": 4528.662,
       "end_time_ms": 5248.481,
-      "duration_ms": 719.81885
+      "duration_ms": 719.81885,
+      "volume": 0.69569945
     },
     {
       "note_id": 28,
       "pitch_hz": 132.22814801414125,
       "start_time_ms": 4517.0522,
       "end_time_ms": 5202.041,
-      "duration_ms": 684.9888
+      "duration_ms": 684.9888,
+      "volume": 0.69569945
     },
     {
       "note_id": 35,
       "pitch_hz": 294.4879004138788,
       "start_time_ms": 5689.6597,
       "end_time_ms": 6072.789,
-      "duration_ms": 383.1294
+      "duration_ms": 383.1294,
+      "volume": 0.687065
     },
     {
       "note_id": 34,
       "pitch_hz": 329.92966783162956,
       "start_time_ms": 5283.3105,
       "end_time_ms": 5666.44,
-      "duration_ms": 383.1294
+      "duration_ms": 383.1294,
+      "volume": 0.6894558
     },
     {
       "note_id": 33,
       "pitch_hz": 147.26844403031086,
       "start_time_ms": 5306.531,
       "end_time_ms": 6026.349,
-      "duration_ms": 719.81836
+      "duration_ms": 719.81836,
+      "volume": 0.6894558
     },
     {
       "note_id": 32,
       "pitch_hz": 123.471,
       "start_time_ms": 5341.3604,
       "end_time_ms": 6014.7393,
-      "duration_ms": 673.3789
+      "duration_ms": 673.3789,
+      "volume": 0.6894558
     },
     {
       "note_id": 39,
       "pitch_hz": 294.431436488094,
       "start_time_ms": 6072.789,
       "end_time_ms": 6479.138,
-      "duration_ms": 406.34912
+      "duration_ms": 406.34912,
+      "volume": 0.69529116
     },
     {
       "note_id": 36,
       "pitch_hz": 131.50693861903906,
       "start_time_ms": 6142.449,
       "end_time_ms": 6827.438,
-      "duration_ms": 684.9888
+      "duration_ms": 684.9888,
+      "volume": 0.69529116
     },
     {
       "note_id": 37,
       "pitch_hz": 165.82971475648824,
       "start_time_ms": 6142.449,
       "end_time_ms": 6873.8774,
-      "duration_ms": 731.4282
+      "duration_ms": 731.4282,
+      "volume": 0.69529116
     },
     {
       "note_id": 38,
       "pitch_hz": 196.2664657918984,
       "start_time_ms": 6107.619,
       "end_time_ms": 6873.8774,
-      "duration_ms": 766.2583
+      "duration_ms": 766.2583,
+      "volume": 0.69529116
     },
     {
       "note_id": 40,
       "pitch_hz": 294.4161651168201,
       "start_time_ms": 6490.7485,
       "end_time_ms": 6862.2676,
-      "duration_ms": 371.51904
+      "duration_ms": 371.51904,
+      "volume": 0.66420007
     },
     {
       "note_id": 31,
       "pitch_hz": 98.18497489334328,
       "start_time_ms": 5329.7505,
       "end_time_ms": 6815.8276,
-      "duration_ms": 1486.0771
+      "duration_ms": 1486.0771,
+      "volume": 0.69529116
     },
     {
       "note_id": 44,
       "pitch_hz": 262.83194114371554,
       "start_time_ms": 6897.0977,
       "end_time_ms": 7326.667,
-      "duration_ms": 429.56934
+      "duration_ms": 429.56934,
+      "volume": 0.6741922
     },
     {
       "note_id": 42,
       "pitch_hz": 165.15786508404366,
       "start_time_ms": 6920.3174,
       "end_time_ms": 7918.776,
-      "duration_ms": 998.4585
+      "duration_ms": 998.4585,
+      "volume": 0.6741922
     },
     {
       "note_id": 43,
       "pitch_hz": 197.15619293600497,
       "start_time_ms": 6920.3174,
       "end_time_ms": 7941.9956,
-      "duration_ms": 1021.6782
+      "duration_ms": 1021.6782,
+      "volume": 0.6741922
     },
     {
       "note_id": 41,
       "pitch_hz": 131.4366382451824,
       "start_time_ms": 6920.3174,
       "end_time_ms": 7930.3857,
-      "duration_ms": 1010.06836
+      "duration_ms": 1010.06836,
+      "volume": 0.6741922
     }
   ]
 }

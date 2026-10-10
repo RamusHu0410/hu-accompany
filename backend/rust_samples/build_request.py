@@ -35,6 +35,8 @@ def user_note_to_json(note: dict) -> dict:
     }
     if note.get("has_accent") is not None:
         out["has_accent"] = note["has_accent"]
+    if note.get("volume") is not None:
+        out["volume"] = note["volume"]
     return out
 
 

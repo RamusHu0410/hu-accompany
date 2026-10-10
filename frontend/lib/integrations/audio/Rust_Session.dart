@@ -45,7 +45,7 @@ abstract final class RustSession {
       if (decoded is! List) return const [];
       final notes = decoded
           .whereType<Map<String, dynamic>>()
-          .map(_notesFromJson)
+          .map(notesFromJson)
           .toList();
       debugPrint('[Diagnostics] rust: ${notes.length} unsent entr(ies) at stop');
       return notes;
@@ -57,7 +57,8 @@ abstract final class RustSession {
 
   static double? _double(Object? v) => (v as num?)?.toDouble();
 
-  static Notes _notesFromJson(Map<String, dynamic> j) => Notes(
+  @visibleForTesting
+  static Notes notesFromJson(Map<String, dynamic> j) => Notes(
     noteId: BigInt.from((j['note_id'] as num).toInt()),
     pitchHz: _double(j['pitch_hz']) ?? 0,
     startTimeMs: _double(j['start_time_ms']),
@@ -68,5 +69,6 @@ abstract final class RustSession {
     pedalAction: j['pedal_action'] as String?,
     hasAccent: j['has_accent'] as bool?,
     markings: j['markings'] as String?,
+    volume: _double(j['volume']),
   );
 }

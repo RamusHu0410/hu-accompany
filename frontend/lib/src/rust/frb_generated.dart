@@ -245,8 +245,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   Notes dco_decode_notes(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 10)
-      throw Exception('unexpected arr length: expect 10 but see ${arr.length}');
+    if (arr.length != 11)
+      throw Exception('unexpected arr length: expect 11 but see ${arr.length}');
     return Notes(
       noteId: dco_decode_u_64(arr[0]),
       pitchHz: dco_decode_f_64(arr[1]),
@@ -258,6 +258,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       pedalAction: dco_decode_opt_String(arr[7]),
       hasAccent: dco_decode_opt_box_autoadd_bool(arr[8]),
       markings: dco_decode_opt_String(arr[9]),
+      volume: dco_decode_opt_box_autoadd_f_32(arr[10]),
     );
   }
 
@@ -381,6 +382,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_pedalAction = sse_decode_opt_String(deserializer);
     var var_hasAccent = sse_decode_opt_box_autoadd_bool(deserializer);
     var var_markings = sse_decode_opt_String(deserializer);
+    var var_volume = sse_decode_opt_box_autoadd_f_32(deserializer);
     return Notes(
       noteId: var_noteId,
       pitchHz: var_pitchHz,
@@ -392,6 +394,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       pedalAction: var_pedalAction,
       hasAccent: var_hasAccent,
       markings: var_markings,
+      volume: var_volume,
     );
   }
 
@@ -545,6 +548,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_opt_String(self.pedalAction, serializer);
     sse_encode_opt_box_autoadd_bool(self.hasAccent, serializer);
     sse_encode_opt_String(self.markings, serializer);
+    sse_encode_opt_box_autoadd_f_32(self.volume, serializer);
   }
 
   @protected

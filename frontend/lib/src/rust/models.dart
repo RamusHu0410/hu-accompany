@@ -18,6 +18,13 @@ class Notes {
   final bool? hasAccent;
   final String? markings;
 
+  /// How loudly the note was played: 0.0 (at or below -60 dBFS) to 1.0
+  /// (full scale), spaced in decibels (see volume.rs). The loudest 50 ms
+  /// of the note's span. Relative to this microphone and device, not a
+  /// calibrated level, so mapping it to pp..ff is the backend's job.
+  /// `None` on score notes, and on a played note whose audio isn't logged.
+  final double? volume;
+
   const Notes({
     required this.noteId,
     required this.pitchHz,
@@ -29,6 +36,7 @@ class Notes {
     this.pedalAction,
     this.hasAccent,
     this.markings,
+    this.volume,
   });
 
   @override
@@ -42,7 +50,8 @@ class Notes {
       vibratoDepth.hashCode ^
       pedalAction.hashCode ^
       hasAccent.hashCode ^
-      markings.hashCode;
+      markings.hashCode ^
+      volume.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -58,5 +67,6 @@ class Notes {
           vibratoDepth == other.vibratoDepth &&
           pedalAction == other.pedalAction &&
           hasAccent == other.hasAccent &&
-          markings == other.markings;
+          markings == other.markings &&
+          volume == other.volume;
 }

@@ -2,6 +2,7 @@ use crate::dsp::{Analyzer, Detection, FFT_SIZE, HOP_SIZE};
 use crate::models::Notes;
 use crate::run_onnx::{neural_evidence, NetFrame, StreamingPitchNet, FRAME_MS};
 use crate::tracker::{Frame, NoteTracker, Thresholds};
+use crate::volume::LevelLog;
 use crate::templates::NoteTemplates;
 use crate::{lock, ACTIVE_PIECE, ANCHOR_CLOCK, NOTES_SINK, NOTE_TEMPLATES, PIECE_GENERATION, USE_NEURAL, USER_DATA};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
@@ -325,10 +326,12 @@ fn dsp_processing_loop(mut intake: Intake, sample_rate: u32) {
     let mut analyzer = Analyzer::new(sample_rate);
     let mut follower = Follower::new(Thresholds::DSP);
     let mut audio_vault: Vec<f32> = Vec::new();
+    let mut levels = LevelLog::new(sample_rate);
     let mut consumed_samples: u64 = 0; // first sample of the current frame
 
     // This loop runs when data is received; it ends when the mic stops.
     while let Some(chunk) = intake.next() {
+        levels.push(&chunk);
         audio_vault.extend_from_slice(&chunk);
         intake.give_back(chunk);
 
@@ -351,7 +354,7 @@ fn dsp_processing_loop(mut intake: Intake, sample_rate: u32) {
                         .iter()
                         .map(|&i| (i, analyzer.evidence(tracker.pitch_hz(i), &expected)))
                         .collect();
-                    publish(tracker.update(frame, &observations));
+                    publish(with_volume(tracker.update(frame, &observations), &levels, tracker.offset_ms()));
                 }
             }
             audio_vault.drain(..HOP_SIZE);
@@ -362,7 +365,7 @@ fn dsp_processing_loop(mut intake: Intake, sample_rate: u32) {
     // Stream closed (recording stopped): notes still sounding end here.
     if let Some(tracker) = follower.tracker.as_mut() {
         let end_ms = (consumed_samples + audio_vault.len() as u64) as f32 * ms_per_sample;
-        publish(tracker.finish(end_ms));
+        publish(with_volume(tracker.finish(end_ms), &levels, tracker.offset_ms()));
     }
 }
 
@@ -375,12 +378,13 @@ fn neural_processing_loop(mut intake: Intake, sample_rate: u32, mut net: Streami
     let ms_per_sample = 1000.0 / sample_rate as f32;
     let mut analyzer = Analyzer::new(sample_rate);
     let mut follower = Follower::new(Thresholds::NEURAL);
+    let mut levels = LevelLog::new(sample_rate);
     // Device audio still needed by the DSP analyser; history[0] is sample `history_start`.
     let mut history: Vec<f32> = Vec::new();
     let mut history_start: usize = 0;
     let mut window = vec![0.0f32; FFT_SIZE];
 
-    let mut step = |frames: Vec<NetFrame>, history: &[f32], history_start: usize, follower: &mut Follower| {
+    let mut step = |frames: Vec<NetFrame>, history: &[f32], history_start: usize, follower: &mut Follower, levels: &LevelLog| {
         for nf in frames {
             let Some(tracker) = follower.tracker() else { continue };
             let frame = Frame { start_ms: nf.start_ms(), end_ms: nf.start_ms() + FRAME_MS as f32 };
@@ -400,14 +404,15 @@ fn neural_processing_loop(mut intake: Intake, sample_rate: u32, mut net: Streami
                 .iter()
                 .map(|&i| (i, neural_evidence(&nf, &analyzer, tracker.pitch_hz(i), &expected)))
                 .collect();
-            publish(tracker.update(frame, &observations));
+            publish(with_volume(tracker.update(frame, &observations), levels, tracker.offset_ms()));
         }
     };
 
     while let Some(chunk) = intake.next() {
         history.extend_from_slice(&chunk);
+        levels.push(&chunk);
         match net.push(&chunk) {
-            Ok(frames) => step(frames, &history, history_start, &mut follower),
+            Ok(frames) => step(frames, &history, history_start, &mut follower, &levels),
             Err(e) => report(AUDIO_ERR_WORKER, format!("pitch network error: {e}")),
         }
         intake.give_back(chunk);
@@ -420,12 +425,12 @@ fn neural_processing_loop(mut intake: Intake, sample_rate: u32, mut net: Streami
         }
     }
     match net.finish() {
-        Ok(frames) => step(frames, &history, history_start, &mut follower),
+        Ok(frames) => step(frames, &history, history_start, &mut follower, &levels),
         Err(e) => report(AUDIO_ERR_WORKER, format!("pitch network error at the end of the recording: {e}")),
     }
     if let Some(tracker) = follower.tracker.as_mut() {
         let end_ms = (history_start + history.len()) as f32 * ms_per_sample;
-        publish(tracker.finish(end_ms));
+        publish(with_volume(tracker.finish(end_ms), &levels, tracker.offset_ms()));
     }
 }
 
@@ -478,6 +483,19 @@ fn templates_for_active_piece() -> Option<NoteTemplates> {
     (templates.instrument == format!("{instrument:?}")).then_some(templates)
 }
 
+/// Sets each note's `volume` from the level log. Notes carry score-clock
+/// times, the log is indexed by stream time, so the tracker's clock offset is
+/// added back: with the clock anchored to the first note, a note scored at
+/// 0 ms may have been played 5 s into the recording.
+fn with_volume(mut notes: Vec<Notes>, levels: &LevelLog, offset_ms: f32) -> Vec<Notes> {
+    for note in &mut notes {
+        if let (Some(start), Some(end)) = (note.start_time_ms, note.end_time_ms) {
+            note.volume = levels.peak_volume(start + offset_ms, end + offset_ms);
+        }
+    }
+    notes
+}
+
 /// Buffers finished notes and streams them to Dart when it is listening.
 /// With no listener (tests, CLI harness, or Dart has stopped listening) they
 /// stay in USER_DATA, where get_user_data can still hand them over.
@@ -525,6 +543,7 @@ mod tests {
                 pedal_action: None,
                 has_accent: None,
                 markings: None,
+                volume: None,
             }],
         }
     }
@@ -581,6 +600,66 @@ mod tests {
         assert_eq!(notes.len(), 1, "exactly one record per played note: {notes:?}");
         assert_close("start", notes[0].start_time_ms, 300.0, TIMING_TOLERANCE_MS);
         assert_close("end", notes[0].end_time_ms, 800.0, TIMING_TOLERANCE_MS);
+    }
+
+    /// As `run_a4`, with the tone scaled by `gain` (each test needs its own
+    /// `note_id`: USER_DATA is shared). With `anchor` the score's
+    /// clock starts at the first note, so the note is scored at 0 although it
+    /// is played at `silence_ms` of stream time, as in the app.
+    fn run_tone(note_id: u64, gain: f32, silence_ms: f32, tone_ms: f32, tail_ms: f32, anchor: bool) -> Vec<Notes> {
+        let rate = 44100;
+        let _serial = LOOP_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        ANCHOR_CLOCK.store(anchor, Ordering::Relaxed);
+        let score_start = if anchor { 0.0 } else { silence_ms };
+        *ACTIVE_PIECE.lock().unwrap() = Some(a4_piece(note_id, score_start, score_start + tone_ms));
+        let samples = |ms: f32| (ms / 1000.0 * rate as f32) as usize;
+        let mut audio = vec![0.0f32; samples(silence_ms)];
+        audio.extend((0..samples(tone_ms)).map(|i| {
+            let t = i as f32 / rate as f32;
+            gain * (1..=6).map(|k| 0.3 / k as f32 * (2.0 * PI * 440.0 * k as f32 * t).sin()).sum::<f32>()
+        }));
+        audio.extend(vec![0.0f32; samples(tail_ms)]);
+
+        let (tx, rx) = std::sync::mpsc::channel();
+        let worker = std::thread::spawn(move || start_processing_loop(rx, rate));
+        for chunk in audio.chunks(512) {
+            tx.send(chunk.to_vec()).unwrap();
+        }
+        drop(tx);
+        worker.join().unwrap();
+        *ACTIVE_PIECE.lock().unwrap() = None;
+        ANCHOR_CLOCK.store(true, Ordering::Relaxed);
+
+        let user_data = USER_DATA.lock().unwrap();
+        user_data.iter().flatten().filter(|n| n.note_id == note_id).cloned().collect()
+    }
+
+    // That tone (six harmonics at 0.3/k) is -8.72 dBFS RMS: volume (60 - 8.72) / 60.
+    const FULL_TONE_VOLUME: f32 = 0.8546;
+
+    #[test]
+    fn test_a_played_note_carries_the_volume_it_was_played_at() {
+        let notes = run_tone(9501, 1.0, 300.0, 500.0, 500.0, false);
+        assert_eq!(notes.len(), 1, "{notes:?}");
+        assert_close("volume", notes[0].volume, FULL_TONE_VOLUME, 0.03);
+    }
+
+    #[test]
+    fn test_a_quieter_note_gets_a_proportionally_lower_volume() {
+        // Gain 0.25 is 12.04 dB down: 12.04 / 60 = 0.2007 lower on the 0..1 scale.
+        let notes = run_tone(9502, 0.25, 300.0, 500.0, 500.0, false);
+        assert_eq!(notes.len(), 1, "{notes:?}");
+        assert_close("volume", notes[0].volume, FULL_TONE_VOLUME - 0.2007, 0.03);
+    }
+
+    #[test]
+    fn test_volume_is_read_from_the_notes_own_audio_when_the_score_clock_is_anchored() {
+        // Anchored, the note is reported at ~0 ms of score time but was played
+        // 1.2 s into the stream. Looking at the first 500 ms would find silence.
+        let notes = run_tone(9503, 1.0, 1200.0, 500.0, 500.0, true);
+        assert_eq!(notes.len(), 1, "{notes:?}");
+        assert!(notes[0].start_time_ms.unwrap() < 100.0, "score time should start near 0: {notes:?}");
+        assert_close("volume", notes[0].volume, FULL_TONE_VOLUME, 0.03);
     }
 
     #[test]

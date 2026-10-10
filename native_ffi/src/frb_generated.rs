@@ -239,6 +239,7 @@ impl SseDecode for crate::models::Notes {
         let mut var_pedalAction = <Option<String>>::sse_decode(deserializer);
         let mut var_hasAccent = <Option<bool>>::sse_decode(deserializer);
         let mut var_markings = <Option<String>>::sse_decode(deserializer);
+        let mut var_volume = <Option<f32>>::sse_decode(deserializer);
         return crate::models::Notes {
             note_id: var_noteId,
             pitch_hz: var_pitchHz,
@@ -250,6 +251,7 @@ impl SseDecode for crate::models::Notes {
             pedal_action: var_pedalAction,
             has_accent: var_hasAccent,
             markings: var_markings,
+            volume: var_volume,
         };
     }
 }
@@ -357,6 +359,7 @@ impl flutter_rust_bridge::IntoDart for crate::models::Notes {
             self.pedal_action.into_into_dart().into_dart(),
             self.has_accent.into_into_dart().into_dart(),
             self.markings.into_into_dart().into_dart(),
+            self.volume.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -445,6 +448,7 @@ impl SseEncode for crate::models::Notes {
         <Option<String>>::sse_encode(self.pedal_action, serializer);
         <Option<bool>>::sse_encode(self.has_accent, serializer);
         <Option<String>>::sse_encode(self.markings, serializer);
+        <Option<f32>>::sse_encode(self.volume, serializer);
     }
 }
 

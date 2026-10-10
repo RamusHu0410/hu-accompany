@@ -7,6 +7,7 @@ pub mod models;
 pub mod run_onnx;
 pub mod templates;
 pub mod tracker;
+pub mod volume;
 
 // Crates
 use crate::frb_generated::StreamSink;
@@ -228,6 +229,7 @@ mod lifecycle_tests {
             pedal_action: None,
             has_accent: None,
             markings: None,
+            volume: None,
         }
     }
 
